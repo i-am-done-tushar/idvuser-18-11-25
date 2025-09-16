@@ -98,7 +98,7 @@ export function PersonalInformationForm({
                   First Name
                 </div>
               </div>
-              <div className="flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border border-input-border bg-background">
+              <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.firstName ? 'border-destructive' : 'border-input-border'} bg-background`}>
                 <div className="flex items-center gap-2 flex-1">
                   <input
                     type="text"
@@ -106,13 +106,15 @@ export function PersonalInformationForm({
                     value={formData.firstName}
                     onChange={(e) => updateField('firstName', e.target.value)}
                     onBlur={() => validateField('firstName')}
-                    className={`text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted ${errors.firstName ? 'ring-1 ring-destructive/60' : ''}`}
+                    aria-invalid={!!errors.firstName}
+                    aria-describedby={errors.firstName ? 'err-firstName' : undefined}
+                    className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                   />
-                  {errors.firstName && (
-                    <div className="text-destructive text-[12px] ml-2">{errors.firstName}</div>
-                  )}
                 </div>
               </div>
+              {errors.firstName && (
+                <div id="err-firstName" role="alert" className="text-destructive text-[12px] mt-1">{errors.firstName}</div>
+              )}
             </div>
 
             {/* Last Name */}
