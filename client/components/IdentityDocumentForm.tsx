@@ -11,6 +11,8 @@ interface IdentityDocumentFormProps {
 export function IdentityDocumentForm({}: IdentityDocumentFormProps) {
   const [country, setCountry] = useState("");
   const [selectedDocument, setSelectedDocument] = useState("");
+  const [showCameraDialog, setShowCameraDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
 
   const documentTypes = [
     {
