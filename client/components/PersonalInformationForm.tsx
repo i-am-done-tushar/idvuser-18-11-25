@@ -130,8 +130,12 @@ export function PersonalInformationForm({
                     placeholder="Enter Your Full Name"
                     value={formData.lastName}
                     onChange={(e) => updateField('lastName', e.target.value)}
-                    className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
+                    onBlur={() => validateField('lastName')}
+                    className={`text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted ${errors.lastName ? 'ring-1 ring-destructive/60' : ''}`}
                   />
+                  {errors.lastName && (
+                    <div className="text-destructive text-[12px] ml-2">{errors.lastName}</div>
+                  )}
                 </div>
               </div>
             </div>
