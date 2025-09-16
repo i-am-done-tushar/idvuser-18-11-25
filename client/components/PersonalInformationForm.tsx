@@ -410,8 +410,12 @@ export function PersonalInformationForm({
                       placeholder="e.g Mumbai"
                       value={formData.city}
                       onChange={(e) => updateField('city', e.target.value)}
-                      className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
+                      onBlur={() => validateField('city')}
+                      className={`text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted ${errors.city ? 'ring-1 ring-destructive/60' : ''}`}
                     />
+                    {errors.city && (
+                      <div className="text-destructive text-[12px] ml-2">{errors.city}</div>
+                    )}
                   </div>
                 </div>
               </div>
