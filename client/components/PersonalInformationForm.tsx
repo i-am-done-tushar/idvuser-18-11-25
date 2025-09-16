@@ -119,7 +119,7 @@ export function PersonalInformationForm({
 
           {/* Email and Phone Row */}
           <div className="flex flex-col items-start gap-6 self-stretch mt-6">
-            <div className="flex items-start gap-6 self-stretch">
+            <div className="flex flex-col lg:flex-row items-start gap-4 lg:gap-6 self-stretch">
               {/* Email */}
               <div className="flex flex-col items-start flex-1">
                 <div className="flex pb-2 items-start gap-2 self-stretch">
