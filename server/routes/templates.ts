@@ -108,7 +108,7 @@ const mockTemplate: TemplateResponse = {
         {
           id: 6,
           templateVersionId: 2,
-          name: "Biometric Verification",
+          name: "Capture Selfie",
           description: "Live selfie capture for biometric verification",
           orderIndex: 3,
           sectionType: "biometrics",
