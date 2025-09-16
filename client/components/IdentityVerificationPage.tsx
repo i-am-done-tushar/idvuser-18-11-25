@@ -182,8 +182,8 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
 
         {/* Content Area */}
         <div className="flex w-full flex-1 p-2 sm:p-4 lg:p-6 flex-col items-center gap-4 lg:gap-6 bg-background overflow-auto">
-          <div className="flex w-full max-w-[998px] flex-col items-center gap-6">
-            <div className="flex flex-col items-center gap-6 self-stretch">
+          <div className="flex w-full max-w-[998px] flex-col items-center gap-4 lg:gap-6">
+            <div className="flex flex-col items-center gap-4 lg:gap-6 self-stretch">
               {/* Personal Information Section */}
               <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
                 <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
