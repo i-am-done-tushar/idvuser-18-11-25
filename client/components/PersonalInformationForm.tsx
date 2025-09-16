@@ -66,6 +66,26 @@ export function PersonalInformationForm({
     return fields.every((f) => validateField(f));
   };
 
+  // Helpers to convert between DD/MM/YYYY (formData) and YYYY-MM-DD (input[type=date])
+  const formatDOBToInput = (dob: string) => {
+    if (!dob) return '';
+    const m = dob.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return '';
+    const day = m[1];
+    const month = m[2];
+    const year = m[3];
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseInputDateToDOB = (value: string) => {
+    // value is YYYY-MM-DD
+    if (!value) return '';
+    const parts = value.split('-');
+    if (parts.length !== 3) return '';
+    const [year, month, day] = parts;
+    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+  };
+
   return (
     <div className="flex flex-col items-start self-stretch">
       <div className="flex flex-col items-start gap-6 self-stretch">
