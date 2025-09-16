@@ -20,11 +20,14 @@ export function StepSidebar({ sections, currentStep }: StepSidebarProps) {
   }));
 
   return (
-    <aside className="w-80 p-4 flex flex-col gap-6 bg-background h-full">
+    <aside className="w-80 p-4 flex flex-col gap-6 bg-background h-full relative">
+      {/* full-height inactive vertical line behind the step circles */}
+      <div className="absolute left-9 top-4 bottom-4 w-[2px] bg-step-inactive-border rounded z-0" aria-hidden />
+
       {steps.map((step, idx) => (
         <div key={step.number} className="flex items-start gap-4">
-          {/* Left column: circle + connector */}
-          <div className="flex flex-col items-center w-10">
+          {/* Left column: circle + connector (overlaid above the background line) */}
+          <div className="flex flex-col items-center w-10 relative z-10">
             <div
               className={`flex items-center justify-center rounded-full transition-all duration-150 ${
                 step.isActive
@@ -39,12 +42,12 @@ export function StepSidebar({ sections, currentStep }: StepSidebarProps) {
               </span>
             </div>
 
-            {/* connector line - show below except last */}
+            {/* overlay connector segment to show completed portion (only between circles) */}
             {idx < steps.length - 1 && (
               <div
                 className={`mt-2 w-[2px] flex-1 rounded ${
-                  step.isCompleted ? 'bg-primary' : 'bg-step-inactive-border'
-                }`}
+                  step.isCompleted ? 'bg-primary' : 'bg-transparent'
+                } z-10`}
                 aria-hidden
               />
             )}
