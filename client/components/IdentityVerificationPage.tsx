@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { StepSidebar } from './StepSidebar';
 import { PersonalInformationForm } from './PersonalInformationForm';
 import { TemplateResponse, FormData } from '@shared/templates';
+import { useToast } from '@/hooks/use-toast';
 
 interface IdentityVerificationPageProps {
   templateId: number;
