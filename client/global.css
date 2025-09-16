@@ -12,51 +12,47 @@
    * A different format will require also updating the theme in tailwind.config.ts.
   */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Design system colors from Figma */
+    --background: 0 0% 100%; /* #FFF */
+    --foreground: 217 17% 20%; /* #323238 */
+    --page-background: 216 6% 94%; /* #F1F2F4 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%; /* #FFF */
+    --card-foreground: 217 17% 20%; /* #323238 */
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 217 17% 20%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 209 100% 46%; /* #0073EA */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 216 6% 94%; /* #F1F2F4 */
+    --secondary-foreground: 217 17% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 216 6% 94%; /* #F1F2F4 */
+    --muted-foreground: 217 12% 47%; /* #676879 */
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 209 75% 92%; /* #E6F1FD */
+    --accent-foreground: 217 17% 20%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 349 69% 53%; /* #D83A52 */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 217 20% 83%; /* #D0D4E4 */
+    --input-border: 219 15% 77%; /* #C3C6D4 */
+    --input: 219 15% 77%;
+    --ring: 209 100% 46%;
 
-    --radius: 0.5rem;
+    --radius: 0.25rem; /* 4px to match design */
 
-    --sidebar-background: 0 0% 98%;
+    /* Text colors */
+    --text-primary: 217 17% 20%; /* #323238 */
+    --text-secondary: 214 23% 42%; /* #42526E */
+    --text-muted: 217 12% 47%; /* #676879 */
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Specific design colors */
+    --step-active-bg: 209 75% 92%; /* #E6F1FD */
+    --step-inactive-border: 219 15% 77%; /* #C3C6D4 */
   }
 
   .dark {
