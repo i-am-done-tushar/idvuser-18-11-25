@@ -55,7 +55,9 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
 
   // Monitor for Step 1 completion
   useEffect(() => {
-    if (currentStep === 1 && isFormValid() && !hasShownStep1Toast) {
+    const formIsValid = isFormValid();
+
+    if (currentStep === 1 && formIsValid && !hasShownStep1Toast) {
       // Show success toast
       toast({
         title: (
@@ -82,7 +84,21 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
         setCurrentStep(2);
       }, 1500);
     }
-  }, [isEmailVerified, isPhoneVerified, formData, currentStep, hasShownStep1Toast, toast]);
+  }, [
+    isEmailVerified,
+    isPhoneVerified,
+    formData.firstName,
+    formData.lastName,
+    formData.dateOfBirth,
+    formData.email,
+    formData.phoneNumber,
+    formData.address,
+    formData.city,
+    formData.postalCode,
+    currentStep,
+    hasShownStep1Toast,
+    toast
+  ]);
 
   const handleSendEmailOTP = () => {
     // Mock email verification
