@@ -65,30 +65,17 @@ export function IdentityDocumentForm({}: IdentityDocumentFormProps) {
         {/* Input Container */}
         <div className="flex w-full items-start gap-6">
           {/* Country Dropdown */}
-          <div className="flex h-[38px] px-3 py-[15px] justify-between items-center flex-1 rounded border border-[#C3C6D4] bg-white">
-            <div className="flex items-center gap-2 flex-1">
-              <div className="text-[#676879] font-roboto text-[13px] font-normal leading-5">
-                {country || 'Select'}
-              </div>
-            </div>
-            <div className="flex justify-end items-center gap-2">
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 10 10"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="flex-shrink-0"
-              >
-                <path
-                  d="M1 3L5 7L9 3"
-                  stroke="#344563"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
+          <div className="flex-1">
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="w-full h-[38px] px-3 py-[8px] rounded border border-[#C3C6D4] bg-white text-[#172B4D] font-roboto text-[13px]"
+            >
+              <option value="">Select</option>
+              <option value="India">India</option>
+              <option value="United States">United States</option>
+              <option value="United Kingdom">United Kingdom</option>
+            </select>
           </div>
 
           {/* Document Type Dropdown - hidden for now */}
