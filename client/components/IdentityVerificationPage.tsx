@@ -5,6 +5,7 @@ import { PersonalInformationForm } from './PersonalInformationForm';
 import { ConsentDialog } from './ConsentDialog';
 import { TemplateResponse, FormData } from '@shared/templates';
 import { useToast } from '@/hooks/use-toast';
+import { isValidName, isValidEmail, isValidPhone, isValidDOB, isValidAddress, isValidPostalCode } from '@/lib/validation';
 
 interface IdentityVerificationPageProps {
   templateId: number;
