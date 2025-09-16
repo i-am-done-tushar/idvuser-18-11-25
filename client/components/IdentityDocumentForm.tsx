@@ -223,8 +223,8 @@ export function IdentityDocumentForm({}: IdentityDocumentFormProps) {
           </div>
 
           {/* QR Code Upload */}
-          <div className="flex h-[156px] flex-col items-center gap-4 self-stretch border-2 border-dashed border-[#C3C6D4] rounded-t-lg bg-white">
-            <div className="flex w-full justify-center items-center gap-4 p-4">
+          <div className="flex flex-col items-center gap-4 self-stretch border-2 border-dashed border-[#C3C6D4] rounded-lg bg-white p-4">
+            <div className="flex w-full justify-center items-center gap-4">
               <div className="flex justify-center items-center">
                 <img
                   src="https://api.builder.io/api/v1/image/assets/TEMP/e4a25327bd6d9a0c88f260c5b3b9c48816547c30?width=220"
@@ -241,12 +241,14 @@ export function IdentityDocumentForm({}: IdentityDocumentFormProps) {
                 </div>
               </div>
             </div>
-            <div className="flex p-2 justify-end items-center gap-1 self-end">
-              <svg width="20" height="20" viewBox="0 0 20 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10.0003 13.8332V10.4998M10.0003 7.1665H10.0087M18.3337 10.4998C18.3337 15.1022 14.6027 18.8332 10.0003 18.8332C5.39795 18.8332 1.66699 15.1022 1.66699 10.4998C1.66699 5.89746 5.39795 2.1665 10.0003 2.1665C14.6027 2.1665 18.3337 5.89746 18.3337 10.4998Z" stroke="#0073EA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <div className="text-[#0073EA] font-roboto text-[12px] font-normal leading-5">
-                How does this work?
+            <div className="w-full flex justify-end items-center mt-2">
+              <div className="flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 20 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10.0003 13.8332V10.4998M10.0003 7.1665H10.0087M18.3337 10.4998C18.3337 15.1022 14.6027 18.8332 10.0003 18.8332C5.39795 18.8332 1.66699 15.1022 1.66699 10.4998C1.66699 5.89746 5.39795 2.1665 10.0003 2.1665C14.6027 2.1665 18.3337 5.89746 18.3337 10.4998Z" stroke="#0073EA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <div className="text-[#0073EA] font-roboto text-[12px] font-normal leading-5">
+                  How does this work?
+                </div>
               </div>
             </div>
           </div>
