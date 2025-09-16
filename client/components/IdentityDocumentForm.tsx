@@ -266,6 +266,25 @@ export function IdentityDocumentForm({}: IdentityDocumentFormProps) {
           </div>
         </div>
       )}
+
+      {/* Dialogs */}
+      <CameraDialog
+        isOpen={showCameraDialog}
+        onClose={() => setShowCameraDialog(false)}
+        onSubmit={() => {
+          setShowCameraDialog(false);
+          // Handle camera submission
+        }}
+      />
+
+      <UploadDialog
+        isOpen={showUploadDialog}
+        onClose={() => setShowUploadDialog(false)}
+        onSubmit={() => {
+          setShowUploadDialog(false);
+          // Handle upload submission
+        }}
+      />
     </div>
   );
 }
