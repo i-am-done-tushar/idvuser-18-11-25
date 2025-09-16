@@ -70,7 +70,7 @@ export function PersonalInformationForm({
           </div>
 
           {/* Middle Name and Date of Birth Row */}
-          <div className="flex items-start gap-6 self-stretch mt-6">
+          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 self-stretch mt-6">
             {/* Middle Name */}
             <div className="flex flex-col items-start flex-1">
               <div className="flex pb-2 items-start gap-2 self-stretch">
