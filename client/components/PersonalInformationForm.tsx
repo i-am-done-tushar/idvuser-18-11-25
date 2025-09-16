@@ -27,7 +27,7 @@ export function PersonalInformationForm({
       <div className="flex flex-col items-start gap-6 self-stretch">
         {/* Name Fields Row */}
         <div className="flex flex-col items-start self-stretch">
-          <div className="flex items-start gap-6 self-stretch">
+          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 self-stretch">
             {/* First Name */}
             <div className="flex flex-col items-start flex-1">
               <div className="flex pb-2 items-start gap-2 self-stretch">
