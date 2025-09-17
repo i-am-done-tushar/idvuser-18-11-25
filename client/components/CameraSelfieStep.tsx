@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HowItWorksDialog } from "./HowItWorksDialog";
 
 interface CameraSelfieStepProps {
   // Add props as needed for camera functionality
