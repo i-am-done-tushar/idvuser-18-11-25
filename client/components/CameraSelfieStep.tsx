@@ -197,6 +197,11 @@ export function CameraSelfieStep({}: CameraSelfieStepProps) {
           </div>
         </div>
       </div>
+
+      <HowItWorksDialog
+        isOpen={showHowItWorksDialog}
+        onClose={() => setShowHowItWorksDialog(false)}
+      />
     </div>
   );
 }
