@@ -185,7 +185,10 @@ export function CameraSelfieStep({}: CameraSelfieStepProps) {
                       </clipPath>
                     </defs>
                   </svg>
-                  <button className="text-primary font-roboto text-xs font-normal leading-5 hover:underline">
+                  <button
+                    onClick={() => setShowHowItWorksDialog(true)}
+                    className="text-primary font-roboto text-xs font-normal leading-5 hover:underline"
+                  >
                     How does this work?
                   </button>
                 </div>
