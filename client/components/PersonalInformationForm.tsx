@@ -50,7 +50,7 @@ export function PersonalInformationForm({
           error = "Enter a valid DOB (DD/MM/YYYY). You must be at least 18.";
         break;
       case "email":
-        if (!isValidEmail(value)) error = "Enter a valid email address.";
+        if (!isValidEmail(value)) error = "Please enter a valid email address.";
         break;
       case "phoneNumber":
         if (!isValidPhone(value))
@@ -279,7 +279,7 @@ export function PersonalInformationForm({
                         type="email"
                         placeholder="Enter Your Email Address"
                         value={formData.email}
-                        onChange={(e) => updateField("email", e.target.value)}
+                        onChange={(e) => updateField("email", e.target.value.trim())}
                         onBlur={() => validateField("email")}
                         aria-invalid={!!errors.email}
                         aria-describedby={
@@ -290,20 +290,26 @@ export function PersonalInformationForm({
                     </div>
                     <button
                       onClick={onSendEmailOTP}
-                      className="flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background"
+                      disabled={!isValidEmail(formData.email) || isEmailVerified}
+                      aria-disabled={!isValidEmail(formData.email) || isEmailVerified}
+                      className={`flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background ${(!isValidEmail(formData.email) || isEmailVerified) ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <span className="text-primary font-figtree text-[12px] font-normal">
                         {isEmailVerified ? "Verified" : "Send OTP"}
                       </span>
                     </button>
                   </div>
-                  {errors.email && (
+                  {errors.email ? (
                     <div
                       id="err-email"
                       role="alert"
                       className="text-destructive text-[12px] mt-1"
                     >
                       {errors.email}
+                    </div>
+                  ) : !isEmailVerified && (
+                    <div className="text-text-muted text-[12px] mt-1">
+                      Email verification is required to continue.
                     </div>
                   )}
                 </div>
