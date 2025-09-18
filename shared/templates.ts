@@ -67,6 +67,7 @@ export interface FormData {
   middleName: string;
   dateOfBirth: string;
   email: string;
+  countryCode: string;
   phoneNumber: string;
   gender: string;
   address: string;

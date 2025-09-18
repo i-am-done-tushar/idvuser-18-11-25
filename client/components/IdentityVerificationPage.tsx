@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   isValidName,
   isValidEmail,
-  isValidPhone,
+  isValidPhoneForCountry,
   isValidDOB,
   isValidAddress,
   isValidPostalCode,
@@ -43,6 +43,7 @@ export function IdentityVerificationPage({
     middleName: "",
     dateOfBirth: "",
     email: "",
+    countryCode: "",
     phoneNumber: "",
     gender: "",
     address: "",
@@ -122,6 +123,7 @@ export function IdentityVerificationPage({
     formData.lastName,
     formData.dateOfBirth,
     formData.email,
+    formData.countryCode,
     formData.phoneNumber,
     formData.address,
     formData.city,
@@ -212,7 +214,8 @@ export function IdentityVerificationPage({
       isValidName(formData.lastName) &&
       isValidDOB(formData.dateOfBirth) &&
       isValidEmail(formData.email) &&
-      isValidPhone(formData.phoneNumber) &&
+      !!formData.countryCode &&
+      isValidPhoneForCountry(formData.countryCode, formData.phoneNumber) &&
       isValidAddress(formData.address) &&
       !!formData.city &&
       isValidPostalCode(formData.postalCode) &&
