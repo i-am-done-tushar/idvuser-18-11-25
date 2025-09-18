@@ -125,7 +125,12 @@ export function PersonalInformationForm({
                     type="text"
                     placeholder="Enter Name"
                     value={formData.firstName}
-                    onChange={(e) => updateField("firstName", e.target.value)}
+                    onChange={(e) =>
+                      updateField(
+                        "firstName",
+                        e.target.value.replace(/[^\p{L}]/gu, "")
+                      )
+                    }
                     onBlur={() => validateField("firstName")}
                     aria-invalid={!!errors.firstName}
                     aria-describedby={
@@ -162,7 +167,12 @@ export function PersonalInformationForm({
                     type="text"
                     placeholder="Enter Your Full Name"
                     value={formData.lastName}
-                    onChange={(e) => updateField("lastName", e.target.value)}
+                    onChange={(e) =>
+                      updateField(
+                        "lastName",
+                        e.target.value.replace(/[^\p{L}]/gu, "")
+                      )
+                    }
                     onBlur={() => validateField("lastName")}
                     aria-invalid={!!errors.lastName}
                     aria-describedby={
