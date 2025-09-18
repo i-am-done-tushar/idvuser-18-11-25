@@ -6,6 +6,7 @@ import { IdentityDocumentForm } from "./IdentityDocumentForm";
 import { CameraSelfieStep } from "./CameraSelfieStep";
 import { ConsentDialog } from "./ConsentDialog";
 import { HowItWorksDialog } from "./HowItWorksDialog";
+import { LockedStepComponent } from "./LockedStepComponent";
 import { TemplateResponse, FormData } from "@shared/templates";
 import { useToast } from "@/hooks/use-toast";
 import {
