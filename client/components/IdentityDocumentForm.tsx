@@ -13,6 +13,7 @@ export function IdentityDocumentForm({
   const [selectedDocument, setSelectedDocument] = useState("");
   const [showCameraDialog, setShowCameraDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadedDocuments, setUploadedDocuments] = useState<string[]>([]);
 
   const documentTypes = [
     {
