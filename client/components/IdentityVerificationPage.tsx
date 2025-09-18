@@ -713,14 +713,8 @@ export function IdentityVerificationPage({
                             </div>
                           </div>
                         </div>
-                        <div className="flex w-full h-[308px] py-4 px-4 flex-col justify-center items-center border-t border-border bg-background">
-                          <div className="flex w-[269px] flex-col items-center gap-2 text-center">
-                            <div className="text-text-secondary font-roboto text-[13px] font-medium">
-                              You'll be able to complete this step after
-                              <br />
-                              submitting your identity document.
-                            </div>
-                          </div>
+                        <div className="flex w-full h-[308px] border-t border-border bg-background">
+                          <LockedStepComponent message="You'll be able to complete this step after submitting your identity document." />
                         </div>
                       </div>
                     </div>
