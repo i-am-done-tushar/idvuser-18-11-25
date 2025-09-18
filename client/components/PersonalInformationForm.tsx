@@ -43,7 +43,7 @@ export function PersonalInformationForm({
       case "firstName":
       case "lastName":
         if (!isValidName(value))
-          error = "Please enter a valid name (at least 2 letters).";
+          error = "Enter at least 2 valid letters.";
         break;
       case "dateOfBirth":
         if (!isValidDOB(value))
