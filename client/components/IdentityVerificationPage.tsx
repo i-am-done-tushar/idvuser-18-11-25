@@ -123,6 +123,7 @@ export function IdentityVerificationPage({
     formData.lastName,
     formData.dateOfBirth,
     formData.email,
+    formData.countryCode,
     formData.phoneNumber,
     formData.address,
     formData.city,
