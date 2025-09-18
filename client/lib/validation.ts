@@ -12,11 +12,37 @@ export function isValidEmail(email: string) {
   return re.test(trimmed);
 }
 
+export const COUNTRY_PHONE_RULES = [
+  { dial: "+91", name: "India", min: 10, max: 10 },
+  { dial: "+1", name: "United States", min: 10, max: 10 },
+  { dial: "+44", name: "United Kingdom", min: 10, max: 10 },
+  { dial: "+61", name: "Australia", min: 9, max: 9 },
+  { dial: "+49", name: "Germany", min: 10, max: 11 },
+  { dial: "+33", name: "France", min: 9, max: 9 },
+  { dial: "+65", name: "Singapore", min: 8, max: 8 },
+  { dial: "+971", name: "United Arab Emirates", min: 9, max: 9 },
+  { dial: "+55", name: "Brazil", min: 10, max: 11 },
+  { dial: "+81", name: "Japan", min: 9, max: 10 },
+] as const;
+
+export function digitsOnly(input: string) {
+  return (input ?? "").replace(/\D/g, "");
+}
+
 export function isValidPhone(phone: string) {
-  if (!phone) return false;
-  const digits = phone.replace(/\D/g, '');
-  // Accept 10 digit phone numbers (common format)
+  // Kept for backward compatibility; assumes generic 10-digit rule
+  const digits = digitsOnly(phone);
   return digits.length === 10;
+}
+
+export function isValidPhoneForCountry(countryDial: string, phone: string) {
+  const digits = digitsOnly(phone);
+  const rule = COUNTRY_PHONE_RULES.find((c) => c.dial === countryDial);
+  if (!rule) {
+    // default to reasonable E.164 local length range if unknown
+    return digits.length >= 6 && digits.length <= 14;
+  }
+  return digits.length >= rule.min && digits.length <= rule.max;
 }
 
 export function parseDOB(dob: string): Date | null {
