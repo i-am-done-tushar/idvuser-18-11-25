@@ -32,6 +32,18 @@ const App = () => (
             path="/verification-success"
             element={<VerificationSuccessPage />}
           />
+          <Route
+            path="/auth/login"
+            element={<AuthLoginPage />}
+          />
+          <Route
+            path="/auth/otp"
+            element={<AuthOtpPage />}
+          />
+          <Route
+            path="/dashboard"
+            element={<Dashboard />}
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
