@@ -5,24 +5,28 @@ export function Dashboard() {
       id: 1,
       name: "Opinder Singh",
       documentType: "Aadhar Card",
-      profileImage: "https://api.builder.io/api/v1/image/assets/TEMP/f021a7991ff41a16f92b6cf5984980c0c4edf3d2?width=160",
+      profileImage:
+        "https://api.builder.io/api/v1/image/assets/TEMP/f021a7991ff41a16f92b6cf5984980c0c4edf3d2?width=160",
       dateOfBirth: "15/12/1980",
       gender: "Male",
       verificationId: "XXXXXX56",
       createdOn: "20 April 2025, 11:45 AM",
-      address: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiu sit amet"
+      address:
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiu sit amet",
     },
     {
       id: 2,
       name: "Opinder Singh",
-      documentType: "Aadhar Card", 
-      profileImage: "https://api.builder.io/api/v1/image/assets/TEMP/f021a7991ff41a16f92b6cf5984980c0c4edf3d2?width=160",
+      documentType: "Aadhar Card",
+      profileImage:
+        "https://api.builder.io/api/v1/image/assets/TEMP/f021a7991ff41a16f92b6cf5984980c0c4edf3d2?width=160",
       dateOfBirth: "15/12/1980",
       gender: "Male",
       verificationId: "XXXXXX56",
       createdOn: "20 April 2025, 11:45 AM",
-      address: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiu sit amet"
-    }
+      address:
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiu sit amet",
+    },
   ];
 
   return (
@@ -83,7 +87,9 @@ export function Dashboard() {
         {/* Admin Badge */}
         <div className="flex items-center gap-1">
           <div className="flex w-8 h-8 justify-center items-center rounded-full bg-[#F65F7C]">
-            <span className="text-white font-roboto text-xs font-medium">OS</span>
+            <span className="text-white font-roboto text-xs font-medium">
+              OS
+            </span>
           </div>
         </div>
       </div>
@@ -96,7 +102,8 @@ export function Dashboard() {
             Verified Credentials
           </h1>
           <p className="text-text-muted font-roboto text-[13px] font-normal leading-[15px]">
-            View and manage all successful verifications below. Your data is encrypted and accessible only to authorized parties.
+            View and manage all successful verifications below. Your data is
+            encrypted and accessible only to authorized parties.
           </p>
         </div>
 
