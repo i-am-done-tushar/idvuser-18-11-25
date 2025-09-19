@@ -186,14 +186,14 @@ export function AuthLoginPage() {
                 <div className="flex items-center gap-2 bg-[#F6F7FB] rounded p-1 w-full">
                   <button
                     type="button"
-                    onClick={() => { setMode("email"); setEmailError(""); setEmailOrPhone(""); }}
+                    onClick={() => { setMode("email"); setEmailError(""); setPhoneError(""); setCountryError(""); setSelectedCountry(""); setEmailOrPhone(""); }}
                     className={`flex-1 h-10 rounded text-sm font-medium ${mode === "email" ? "bg-white shadow text-[#172B4D]" : "text-[#676879]"}`}
                   >
                     Email
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setMode("phone"); setEmailError(""); setEmailOrPhone(""); }}
+                    onClick={() => { setMode("phone"); setEmailError(""); setPhoneError(""); setCountryError(""); setSelectedCountry(""); setEmailOrPhone(""); }}
                     className={`flex-1 h-10 rounded text-sm font-medium ${mode === "phone" ? "bg-white shadow text-[#172B4D]" : "text-[#676879]"}`}
                   >
                     Mobile
