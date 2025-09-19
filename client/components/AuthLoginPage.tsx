@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-type Country = { code: string; name: string; length?: number; min?: number; max?: number };
+type Country = {
+  code: string;
+  name: string;
+  length?: number;
+  min?: number;
+  max?: number;
+};
 
 const COUNTRIES: Country[] = [
   { code: "+91", name: "India", length: 10 },
@@ -71,7 +77,9 @@ export function AuthLoginPage() {
 
     setPhoneError("");
     // send with country code prefixed
-    navigate("/auth/otp", { state: { emailOrPhone: `${selectedCountry}${digits}` } });
+    navigate("/auth/otp", {
+      state: { emailOrPhone: `${selectedCountry}${digits}` },
+    });
   };
 
   return (
@@ -185,14 +193,28 @@ export function AuthLoginPage() {
                 <div className="flex items-center gap-2 bg-[#F6F7FB] rounded p-1 w-full">
                   <button
                     type="button"
-                    onClick={() => { setMode("email"); setEmailError(""); setPhoneError(""); setCountryError(""); setSelectedCountry(""); setEmailOrPhone(""); }}
+                    onClick={() => {
+                      setMode("email");
+                      setEmailError("");
+                      setPhoneError("");
+                      setCountryError("");
+                      setSelectedCountry("");
+                      setEmailOrPhone("");
+                    }}
                     className={`flex-1 h-10 rounded text-sm font-medium ${mode === "email" ? "bg-white shadow text-[#172B4D]" : "text-[#676879]"}`}
                   >
                     Email
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setMode("phone"); setEmailError(""); setPhoneError(""); setCountryError(""); setSelectedCountry(""); setEmailOrPhone(""); }}
+                    onClick={() => {
+                      setMode("phone");
+                      setEmailError("");
+                      setPhoneError("");
+                      setCountryError("");
+                      setSelectedCountry("");
+                      setEmailOrPhone("");
+                    }}
                     className={`flex-1 h-10 rounded text-sm font-medium ${mode === "phone" ? "bg-white shadow text-[#172B4D]" : "text-[#676879]"}`}
                   >
                     Mobile
@@ -225,7 +247,9 @@ export function AuthLoginPage() {
                           ))}
                         </select>
                         {countryError && (
-                          <p className="text-sm text-destructive mt-1">{countryError}</p>
+                          <p className="text-sm text-destructive mt-1">
+                            {countryError}
+                          </p>
                         )}
                       </div>
 
@@ -248,7 +272,9 @@ export function AuthLoginPage() {
                             setCountryError("Please select a country code.");
                             return;
                           }
-                          const country = COUNTRIES.find((c) => c.code === selectedCountry);
+                          const country = COUNTRIES.find(
+                            (c) => c.code === selectedCountry,
+                          );
                           const digits = trimmed.replace(/\D/g, "");
                           if (!digits) {
                             setPhoneError("Please enter a valid phone number.");
@@ -256,18 +282,26 @@ export function AuthLoginPage() {
                           }
                           if (country && country.length !== undefined) {
                             if (digits.length !== country.length) {
-                              setPhoneError("Please enter a valid phone number.");
+                              setPhoneError(
+                                "Please enter a valid phone number.",
+                              );
                               return;
                             }
                           } else {
                             if (digits.length < 7 || digits.length > 15) {
-                              setPhoneError("Please enter a valid phone number.");
+                              setPhoneError(
+                                "Please enter a valid phone number.",
+                              );
                               return;
                             }
                           }
                           setPhoneError("");
                         }}
-                        placeholder={selectedCountry ? `e.g. ${COUNTRIES.find(c => c.code === selectedCountry)?.length ? '9'.repeat(COUNTRIES.find(c => c.code === selectedCountry)!.length) : 'Phone number'}` : "Enter mobile number"}
+                        placeholder={
+                          selectedCountry
+                            ? `e.g. ${COUNTRIES.find((c) => c.code === selectedCountry)?.length ? "9".repeat(COUNTRIES.find((c) => c.code === selectedCountry)!.length) : "Phone number"}`
+                            : "Enter mobile number"
+                        }
                         className="flex-1 h-[54px] px-3 py-4 border border-[#C3C6D4] rounded bg-white text-[#676879] font-roboto text-base placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                       />
                     </div>
@@ -290,22 +324,32 @@ export function AuthLoginPage() {
                         if (mode === "email") {
                           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                           if (!emailRegex.test(trimmed)) {
-                            setEmailError("Please enter a valid email address.");
+                            setEmailError(
+                              "Please enter a valid email address.",
+                            );
                           } else {
                             setEmailError("");
                           }
                         }
                       }}
-                      placeholder={mode === "email" ? "example@domain.com" : "Enter mobile number"}
+                      placeholder={
+                        mode === "email"
+                          ? "example@domain.com"
+                          : "Enter mobile number"
+                      }
                       className="w-full h-[54px] px-3 py-4 border border-[#C3C6D4] rounded bg-white text-[#676879] font-roboto text-base placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     />
                   )}
 
                   {emailError && (
-                    <p className="text-sm text-destructive mt-1">{emailError}</p>
+                    <p className="text-sm text-destructive mt-1">
+                      {emailError}
+                    </p>
                   )}
                   {phoneError && (
-                    <p className="text-sm text-destructive mt-1">{phoneError}</p>
+                    <p className="text-sm text-destructive mt-1">
+                      {phoneError}
+                    </p>
                   )}
                 </div>
 
