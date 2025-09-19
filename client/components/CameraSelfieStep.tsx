@@ -67,11 +67,15 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach((t) => t.stop());
       // Clear the srcObject so video element can be reattached to new stream
-      try { (videoRef.current as HTMLVideoElement).srcObject = null; } catch {}
+      try {
+        (videoRef.current as HTMLVideoElement).srcObject = null;
+      } catch {}
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
@@ -161,10 +165,11 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
                 <button
                   onClick={captureSelfie}
                   disabled={cameraError}
-                  className={`flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded ${cameraError
+                  className={`flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded ${
+                    cameraError
                       ? "bg-primary opacity-50"
                       : "bg-success hover:bg-success/90"
-                    }`}
+                  }`}
                 >
                   <span className="text-white font-roboto text-[13px] font-medium">
                     {selfieCaptured ? "Captured" : "Capture Selfie"}
