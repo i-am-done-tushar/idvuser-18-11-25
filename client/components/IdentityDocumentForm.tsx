@@ -400,6 +400,16 @@ export function IdentityDocumentForm({
               ? uploadedDocuments
               : [...uploadedDocuments, selectedDocument];
             setUploadedDocuments(next);
+
+            // Add uploaded file to the files list
+            const newFile: UploadedFile = {
+              id: `${selectedDocument}-${Date.now()}`,
+              name: `${documentTypes.find(d => d.id === selectedDocument)?.name || 'Document'}.jpg`,
+              size: "2.5MB",
+              type: "image"
+            };
+            setUploadedFiles(prev => [...prev, newFile]);
+
             setSelectedDocument("");
             // call onComplete only when all required documents are uploaded
             const requiredIds = documentTypes.map((d) => d.id);
