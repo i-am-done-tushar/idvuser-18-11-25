@@ -429,6 +429,16 @@ export function IdentityDocumentForm({
               ? uploadedDocuments
               : [...uploadedDocuments, selectedDocument];
             setUploadedDocuments(next);
+
+            // Add uploaded file to the files list
+            const newFile: UploadedFile = {
+              id: `${selectedDocument}-${Date.now()}`,
+              name: `${documentTypes.find(d => d.id === selectedDocument)?.name || 'Document'}.pdf`,
+              size: "3MB",
+              type: "document"
+            };
+            setUploadedFiles(prev => [...prev, newFile]);
+
             setSelectedDocument("");
             const requiredIds = documentTypes.map((d) => d.id);
             const allUploaded = requiredIds.every((id) => next.includes(id));
