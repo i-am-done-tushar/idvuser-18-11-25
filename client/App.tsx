@@ -9,6 +9,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { VerificationProgressPage } from "./components/VerificationProgressPage";
+import { VerificationSuccessPage } from "./components/VerificationSuccessPage";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,10 @@ const App = () => (
           <Route
             path="/verification-progress"
             element={<VerificationProgressPage />}
+          />
+          <Route
+            path="/verification-success"
+            element={<VerificationSuccessPage />}
           />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
