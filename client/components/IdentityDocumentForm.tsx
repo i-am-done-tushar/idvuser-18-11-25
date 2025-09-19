@@ -25,28 +25,75 @@ export function IdentityDocumentForm({
 
   // Function to get file icon based on file type
   const getFileIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <g clipPath="url(#clip0_2641_20024)">
-        <path d="M10.0463 7.62797L3.7207 6.51172V14.7598C3.7207 15.1364 4.02602 15.442 4.40289 15.442H15.3179C15.6945 15.442 16.0001 15.1367 16.0001 14.7598V11.7211L10.0463 7.62797Z" fill="#185C37"/>
-        <path d="M10.0463 0.558594H4.40289C4.02633 0.558594 3.7207 0.863906 3.7207 1.24078V4.27953L10.0463 8.00047L13.3951 9.11672L15.9998 8.00047V4.27953L10.0463 0.558594Z" fill="#21A366"/>
-        <path d="M3.7207 4.2793H10.0463V8.00023H3.7207V4.2793Z" fill="#107C41"/>
-        <path opacity="0.1" d="M8.24789 3.53516H3.7207V12.8373H8.24789C8.62414 12.8361 8.92883 12.5314 8.93008 12.1552V4.21703C8.92883 3.84078 8.62414 3.53641 8.24789 3.53516Z" fill="black"/>
-        <path opacity="0.2" d="M7.87602 3.90625H3.7207V13.2088H7.87602C8.25227 13.2075 8.55695 12.9028 8.5582 12.5266V4.58844C8.55664 4.21219 8.25195 3.9075 7.87602 3.90625Z" fill="black"/>
-        <path opacity="0.2" d="M7.87602 3.90625H3.7207V12.4644H7.87602C8.25227 12.4631 8.55695 12.1584 8.5582 11.7822V4.58844C8.55664 4.21219 8.25195 3.9075 7.87602 3.90625Z" fill="black"/>
-        <path opacity="0.2" d="M7.50383 3.90625H3.7207V12.4644H7.50383C7.88008 12.4631 8.18477 12.1584 8.18602 11.7822V4.58844C8.18445 4.21219 7.88008 3.9075 7.50383 3.90625Z" fill="black"/>
-        <path d="M0.682187 3.90625H7.50406C7.88063 3.90625 8.18625 4.21156 8.18625 4.58844V11.4103C8.18625 11.7869 7.88094 12.0925 7.50406 12.0925H0.682187C0.305312 12.0925 0 11.7872 0 11.4103V4.58844C0 4.21156 0.305312 3.90625 0.682187 3.90625Z" fill="url(#paint0_linear_2641_20024)"/>
-        <path d="M2.1123 10.2173L3.54699 7.99414L2.2323 5.7832H3.2898L4.0073 7.19727C4.07355 7.33164 4.11887 7.43133 4.14355 7.49727H4.15293C4.20012 7.39008 4.2498 7.28602 4.30168 7.18508L5.06855 5.78414H6.03949L4.69137 7.98195L6.07355 10.2176H5.04043L4.21168 8.6657C4.17262 8.59977 4.13949 8.53039 4.11262 8.45852H4.10043C4.07605 8.52883 4.04387 8.59633 4.00449 8.65945L3.15137 10.2179L2.1123 10.2173Z" fill="white"/>
-        <path d="M15.3181 0.558594H10.0469V4.27953H16.0003V1.24078C16.0003 0.863906 15.695 0.558594 15.3181 0.558594Z" fill="#33C481"/>
-        <path d="M10.0469 8H16.0003V11.7209H10.0469V8Z" fill="#107C41"/>
+        <path
+          d="M10.0463 7.62797L3.7207 6.51172V14.7598C3.7207 15.1364 4.02602 15.442 4.40289 15.442H15.3179C15.6945 15.442 16.0001 15.1367 16.0001 14.7598V11.7211L10.0463 7.62797Z"
+          fill="#185C37"
+        />
+        <path
+          d="M10.0463 0.558594H4.40289C4.02633 0.558594 3.7207 0.863906 3.7207 1.24078V4.27953L10.0463 8.00047L13.3951 9.11672L15.9998 8.00047V4.27953L10.0463 0.558594Z"
+          fill="#21A366"
+        />
+        <path
+          d="M3.7207 4.2793H10.0463V8.00023H3.7207V4.2793Z"
+          fill="#107C41"
+        />
+        <path
+          opacity="0.1"
+          d="M8.24789 3.53516H3.7207V12.8373H8.24789C8.62414 12.8361 8.92883 12.5314 8.93008 12.1552V4.21703C8.92883 3.84078 8.62414 3.53641 8.24789 3.53516Z"
+          fill="black"
+        />
+        <path
+          opacity="0.2"
+          d="M7.87602 3.90625H3.7207V13.2088H7.87602C8.25227 13.2075 8.55695 12.9028 8.5582 12.5266V4.58844C8.55664 4.21219 8.25195 3.9075 7.87602 3.90625Z"
+          fill="black"
+        />
+        <path
+          opacity="0.2"
+          d="M7.87602 3.90625H3.7207V12.4644H7.87602C8.25227 12.4631 8.55695 12.1584 8.5582 11.7822V4.58844C8.55664 4.21219 8.25195 3.9075 7.87602 3.90625Z"
+          fill="black"
+        />
+        <path
+          opacity="0.2"
+          d="M7.50383 3.90625H3.7207V12.4644H7.50383C7.88008 12.4631 8.18477 12.1584 8.18602 11.7822V4.58844C8.18445 4.21219 7.88008 3.9075 7.50383 3.90625Z"
+          fill="black"
+        />
+        <path
+          d="M0.682187 3.90625H7.50406C7.88063 3.90625 8.18625 4.21156 8.18625 4.58844V11.4103C8.18625 11.7869 7.88094 12.0925 7.50406 12.0925H0.682187C0.305312 12.0925 0 11.7872 0 11.4103V4.58844C0 4.21156 0.305312 3.90625 0.682187 3.90625Z"
+          fill="url(#paint0_linear_2641_20024)"
+        />
+        <path
+          d="M2.1123 10.2173L3.54699 7.99414L2.2323 5.7832H3.2898L4.0073 7.19727C4.07355 7.33164 4.11887 7.43133 4.14355 7.49727H4.15293C4.20012 7.39008 4.2498 7.28602 4.30168 7.18508L5.06855 5.78414H6.03949L4.69137 7.98195L6.07355 10.2176H5.04043L4.21168 8.6657C4.17262 8.59977 4.13949 8.53039 4.11262 8.45852H4.10043C4.07605 8.52883 4.04387 8.59633 4.00449 8.65945L3.15137 10.2179L2.1123 10.2173Z"
+          fill="white"
+        />
+        <path
+          d="M15.3181 0.558594H10.0469V4.27953H16.0003V1.24078C16.0003 0.863906 15.695 0.558594 15.3181 0.558594Z"
+          fill="#33C481"
+        />
+        <path d="M10.0469 8H16.0003V11.7209H10.0469V8Z" fill="#107C41" />
       </g>
       <defs>
-        <linearGradient id="paint0_linear_2641_20024" x1="1.42208" y1="3.37341" x2="6.76396" y2="12.6253" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#18884F"/>
-          <stop offset="0.5" stopColor="#117E43"/>
-          <stop offset="1" stopColor="#0B6631"/>
+        <linearGradient
+          id="paint0_linear_2641_20024"
+          x1="1.42208"
+          y1="3.37341"
+          x2="6.76396"
+          y2="12.6253"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor="#18884F" />
+          <stop offset="0.5" stopColor="#117E43" />
+          <stop offset="1" stopColor="#0B6631" />
         </linearGradient>
         <clipPath id="clip0_2641_20024">
-          <rect width="16" height="16" fill="white"/>
+          <rect width="16" height="16" fill="white" />
         </clipPath>
       </defs>
     </svg>
@@ -54,7 +101,7 @@ export function IdentityDocumentForm({
 
   // Function to remove uploaded file
   const removeUploadedFile = (fileId: string) => {
-    setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
+    setUploadedFiles((prev) => prev.filter((file) => file.id !== fileId));
   };
 
   const documentTypes = [
@@ -467,11 +514,11 @@ export function IdentityDocumentForm({
             // Add uploaded file to the files list
             const newFile: UploadedFile = {
               id: `${selectedDocument}-${Date.now()}`,
-              name: `${documentTypes.find(d => d.id === selectedDocument)?.name || 'Document'}.jpg`,
+              name: `${documentTypes.find((d) => d.id === selectedDocument)?.name || "Document"}.jpg`,
               size: "2.5MB",
-              type: "image"
+              type: "image",
             };
-            setUploadedFiles(prev => [...prev, newFile]);
+            setUploadedFiles((prev) => [...prev, newFile]);
 
             setSelectedDocument("");
             // call onComplete only when all required documents are uploaded
@@ -496,11 +543,11 @@ export function IdentityDocumentForm({
             // Add uploaded file to the files list
             const newFile: UploadedFile = {
               id: `${selectedDocument}-${Date.now()}`,
-              name: `${documentTypes.find(d => d.id === selectedDocument)?.name || 'Document'}.pdf`,
+              name: `${documentTypes.find((d) => d.id === selectedDocument)?.name || "Document"}.pdf`,
               size: "3MB",
-              type: "document"
+              type: "document",
             };
-            setUploadedFiles(prev => [...prev, newFile]);
+            setUploadedFiles((prev) => [...prev, newFile]);
 
             setSelectedDocument("");
             const requiredIds = documentTypes.map((d) => d.id);
