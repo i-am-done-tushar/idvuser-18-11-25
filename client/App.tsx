@@ -25,6 +25,10 @@ const App = () => (
             path="/verification-progress"
             element={<VerificationProgressPage />}
           />
+          <Route
+            path="/verification-success"
+            element={<VerificationSuccessPage />}
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
