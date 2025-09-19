@@ -388,6 +388,69 @@ export function IdentityDocumentForm({
         </div>
       )}
 
+      {/* Files Uploaded Section */}
+      {uploadedFiles.length > 0 && (
+        <div className="flex flex-col items-start gap-4 self-stretch">
+          {/* Section Header */}
+          <div className="flex flex-col items-start gap-1 self-stretch">
+            <div className="flex items-center gap-2 self-stretch">
+              <div className="text-text-primary font-roboto text-base font-bold leading-[26px]">
+                Files Uploaded
+              </div>
+            </div>
+            <div className="self-stretch text-text-secondary font-roboto text-[13px] font-normal leading-5">
+              Select the ID you'd like to use for verification.
+            </div>
+          </div>
+
+          {/* Uploaded Files Grid */}
+          <div className="flex flex-wrap items-start gap-4 self-stretch">
+            {uploadedFiles.map((file) => (
+              <div
+                key={file.id}
+                className="flex flex-1 min-w-0 max-w-[456px] p-4 flex-col justify-center items-start gap-2 rounded-lg bg-muted"
+              >
+                <div className="flex justify-between items-start self-stretch">
+                  <div className="flex items-center gap-2">
+                    <div className="flex p-[7px] justify-center items-center gap-2 rounded border border-border bg-background">
+                      {getFileIcon()}
+                    </div>
+                    <div className="flex flex-col justify-center items-start gap-[2px]">
+                      <div className="text-text-primary font-figtree text-[13px] font-medium leading-normal">
+                        {file.name}
+                      </div>
+                      <div className="text-text-muted font-figtree text-xs font-normal leading-5">
+                        Size {file.size}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeUploadedFile(file.id)}
+                    className="flex w-7 h-7 justify-center items-center gap-2.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 18 18"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M13.5 4.5L4.5 13.5M4.5 4.5L13.5 13.5"
+                        stroke="#676879"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Dialogs */}
       <CameraDialog
         isOpen={showCameraDialog}
