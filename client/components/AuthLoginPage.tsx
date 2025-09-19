@@ -311,22 +311,12 @@ export function AuthLoginPage() {
 
                 {/* Send OTP Button */}
                 <button
-                  onClick={() => {
-                    // Ensure trimming and validation before sending
-                    const trimmed = emailOrPhone.trim();
-                    setEmailOrPhone(trimmed);
-                    if (mode === "email") {
-                      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                      if (!trimmed || !emailRegex.test(trimmed)) {
-                        setEmailError("Please enter a valid email address.");
-                        return;
-                      }
-                    }
-                    // For phone mode we simply require non-empty input
-                    if (!trimmed) return;
-                    navigate("/auth/otp", { state: { emailOrPhone: trimmed } });
-                  }}
-                  disabled={mode === "email" ? !emailOrPhone.trim() || !!emailError : !emailOrPhone.trim()}
+                  onClick={handleSendOTP}
+                  disabled={
+                    mode === "email"
+                      ? !emailOrPhone.trim() || !!emailError
+                      : !selectedCountry || !emailOrPhone.trim() || !!phoneError
+                  }
                   className={`w-full h-12 px-4 py-3 rounded font-roboto text-base font-bold transition-colors ${
                     emailOrPhone.trim()
                       ? "bg-primary hover:bg-primary/90 text-white"
