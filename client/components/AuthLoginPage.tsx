@@ -1,14 +1,85 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+type Country = {
+  code: string;
+  name: string;
+  length?: number;
+  min?: number;
+  max?: number;
+};
+
+const COUNTRIES: Country[] = [
+  { code: "+91", name: "India", length: 10 },
+  { code: "+1", name: "United States", length: 10 },
+  { code: "+44", name: "United Kingdom", length: 10 },
+  { code: "+61", name: "Australia", length: 9 },
+  { code: "+49", name: "Germany", length: 10 },
+  { code: "+33", name: "France", length: 9 },
+  { code: "+55", name: "Brazil", length: 11 },
+];
+
 export function AuthLoginPage() {
   const [emailOrPhone, setEmailOrPhone] = useState("");
+  const [mode, setMode] = useState<"email" | "phone">("email");
+  const [emailError, setEmailError] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [countryError, setCountryError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const navigate = useNavigate();
 
   const handleSendOTP = () => {
-    if (emailOrPhone.trim()) {
-      navigate("/auth/otp", { state: { emailOrPhone } });
+    const trimmed = emailOrPhone.trim();
+
+    if (mode === "email") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!trimmed || !emailRegex.test(trimmed)) {
+        setEmailError("Please enter a valid email address.");
+        return;
+      }
+      navigate("/auth/otp", { state: { emailOrPhone: trimmed } });
+      return;
     }
+
+    // phone mode validations
+    if (!selectedCountry) {
+      setCountryError("Please select a country code.");
+      return;
+    }
+    setCountryError("");
+
+    if (!trimmed) {
+      setPhoneError("Please enter a valid phone number.");
+      return;
+    }
+
+    const country = COUNTRIES.find((c) => c.code === selectedCountry);
+    const digits = trimmed.replace(/\D/g, "");
+
+    if (!digits) {
+      setPhoneError("Please enter a valid phone number.");
+      return;
+    }
+
+    // length validation
+    if (country && country.length !== undefined) {
+      if (digits.length !== country.length) {
+        setPhoneError("Please enter a valid phone number.");
+        return;
+      }
+    } else {
+      // fallback: accept 7-15 digits
+      if (digits.length < 7 || digits.length > 15) {
+        setPhoneError("Please enter a valid phone number.");
+        return;
+      }
+    }
+
+    setPhoneError("");
+    // send with country code prefixed
+    navigate("/auth/otp", {
+      state: { emailOrPhone: `${selectedCountry}${digits}` },
+    });
   };
 
   return (
@@ -118,24 +189,178 @@ export function AuthLoginPage() {
 
               {/* Form */}
               <div className="space-y-6">
+                {/* Mode toggle */}
+                <div className="flex items-center gap-2 bg-[#F6F7FB] rounded p-1 w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("email");
+                      setEmailError("");
+                      setPhoneError("");
+                      setCountryError("");
+                      setSelectedCountry("");
+                      setEmailOrPhone("");
+                    }}
+                    className={`flex-1 h-10 rounded text-sm font-medium ${mode === "email" ? "bg-white shadow text-[#172B4D]" : "text-[#676879]"}`}
+                  >
+                    Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("phone");
+                      setEmailError("");
+                      setPhoneError("");
+                      setCountryError("");
+                      setSelectedCountry("");
+                      setEmailOrPhone("");
+                    }}
+                    className={`flex-1 h-10 rounded text-sm font-medium ${mode === "phone" ? "bg-white shadow text-[#172B4D]" : "text-[#676879]"}`}
+                  >
+                    Mobile
+                  </button>
+                </div>
+
                 {/* Input Field */}
                 <div className="space-y-2">
                   <label className="block text-[#323238] font-roboto text-[13px] font-medium">
-                    Mobile Number Or Email Address
+                    {mode === "email" ? "Email Address" : "Mobile Number"}
                   </label>
-                  <input
-                    type="text"
-                    value={emailOrPhone}
-                    onChange={(e) => setEmailOrPhone(e.target.value)}
-                    placeholder="Enter mobile number or email address"
-                    className="w-full h-[54px] px-3 py-4 border border-[#C3C6D4] rounded bg-white text-[#676879] font-roboto text-base placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
+
+                  {mode === "phone" ? (
+                    <div className="flex gap-2">
+                      <div className="w-36">
+                        <select
+                          value={selectedCountry}
+                          onChange={(e) => {
+                            setSelectedCountry(e.target.value);
+                            setCountryError("");
+                            setPhoneError("");
+                          }}
+                          className={`w-full h-[54px] px-2 border border-[#C3C6D4] rounded bg-white text-[#676879] font-roboto text-base focus:outline-none focus:ring-2 focus:ring-primary`}
+                        >
+                          <option value="">Select country</option>
+                          {COUNTRIES.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {`${c.code} (${c.name})`}
+                            </option>
+                          ))}
+                        </select>
+                        {countryError && (
+                          <p className="text-sm text-destructive mt-1">
+                            {countryError}
+                          </p>
+                        )}
+                      </div>
+
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={emailOrPhone}
+                        onChange={(e) => {
+                          // allow only digits
+                          const val = e.target.value;
+                          const digits = val.replace(/\D/g, "");
+                          const trimmedStart = digits.trimStart();
+                          setEmailOrPhone(trimmedStart);
+                          setPhoneError("");
+                        }}
+                        onBlur={() => {
+                          const trimmed = emailOrPhone.trim();
+                          setEmailOrPhone(trimmed);
+                          if (!selectedCountry) {
+                            setCountryError("Please select a country code.");
+                            return;
+                          }
+                          const country = COUNTRIES.find(
+                            (c) => c.code === selectedCountry,
+                          );
+                          const digits = trimmed.replace(/\D/g, "");
+                          if (!digits) {
+                            setPhoneError("Please enter a valid phone number.");
+                            return;
+                          }
+                          if (country && country.length !== undefined) {
+                            if (digits.length !== country.length) {
+                              setPhoneError(
+                                "Please enter a valid phone number.",
+                              );
+                              return;
+                            }
+                          } else {
+                            if (digits.length < 7 || digits.length > 15) {
+                              setPhoneError(
+                                "Please enter a valid phone number.",
+                              );
+                              return;
+                            }
+                          }
+                          setPhoneError("");
+                        }}
+                        placeholder={
+                          selectedCountry
+                            ? `e.g. ${COUNTRIES.find((c) => c.code === selectedCountry)?.length ? "9".repeat(COUNTRIES.find((c) => c.code === selectedCountry)!.length) : "Phone number"}`
+                            : "Enter mobile number"
+                        }
+                        className="flex-1 h-[54px] px-3 py-4 border border-[#C3C6D4] rounded bg-white text-[#676879] font-roboto text-base placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={emailOrPhone}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Trim leading/trailing spaces automatically
+                        const trimmed = val.trimStart();
+                        // We keep trailing spaces while typing but remove starting spaces immediately
+                        setEmailOrPhone(trimmed);
+                        if (mode === "email") setEmailError("");
+                      }}
+                      onBlur={() => {
+                        // Trim trailing spaces on blur and validate if email mode
+                        const trimmed = emailOrPhone.trim();
+                        setEmailOrPhone(trimmed);
+                        if (mode === "email") {
+                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                          if (!emailRegex.test(trimmed)) {
+                            setEmailError(
+                              "Please enter a valid email address.",
+                            );
+                          } else {
+                            setEmailError("");
+                          }
+                        }
+                      }}
+                      placeholder={
+                        mode === "email"
+                          ? "example@domain.com"
+                          : "Enter mobile number"
+                      }
+                      className="w-full h-[54px] px-3 py-4 border border-[#C3C6D4] rounded bg-white text-[#676879] font-roboto text-base placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                  )}
+
+                  {emailError && (
+                    <p className="text-sm text-destructive mt-1">
+                      {emailError}
+                    </p>
+                  )}
+                  {phoneError && (
+                    <p className="text-sm text-destructive mt-1">
+                      {phoneError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Send OTP Button */}
                 <button
                   onClick={handleSendOTP}
-                  disabled={!emailOrPhone.trim()}
+                  disabled={
+                    mode === "email"
+                      ? !emailOrPhone.trim() || !!emailError
+                      : !selectedCountry || !emailOrPhone.trim() || !!phoneError
+                  }
                   className={`w-full h-12 px-4 py-3 rounded font-roboto text-base font-bold transition-colors ${
                     emailOrPhone.trim()
                       ? "bg-primary hover:bg-primary/90 text-white"
