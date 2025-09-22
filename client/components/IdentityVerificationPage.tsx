@@ -439,11 +439,6 @@ export function IdentityVerificationPage({
                 <StepSidebar
                   sections={activeSections}
                   currentStep={currentStep}
-                  onStepClick={(step) => {
-                    setCurrentStep(step);
-                    setExpandedSections([step]);
-                    setShowMobileMenu(false);
-                  }}
                 />
               </div>
             </div>
