@@ -258,6 +258,7 @@ export function IdentityVerificationPage({
     setExpandedSections((prev) =>
       prev.includes(currentStep) ? prev : [currentStep],
     );
+    if (currentStep === 3) setShowMobileMenu(false);
   }, [currentStep]);
 
   const isFormValid = () => {
