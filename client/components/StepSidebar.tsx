@@ -3,9 +3,10 @@ import { TemplateSection } from "@shared/templates";
 interface StepSidebarProps {
   sections: TemplateSection[];
   currentStep: number;
+  onStepClick?: (step: number) => void;
 }
 
-export function StepSidebar({ sections, currentStep }: StepSidebarProps) {
+export function StepSidebar({ sections, currentStep, onStepClick }: StepSidebarProps) {
   const steps = sections.map((s, i) => ({
     number: i + 1,
     title: s.name,
@@ -23,9 +24,15 @@ export function StepSidebar({ sections, currentStep }: StepSidebarProps) {
     <aside className="w-80 bg-white h-full">
       <div className="flex flex-col gap-1 p-2">
         {steps.map((step, idx) => (
-          <div key={step.number} className="relative">
+          <div
+            key={step.number}
+            className="relative"
+            onClick={() => onStepClick && onStepClick(step.number)}
+            role={onStepClick ? "button" : undefined}
+            tabIndex={onStepClick ? 0 : undefined}
+          >
             {/* Step content container */}
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 cursor-pointer">
               {/* Circle with connecting line */}
               <div className="flex flex-col items-center relative z-10">
                 {/* Step circle */}
