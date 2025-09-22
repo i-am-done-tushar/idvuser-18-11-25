@@ -1,8 +1,72 @@
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { IdentityVerificationPage } from "@/components/IdentityVerificationPage";
+import { ShortCodeResolveResponse, TemplateVersionResponse } from "@shared/api";
 
 export default function Index() {
-  // Use template ID 1 as default
-  const templateId = 1;
+  const { shortCode } = useParams<{ shortCode?: string }>();
+  const [templateVersionId, setTemplateVersionId] = useState<number>(1); // Default template ID
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return <IdentityVerificationPage templateId={templateId} />;
+  useEffect(() => {
+    if (shortCode) {
+      // If we have a shortcode, resolve it to get template version ID
+      resolveShortCode(shortCode);
+    }
+  }, [shortCode]);
+
+  const resolveShortCode = async (code: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Step 1: Resolve shortcode to get template version ID
+      const resolveResponse = await fetch(`/api/templates-link-generation/resolve/${code}`);
+      if (!resolveResponse.ok) {
+        throw new Error("Failed to resolve shortcode");
+      }
+      
+      const resolveData: ShortCodeResolveResponse = await resolveResponse.json();
+      console.log("Shortcode resolved:", resolveData);
+      
+      // Step 2: Get template version details
+      const templateResponse = await fetch(`/api/TemplateVersion/${resolveData.templateVersionId}`);
+      if (!templateResponse.ok) {
+        throw new Error("Failed to get template version");
+      }
+      
+      const templateData: TemplateVersionResponse = await templateResponse.json();
+      console.log("Template version data:", templateData);
+      
+      // Set the template version ID for the verification page
+      setTemplateVersionId(resolveData.templateVersionId);
+      
+    } catch (err) {
+      console.error("Error resolving shortcode:", err);
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full h-screen bg-page-background flex items-center justify-center">
+        <div className="text-text-primary font-roboto text-lg">Loading template...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-screen bg-page-background flex items-center justify-center">
+        <div className="text-destructive font-roboto text-lg">
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
+
+  return <IdentityVerificationPage templateId={templateVersionId} />;
 }

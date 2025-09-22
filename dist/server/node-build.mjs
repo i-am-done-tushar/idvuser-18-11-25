@@ -1,0 +1,240 @@
+import path from "path";
+import "dotenv/config";
+import * as express from "express";
+import express__default from "express";
+import cors from "cors";
+const handleDemo = (req, res) => {
+  const response = {
+    message: "Hello from Express server"
+  };
+  res.status(200).json(response);
+};
+const mockTemplate = {
+  id: 1,
+  name: "Identity Verification Template",
+  description: "Standard identity verification process",
+  createdBy: 1,
+  createdByName: "System Admin",
+  createdByEmail: "admin@idv.local",
+  updatedBy: null,
+  updatedByName: "",
+  updatedByEmail: "",
+  createdAt: "2025-01-14T11:28:19.173459+00:00",
+  updatedAt: null,
+  versions: [
+    {
+      versionId: 2,
+      templateId: 1,
+      versionNumber: 2,
+      isActive: true,
+      enforceRekyc: true,
+      rekycDeadline: "2025-12-31",
+      changeSummary: "Updated personal information fields",
+      isDeleted: false,
+      createdBy: 1,
+      createdByName: "System Admin",
+      createdByEmail: "admin@idv.local",
+      updatedBy: null,
+      updatedByName: "",
+      updatedByEmail: "",
+      createdAt: "2025-01-14T12:11:23.594132",
+      updatedAt: "2025-01-14T12:11:23.594132",
+      rowVersionBase64: "CN3ztexinqA=",
+      sections: [
+        {
+          id: 5,
+          templateVersionId: 2,
+          name: "Personal Information",
+          description: "Basic personal information for identity verification",
+          orderIndex: 1,
+          sectionType: "personalInformation",
+          isActive: true,
+          createdBy: 1,
+          createdByName: "System Admin",
+          createdByEmail: "admin@idv.local",
+          updatedBy: null,
+          updatedByName: null,
+          updatedByEmail: null,
+          createdAt: "2025-01-14T12:11:23.778971+00:00",
+          updatedAt: null,
+          fieldMappings: [
+            {
+              id: 5,
+              templateSectionId: 5,
+              structure: {
+                fields: [
+                  { name: "firstName", type: "string", required: true },
+                  { name: "lastName", type: "string", required: true },
+                  { name: "middleName", type: "string", required: false },
+                  { name: "dateOfBirth", type: "date", required: true },
+                  { name: "email", type: "email", required: true },
+                  { name: "phoneNumber", type: "string", required: true },
+                  { name: "gender", type: "enum", required: false, options: ["Male", "Female", "Non-Binary", "Prefer Not To Say"] },
+                  { name: "address", type: "string", required: true },
+                  { name: "city", type: "string", required: true },
+                  { name: "postalCode", type: "string", required: true }
+                ]
+              },
+              captureAllowed: false,
+              uploadAllowed: false
+            }
+          ]
+        },
+        {
+          id: 4,
+          templateVersionId: 2,
+          name: "Identity Document",
+          description: "Government-issued identification document verification",
+          orderIndex: 2,
+          sectionType: "documents",
+          isActive: true,
+          createdBy: 1,
+          createdByName: "System Admin",
+          createdByEmail: "admin@idv.local",
+          updatedBy: null,
+          updatedByName: null,
+          updatedByEmail: null,
+          createdAt: "2025-01-14T12:11:23.718873+00:00",
+          updatedAt: null,
+          fieldMappings: [
+            {
+              id: 4,
+              templateSectionId: 4,
+              structure: {
+                fields: [
+                  { name: "documentType", type: "enum", required: true, options: ["passport", "driversLicense", "nationalId"] },
+                  { name: "documentNumber", type: "string", required: true },
+                  { name: "expiryDate", type: "date", required: false }
+                ]
+              },
+              captureAllowed: true,
+              uploadAllowed: true
+            }
+          ]
+        },
+        {
+          id: 6,
+          templateVersionId: 2,
+          name: "Capture Selfie",
+          description: "Live selfie capture for biometric verification",
+          orderIndex: 3,
+          sectionType: "biometrics",
+          isActive: true,
+          createdBy: 1,
+          createdByName: "System Admin",
+          createdByEmail: "admin@idv.local",
+          updatedBy: null,
+          updatedByName: null,
+          updatedByEmail: null,
+          createdAt: "2025-01-14T12:11:23.784691+00:00",
+          updatedAt: null,
+          fieldMappings: [
+            {
+              id: 6,
+              templateSectionId: 6,
+              structure: {},
+              captureAllowed: true,
+              uploadAllowed: false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+};
+const handleGetTemplate = (req, res) => {
+  const { id } = req.params;
+  if (!id || isNaN(Number(id))) {
+    return res.status(400).json({ error: "Invalid template ID" });
+  }
+  const template = { ...mockTemplate, id: Number(id) };
+  res.json(template);
+};
+const API_BASE_URL = "http://10.10.2.133:8080";
+const AUTH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwianRpIjoiYjIzN2M2NzUtMmQ5Zi00MTk5LWFjMDQtN2ZiNDY4ODQ2MDA5IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZWlkZW50aWZpZXIiOiIxIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwibmJmIjoxNzU4NTI1NzA2LCJleHAiOjE3NTg1MjkzMDYsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.kIaeMCBm19Cw0DtjpdxkTf4NkgwBfziIqTBeW1cPDJY";
+const handleResolveShortCode = async (req, res) => {
+  const { shortCode } = req.params;
+  if (!shortCode) {
+    return res.status(400).json({ error: "Short code is required" });
+  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/templates-link-generation/resolve/${shortCode}`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Authorization": `Bearer ${AUTH_TOKEN}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to resolve shortcode: ${response.status}`);
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error resolving shortcode:", error);
+    res.status(500).json({ error: "Failed to resolve shortcode" });
+  }
+};
+const handleGetTemplateVersion = async (req, res) => {
+  const { versionId } = req.params;
+  if (!versionId) {
+    return res.status(400).json({ error: "Version ID is required" });
+  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/TemplateVersion/${versionId}`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Authorization": `Bearer ${AUTH_TOKEN}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get template version: ${response.status}`);
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error getting template version:", error);
+    res.status(500).json({ error: "Failed to get template version" });
+  }
+};
+function createServer() {
+  const app2 = express__default();
+  app2.use(cors());
+  app2.use(express__default.json());
+  app2.use(express__default.urlencoded({ extended: true }));
+  app2.get("/api/ping", (_req, res) => {
+    const ping = process.env.PING_MESSAGE ?? "ping";
+    res.json({ message: ping });
+  });
+  app2.get("/api/demo", handleDemo);
+  app2.get("/api/templates/:id", handleGetTemplate);
+  app2.get("/api/templates-link-generation/resolve/:shortCode", handleResolveShortCode);
+  app2.get("/api/TemplateVersion/:versionId", handleGetTemplateVersion);
+  return app2;
+}
+const app = createServer();
+const port = process.env.PORT || 3e3;
+const __dirname = import.meta.dirname;
+const distPath = path.join(__dirname, "../spa");
+app.use(express.static(distPath));
+app.get("*", (req, res) => {
+  if (req.path.startsWith("/api/") || req.path.startsWith("/health")) {
+    return res.status(404).json({ error: "API endpoint not found" });
+  }
+  res.sendFile(path.join(distPath, "index.html"));
+});
+app.listen(port, () => {
+  console.log(`🚀 Fusion Starter server running on port ${port}`);
+  console.log(`📱 Frontend: http://localhost:${port}`);
+  console.log(`🔧 API: http://localhost:${port}/api`);
+});
+process.on("SIGTERM", () => {
+  console.log("🛑 Received SIGTERM, shutting down gracefully");
+  process.exit(0);
+});
+process.on("SIGINT", () => {
+  console.log("🛑 Received SIGINT, shutting down gracefully");
+  process.exit(0);
+});
+//# sourceMappingURL=node-build.mjs.map
