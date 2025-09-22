@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
 
 interface ConsentDialogProps {
   isOpen: boolean;
@@ -50,16 +49,10 @@ export function ConsentDialog({ isOpen, onClose, onAgree }: ConsentDialogProps) 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="flex w-full max-w-[800px] mx-4 flex-col items-center gap-6 rounded-lg bg-background shadow-lg max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex h-[52px] py-2.5 px-5 justify-between items-center self-stretch rounded-t border-b border-border bg-background">
+        <div className="flex h-[52px] py-2.5 px-5 justify-center items-center self-stretch rounded-t border-b border-border bg-background">
           <div className="text-text-primary font-figtree text-lg font-bold leading-[26px]">
             Identity Verification Consent
           </div>
-          <button
-            onClick={onClose}
-            className="flex w-8 h-8 justify-center items-center gap-2.5 rounded-full bg-background hover:bg-secondary"
-          >
-            <X className="w-5 h-5 text-text-secondary" />
-          </button>
         </div>
 
         {/* Body */}
@@ -179,15 +172,7 @@ export function ConsentDialog({ isOpen, onClose, onAgree }: ConsentDialogProps) 
             </label>
           </div>
 
-          <div className="flex justify-end items-start gap-2">
-            <button
-              onClick={onClose}
-              className="flex h-8 py-[11px] px-4 justify-center items-center gap-2.5 rounded bg-background border border-border hover:bg-secondary"
-            >
-              <span className="text-text-secondary font-figtree text-[13px] font-medium">
-                Cancel
-              </span>
-            </button>
+          <div className="flex justify-end items-start">
             <button
               onClick={handleAgree}
               disabled={!canAgree}
