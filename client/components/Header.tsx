@@ -68,7 +68,12 @@ export function Header({ onMobileMenuToggle, isMobileMenuOpen }: HeaderProps) {
 
       {/* Mobile Menu Button - visible only on mobile */}
       <div className="sm:hidden">
-        <button className="flex items-center justify-center w-6 h-6">
+        <button
+          onClick={() => onMobileMenuToggle && onMobileMenuToggle()}
+          aria-controls="mobile-step-sidebar"
+          aria-expanded={isMobileMenuOpen ? true : false}
+          className="flex items-center justify-center w-6 h-6"
+        >
           <svg
             className="w-6 h-6"
             viewBox="0 0 24 25"
