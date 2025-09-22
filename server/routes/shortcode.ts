@@ -3,7 +3,6 @@ import { ShortCodeResolveResponse, TemplateVersionResponse } from "@shared/api";
 
 // Hardcoded API base URL - you can move this to environment variables later
 const API_BASE_URL = "http://10.10.2.133:8080";
-const AUTH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwianRpIjoiYjIzN2M2NzUtMmQ5Zi00MTk5LWFjMDQtN2ZiNDY4ODQ2MDA5IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZWlkZW50aWZpZXIiOiIxIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFkbWluIiwibmJmIjoxNzU4NTI1NzA2LCJleHAiOjE3NTg1MjkzMDYsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.kIaeMCBm19Cw0DtjpdxkTf4NkgwBfziIqTBeW1cPDJY";
 
 export const handleResolveShortCode: RequestHandler = async (req, res) => {
   const { shortCode } = req.params;
@@ -17,8 +16,7 @@ export const handleResolveShortCode: RequestHandler = async (req, res) => {
     const response = await fetch(`${API_BASE_URL}/api/templates-link-generation/resolve/${shortCode}`, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${AUTH_TOKEN}`
+        'Accept': 'application/json'
       }
     });
 
@@ -46,8 +44,7 @@ export const handleGetTemplateVersion: RequestHandler = async (req, res) => {
     const response = await fetch(`${API_BASE_URL}/api/TemplateVersion/${versionId}`, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${AUTH_TOKEN}`
+        'Accept': 'application/json'
       }
     });
 

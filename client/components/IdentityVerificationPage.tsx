@@ -10,6 +10,7 @@ import { HowItWorksDialog } from "./HowItWorksDialog";
 import { LockedStepComponent } from "./LockedStepComponent";
 import { OTPVerificationDialog } from "./OTPVerificationDialog";
 import { TemplateResponse, FormData } from "@shared/templates";
+import { TemplateVersionResponse } from "@shared/api";
 import { useToast } from "@/hooks/use-toast";
 import {
   isValidName,
@@ -21,16 +22,19 @@ import {
 } from "@/lib/validation";
 
 interface IdentityVerificationPageProps {
-  templateId: number;
+  templateId?: number;
+  templateData?: TemplateVersionResponse;
 }
 
 export function IdentityVerificationPage({
   templateId,
+  templateData,
 }: IdentityVerificationPageProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [template, setTemplate] = useState<TemplateResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [templateVersion, setTemplateVersion] = useState<TemplateVersionResponse | null>(templateData || null);
+  const [loading, setLoading] = useState(!templateData);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
@@ -66,8 +70,21 @@ export function IdentityVerificationPage({
     postalCode: "",
   });
 
-  // Fetch template data
+  // Fetch template data (only if not provided via props)
   useEffect(() => {
+    if (templateData) {
+      // Template data provided via props, no need to fetch
+      setTemplateVersion(templateData);
+      setLoading(false);
+      return;
+    }
+
+    if (!templateId) {
+      setError("No template ID or template data provided");
+      setLoading(false);
+      return;
+    }
+
     const fetchTemplate = async () => {
       try {
         setLoading(true);
@@ -85,7 +102,7 @@ export function IdentityVerificationPage({
     };
 
     fetchTemplate();
-  }, [templateId]);
+  }, [templateId, templateData]);
 
   // Step 1 specific validation (personal info + email/phone)
   const isStep1Complete = () => {
@@ -287,30 +304,48 @@ export function IdentityVerificationPage({
     );
   }
 
-  if (error || !template) {
+  if (error) {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
         <div className="text-destructive font-roboto text-lg">
-          {error || "Template not found"}
+          Error: {error}
         </div>
       </div>
     );
   }
 
-  const activeVersion = template.versions.find((v) => v.isActive);
-  if (!activeVersion) {
+  // Handle both old template format and new template version format
+  let activeSections: any[] = [];
+  
+  if (templateVersion) {
+    // New format: TemplateVersionResponse
+    activeSections = templateVersion.sections
+      .filter((s) => s.isActive)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+  } else if (template) {
+    // Old format: TemplateResponse
+    const activeVersion = template.versions.find((v) => v.isActive);
+    if (!activeVersion) {
+      return (
+        <div className="w-full h-screen bg-page-background flex items-center justify-center">
+          <div className="text-destructive font-roboto text-lg">
+            No active template version found
+          </div>
+        </div>
+      );
+    }
+    activeSections = activeVersion.sections
+      .filter((s) => s.isActive)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+  } else {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
         <div className="text-destructive font-roboto text-lg">
-          No active template version found
+          No template data available
         </div>
       </div>
     );
   }
-
-  const activeSections = activeVersion.sections
-    .filter((s) => s.isActive)
-    .sort((a, b) => a.orderIndex - b.orderIndex);
 
   return (
     <>

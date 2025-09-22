@@ -6,6 +6,7 @@ import { ShortCodeResolveResponse, TemplateVersionResponse } from "@shared/api";
 export default function Index() {
   const { shortCode } = useParams<{ shortCode?: string }>();
   const [templateVersionId, setTemplateVersionId] = useState<number>(1); // Default template ID
+  const [templateData, setTemplateData] = useState<TemplateVersionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,8 +40,9 @@ export default function Index() {
       const templateData: TemplateVersionResponse = await templateResponse.json();
       console.log("Template version data:", templateData);
       
-      // Set the template version ID for the verification page
+      // Set the template data for the verification page
       setTemplateVersionId(resolveData.templateVersionId);
+      setTemplateData(templateData);
       
     } catch (err) {
       console.error("Error resolving shortcode:", err);
@@ -68,5 +70,10 @@ export default function Index() {
     );
   }
 
-  return <IdentityVerificationPage templateId={templateVersionId} />;
+  return (
+    <IdentityVerificationPage 
+      templateId={templateVersionId} 
+      templateData={templateData}
+    />
+  );
 }
