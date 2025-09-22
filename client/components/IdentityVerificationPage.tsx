@@ -233,6 +233,7 @@ export function IdentityVerificationPage({
       setTimeout(() => {
         setCurrentStep(3);
         setExpandedSections([3]);
+        setShowMobileMenu(false);
       }, 1500);
     }
   };
