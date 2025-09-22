@@ -1,4 +1,9 @@
-export function Header() {
+interface HeaderProps {
+  onMobileMenuToggle?: () => void;
+  isMobileMenuOpen?: boolean;
+}
+
+export function Header({ onMobileMenuToggle, isMobileMenuOpen }: HeaderProps) {
   return (
     <header className="flex w-full h-10 sm:h-11 px-3 sm:px-4 items-center justify-between flex-shrink-0 border-b border-border bg-background">
       <div className="flex items-center gap-2">
