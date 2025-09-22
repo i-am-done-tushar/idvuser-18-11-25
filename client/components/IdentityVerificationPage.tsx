@@ -45,6 +45,7 @@ export function IdentityVerificationPage({
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
   const [showOTPDialog, setShowOTPDialog] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [otpType, setOtpType] = useState<"email" | "phone">("email");
   const [pendingVerification, setPendingVerification] = useState<{
     type: "email" | "phone";
@@ -338,7 +339,10 @@ export function IdentityVerificationPage({
         }`}
       >
         {/* Header */}
-        <Header />
+        <Header
+          onMobileMenuToggle={() => setShowMobileMenu((v) => !v)}
+          isMobileMenuOpen={showMobileMenu}
+        />
 
         {/* Title Bar - Mobile Layout */}
         <div className="flex w-full h-11 items-center flex-shrink-0 bg-background border-b border-border">
@@ -401,8 +405,49 @@ export function IdentityVerificationPage({
         <div className="flex w-full flex-1 overflow-hidden">
           {/* Desktop Sidebar - hidden on mobile */}
           <div className="hidden lg:block border-r border-border">
-            <StepSidebar sections={activeSections} currentStep={currentStep} />
+            <StepSidebar
+              sections={activeSections}
+              currentStep={currentStep}
+            />
           </div>
+
+          {/* Mobile Sidebar Overlay (from burger) */}
+          {showMobileMenu && (
+            <div className="lg:hidden fixed inset-0 z-50 flex">
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/40"
+                onClick={() => setShowMobileMenu(false)}
+                aria-hidden
+              />
+
+              {/* Panel */}
+              <div
+                id="mobile-step-sidebar"
+                className="relative w-80 bg-white h-full border-r border-border shadow-lg overflow-auto"
+              >
+                <div className="flex items-center justify-between p-3 border-b border-border">
+                  <div className="font-roboto font-bold">Steps</div>
+                  <button
+                    aria-label="Close menu"
+                    className="p-1"
+                    onClick={() => setShowMobileMenu(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <StepSidebar
+                  sections={activeSections}
+                  currentStep={currentStep}
+                  onStepClick={(step) => {
+                    setCurrentStep(step);
+                    setExpandedSections([step]);
+                    setShowMobileMenu(false);
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Mobile/Desktop Content Area */}
           <div className="flex w-full flex-1 flex-col">
