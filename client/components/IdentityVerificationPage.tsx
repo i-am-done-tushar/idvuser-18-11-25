@@ -221,21 +221,21 @@ export function IdentityVerificationPage({
   const handleIdentityDocumentComplete = () => {
     setIsIdentityDocumentCompleted(true);
 
-    // If we're currently on step 2, advance to step 3 with the same toast UX
-    if (currentStep === 2 && !hasShownStep2Toast) {
+    // Show success toast (only once)
+    if (!hasShownStep2Toast) {
       toast({
         title: "Step 2 completed",
         description: "Step 2 completed. Please proceed to the final step",
       });
-
       setHasShownStep2Toast(true);
-
-      setTimeout(() => {
-        setCurrentStep(3);
-        setExpandedSections([3]);
-        setShowMobileMenu(false);
-      }, 1500);
     }
+
+    // Advance to step 3 (ensure mobile menu is closed so content is visible)
+    setTimeout(() => {
+      setCurrentStep(3);
+      setExpandedSections([3]);
+      setShowMobileMenu(false);
+    }, 1500);
   };
 
   const handleSubmit = () => {
