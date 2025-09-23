@@ -20,6 +20,11 @@ import {
   isValidPostalCode,
 } from "@/lib/validation";
 
+  const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  import.meta.env.VITE_API_URL ||
+  "http://10.10.2.133:8080";
+
 interface IdentityVerificationPageProps {
   templateId: number;
 }
@@ -174,14 +179,51 @@ export function IdentityVerificationPage({
     }
   }, [currentStep, isIdentityDocumentCompleted, hasShownStep2Toast, toast]);
 
-  const handleSendEmailOTP = () => {
-    setPendingVerification({
-      type: "email",
-      recipient: formData.email,
-    });
-    setOtpType("email");
-    setShowOTPDialog(true);
+  // const handleSendEmailOTP = () => {
+  //   setPendingVerification({
+  //     type: "email",
+  //     recipient: formData.email,
+  //   });
+  //   setOtpType("email");
+  //   setShowOTPDialog(true);
+  // };
+
+  const handleSendEmailOTP = async () => {
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId(templateVersion, template);
+
+    if (!email || !isValidEmail(email)) {
+      toast({ title: "Invalid email", description: "Please enter a valid email first." });
+      return;
+    }
+    if (versionId == null) {
+      toast({ title: "Missing version", description: "No active template version found." });
+      return;
+    }
+
+    try {
+      setOtpSending(true);
+      await generateEmailOtp(email, versionId);
+      setPendingVerification({ type: "email", recipient: email });
+      setOtpType("email");
+      setShowOTPDialog(true);
+      toast({ title: "OTP sent", description: `An OTP was sent to ${email}.` });
+    } catch (err: any) {
+      toast({
+        title: "Failed to send OTP",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpSending(false);
+    }
   };
+
+
+
+
+
+
 
   const handleSendPhoneOTP = () => {
     const fullPhone = `${formData.countryCode} ${formData.phoneNumber}`;
@@ -193,26 +235,62 @@ export function IdentityVerificationPage({
     setShowOTPDialog(true);
   };
 
+
+
+////
+
+
   const handleOTPVerify = async (otp: string) => {
-    // Simulate OTP verification
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId(templateVersion, template);
 
-    if (pendingVerification?.type === "email") {
+    if (!pendingVerification || pendingVerification.type !== "email") return;
+    if (!email || versionId == null) return;
+
+    try {
+      setOtpValidating(true);
+      await validateEmailOtp(email, versionId, otp);
       setIsEmailVerified(true);
-    } else if (pendingVerification?.type === "phone") {
-      setIsPhoneVerified(true);
+      setShowOTPDialog(false);
+      setPendingVerification(null);
+      toast({ title: "Email verified", description: "Your email was successfully verified." });
+    } catch (err: any) {
+      toast({
+        title: "Invalid OTP",
+        description: err?.message || "Please check the code and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpValidating(false);
     }
-
-    setShowOTPDialog(false);
-    setPendingVerification(null);
   };
 
-  const handleOTPResend = () => {
-    // Simulate resending OTP
-    console.log(
-      `Resending ${otpType} OTP to ${pendingVerification?.recipient}`,
-    );
+  const handleOTPResend = async () => {
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId(templateVersion, template);
+
+    if (!email || versionId == null) return;
+
+    try {
+      setOtpSending(true);
+      await generateEmailOtp(email, versionId);
+      toast({ title: "OTP resent", description: `A new OTP was sent to ${email}.` });
+    } catch (err: any) {
+      toast({
+        title: "Failed to resend",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpSending(false);
+    }
   };
+
+
+
+
+
+
 
   const handleOTPClose = () => {
     setShowOTPDialog(false);

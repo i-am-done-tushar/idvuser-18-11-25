@@ -150,7 +150,7 @@ const handleGetTemplate = (req, res) => {
   const template = { ...mockTemplate, id: Number(id) };
   res.json(template);
 };
-const API_BASE_URL = "http://10.10.2.133:8080";
+const API_BASE_URL = "http://10.10.2.133:8080" || "http://localhost:5027";
 const handleResolveShortCode = async (req, res) => {
   const { shortCode } = req.params;
   if (!shortCode) {
