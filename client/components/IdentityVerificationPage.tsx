@@ -21,6 +21,11 @@ import {
   isValidPostalCode,
 } from "@/lib/validation";
 
+  const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  import.meta.env.VITE_API_URL ||
+  "http://10.10.2.133:8080";
+
 interface IdentityVerificationPageProps {
   templateId?: number;
   templateData?: TemplateVersionResponse;
@@ -88,7 +93,7 @@ export function IdentityVerificationPage({
     const fetchTemplate = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/templates/${templateId}`);
+        const response = await fetch(`${API_BASE}/api/templates/${templateId}`);
         if (!response.ok) {
           throw new Error("Failed to fetch template");
         }
