@@ -79,10 +79,14 @@ export interface FormData {
 }
 
 export interface DocumentConfig {
+  selectedCountries?: string[];
+  selectedDocuments?: string[];
   allowCaptureWebcam?: boolean;
   allowUploadFromDevice?: boolean;
   supportedCountries?: Array<{
     countryName: string;
     documents: string[];
   }>;
+  documentHandlingAllowRetries?: boolean;
+  documentHandlingRejectImmediately?: boolean;
 }
