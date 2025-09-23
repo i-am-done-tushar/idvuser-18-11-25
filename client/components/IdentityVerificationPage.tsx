@@ -20,42 +20,50 @@ import {
   isValidPostalCode,
 } from "@/lib/validation";
 
-  const API_BASE =
+// ---- single source of truth for API base ----
+const API_BASE =
   import.meta.env.VITE_API_BASE ||
   import.meta.env.VITE_API_URL ||
   "http://10.10.2.133:8080";
 
+// token helper (kept minimal)
+const getToken = () =>
+  (typeof window !== "undefined" && localStorage.getItem("access")) || null;
+
 interface IdentityVerificationPageProps {
+  // NOTE: despite the name, we call /TemplateVersion/{id} so this is a VERSION id
   templateId: number;
 }
 
-export function IdentityVerificationPage({
-  templateId,
-}: IdentityVerificationPageProps) {
+export function IdentityVerificationPage({ templateId }: IdentityVerificationPageProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
+
   const [templateVersion, setTemplateVersion] = useState<TemplateVersionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [hasShownStep1Toast, setHasShownStep1Toast] = useState(false);
-  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] =
-    useState(false);
+  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] = useState(false);
   const [hasShownStep2Toast, setHasShownStep2Toast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
+
   const [showConsentDialog, setShowConsentDialog] = useState(true);
   const [hasConsented, setHasConsented] = useState(false);
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
   const [expandedSections, setExpandedSections] = useState<number[]>([1]);
+
+  // OTP dialog + state
   const [showOTPDialog, setShowOTPDialog] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [otpType, setOtpType] = useState<"email" | "phone">("email");
-  const [pendingVerification, setPendingVerification] = useState<{
-    type: "email" | "phone";
-    recipient: string;
-  } | null>(null);
+  const [pendingVerification, setPendingVerification] = useState<{ type: "email" | "phone"; recipient: string } | null>(null);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpValidating, setOtpValidating] = useState(false);
+
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
@@ -74,198 +82,132 @@ export function IdentityVerificationPage({
     permanentPostalCode: "",
   });
 
-  // Helper function to get personal info field configuration from API
+  // ---- helpers pulled from your new version ----
   const getPersonalInfoConfig = () => {
     if (!templateVersion) return {};
-    
     const personalInfoSection = templateVersion.sections.find(
       (section) => section.sectionType === "personalInformation"
     );
-    
     if (!personalInfoSection || !personalInfoSection.fieldMappings?.[0]?.structure) {
       return {};
     }
-    
     const fieldConfig = personalInfoSection.fieldMappings[0].structure as any;
     return fieldConfig.personalInfo || {};
   };
 
-  // Fetch template version data using the templateId
+  // ---- fetch version by id (server route uses version id) ----
   useEffect(() => {
     if (!templateId) {
-      setError("No template ID provided");
+      setError("No template/version ID provided");
       setLoading(false);
       return;
     }
-
-    const fetchTemplateVersion = async () => {
+    const controller = new AbortController();
+    (async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/TemplateVersion/${templateId}`);
-        if (!response.ok) {
-          console.log("API endpoint failed, using mock data for testing");
-          // Use mock data for testing when API is not available
-          const mockTemplateVersion: TemplateVersionResponse = {
-            versionId: 1,
-            templateId: templateId,
-            versionNumber: 1,
-            isActive: true,
-            enforceRekyc: false,
-            rekycDeadline: null,
-            changeSummary: null,
-            isDeleted: false,
-            createdBy: 1,
-            createdByName: "System",
-            createdByEmail: "system@example.com",
-            updatedBy: null,
-            updatedByName: "",
-            updatedByEmail: "",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            rowVersionBase64: "",
-            invitees: [], // Add missing property
-            sections: [
-              {
-                id: 1,
-                templateVersionId: 1,
-                name: "Personal Information",
-                description: "Enter your personal information",
-                orderIndex: 1,
-                sectionType: "personalInformation",
-                isActive: true,
-                createdBy: 1,
-                createdByName: "System",
-                createdByEmail: "system@example.com",
-                updatedBy: null,
-                updatedByName: null,
-                updatedByEmail: null,
-                createdAt: new Date().toISOString(),
-                updatedAt: null,
-                fieldMappings: [
-                  {
-                    id: 1,
-                    templateSectionId: 1,
-                    structure: {
-                      personalInfo: {
-                        email: true,
-                        gender: false,
-                        lastName: true,
-                        firstName: true,
-                        middleName: false,
-                        dateOfBirth: false,
-                        phoneNumber: false,
-                        currentAddress: false,  // This should hide current address
-                        permanentAddress: false
-                      }
-                    },
-                    captureAllowed: true,
-                    uploadAllowed: true
-                  }
-                ]
-              }
-            ]
-          };
-          setTemplateVersion(mockTemplateVersion);
-          setLoading(false);
-          return;
+        const res = await fetch(`${API_BASE}/api/TemplateVersion/${templateId}`, {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || `Failed to fetch version ${templateId}`);
         }
-        
-        const templateVersionData: TemplateVersionResponse = await response.json();
-        
-        // Log to verify the API response structure
-        const personalInfoSection = templateVersionData.sections.find(s => s.sectionType === "personalInformation");
-        if (personalInfoSection) {
-          const personalInfoConfig = personalInfoSection.fieldMappings?.[0]?.structure?.personalInfo;
-          console.log("API Response - Personal Info Config:", personalInfoConfig);
-          if (personalInfoConfig) {
-            console.log("currentAddress setting:", personalInfoConfig.currentAddress);
-          }
-        }
-        
-        setTemplateVersion(templateVersionData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
+        const data: TemplateVersionResponse = await res.json();
+        setTemplateVersion(data);
+      } catch (e: any) {
+        if (e?.name !== "AbortError") setError(e?.message || "Failed to load template version");
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchTemplateVersion();
+    })();
+    return () => controller.abort();
   }, [templateId]);
 
-  // Step 1 specific validation (personal info + email/phone) - Dynamic based on API config
+  // ---- OTP API calls (server-backed) ----
+  async function generateEmailOtp(email: string, versionId: number) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/Otp/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ email, versionId }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `Failed to send OTP (HTTP ${res.status})`);
+    }
+  }
+
+  async function validateEmailOtp(email: string, versionId: number, otp: string) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/Otp/validate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ email, versionId, otp }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `Invalid OTP (HTTP ${res.status})`);
+    }
+  }
+
+  // ---- versionId resolver (new page only deals with TemplateVersionResponse) ----
+  const getActiveVersionId = () => templateVersion?.versionId ?? null;
+
+  // ---- Step 1 validator (dynamic by API config) ----
   const isStep1Complete = () => {
     if (!templateVersion) return false;
-    
-    const personalInfo = getPersonalInfoConfig();
-    
-    // Check each field only if it's required (true) in the API config
-    const validations = [];
-    
-    if (personalInfo.firstName) {
-      validations.push(isValidName(formData.firstName));
-    }
-    
-    if (personalInfo.lastName) {
-      validations.push(isValidName(formData.lastName));
-    }
-    
-    if (personalInfo.middleName) {
-      validations.push(isValidName(formData.middleName));
-    }
-    
-    if (personalInfo.dateOfBirth) {
-      validations.push(isValidDOB(formData.dateOfBirth));
-    }
-    
+    const personalInfo: any = getPersonalInfoConfig();
+    const checks: boolean[] = [];
+
+    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
+    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
+    if (personalInfo.middleName) checks.push(isValidName(formData.middleName));
+    if (personalInfo.dateOfBirth) checks.push(isValidDOB(formData.dateOfBirth));
     if (personalInfo.email) {
-      validations.push(isValidEmail(formData.email));
-      validations.push(isEmailVerified); // Email must be verified if required
+      checks.push(isValidEmail(formData.email));
+      checks.push(isEmailVerified);
     }
-    
     if (personalInfo.phoneNumber) {
-      validations.push(!!formData.countryCode);
-      validations.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-      validations.push(isPhoneVerified); // Phone must be verified if required
+      checks.push(!!formData.countryCode);
+      checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
+      checks.push(isPhoneVerified);
     }
-    
     if (personalInfo.currentAddress) {
-      validations.push(isValidAddress(formData.address));
-      validations.push(!!formData.city);
-      validations.push(isValidPostalCode(formData.postalCode));
+      checks.push(isValidAddress(formData.address));
+      checks.push(!!formData.city);
+      checks.push(isValidPostalCode(formData.postalCode));
     }
-    
     if (personalInfo.permanentAddress) {
-      validations.push(isValidAddress(formData.permanentAddress));
-      validations.push(!!formData.permanentCity);
-      validations.push(isValidPostalCode(formData.permanentPostalCode));
+      checks.push(isValidAddress(formData.permanentAddress));
+      checks.push(!!formData.permanentCity);
+      checks.push(isValidPostalCode(formData.permanentPostalCode));
     }
-    
-    // All required fields must be valid
-    return validations.length > 0 && validations.every(validation => validation === true);
+    return checks.length > 0 && checks.every(Boolean);
   };
 
-  // Monitor for Step 1 completion
+  // advance to step 2 when step 1 complete
   useEffect(() => {
-    const formIsValid = isStep1Complete();
-
-    if (currentStep === 1 && formIsValid && !hasShownStep1Toast) {
-      // Show success toast
-      toast({
-        title: "Step 1 completed",
-        description: "Step 1 completed. Please proceed to the next step",
-      });
-
+    const ok = isStep1Complete();
+    if (currentStep === 1 && ok && !hasShownStep1Toast) {
+      toast({ title: "Step 1 completed", description: "Step 1 completed. Please proceed to the next step" });
       setHasShownStep1Toast(true);
-
-      // Advance to step 2 after a short delay
       setTimeout(() => {
         setCurrentStep(2);
         setExpandedSections([2]);
       }, 1500);
     }
   }, [
-    templateVersion, // Add templateVersion to dependencies
+    templateVersion,
     isEmailVerified,
     isPhoneVerified,
     formData.firstName,
@@ -286,22 +228,11 @@ export function IdentityVerificationPage({
     toast,
   ]);
 
-  // Monitor for Step 2 completion
+  // advance to step 3 when docs complete
   useEffect(() => {
-    if (
-      currentStep === 2 &&
-      isIdentityDocumentCompleted &&
-      !hasShownStep2Toast
-    ) {
-      // Show success toast
-      toast({
-        title: "Step 2 completed",
-        description: "Step 2 completed. Please proceed to the final step",
-      });
-
+    if (currentStep === 2 && isIdentityDocumentCompleted && !hasShownStep2Toast) {
+      toast({ title: "Step 2 completed", description: "Step 2 completed. Please proceed to the final step" });
       setHasShownStep2Toast(true);
-
-      // Advance to step 3 after a short delay
       setTimeout(() => {
         setCurrentStep(3);
         setExpandedSections([3]);
@@ -310,111 +241,116 @@ export function IdentityVerificationPage({
     }
   }, [currentStep, isIdentityDocumentCompleted, hasShownStep2Toast, toast]);
 
-  // const handleSendEmailOTP = () => {
-  //   setPendingVerification({
-  //     type: "email",
-  //     recipient: formData.email,
-  //   });
-  //   setOtpType("email");
-  //   setShowOTPDialog(true);
-  // };
+  // ---- OTP handlers (server-backed email; phone kept UI-only unless you add API) ----
+  const handleSendEmailOTP = async () => {
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId();
 
-  const handleSendEmailOTP = () => {
-    setPendingVerification({
-      type: "email",
-      recipient: formData.email,
-    });
-    setOtpType("email");
-    setShowOTPDialog(true);
+    if (!email || !isValidEmail(email)) {
+      toast({ title: "Invalid email", description: "Please enter a valid email first." });
+      return;
+    }
+    if (versionId == null) {
+      toast({ title: "Missing version", description: "No active template version found." });
+      return;
+    }
+    try {
+      setOtpSending(true);
+      await generateEmailOtp(email, versionId);
+      setPendingVerification({ type: "email", recipient: email });
+      setOtpType("email");
+      setShowOTPDialog(true);
+      toast({ title: "OTP sent", description: `An OTP was sent to ${email}.` });
+    } catch (err: any) {
+      toast({
+        title: "Failed to send OTP",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpSending(false);
+    }
   };
 
-
-
-
-
-
-
   const handleSendPhoneOTP = () => {
-    const fullPhone = `${formData.countryCode} ${formData.phoneNumber}`;
-    setPendingVerification({
-      type: "phone",
-      recipient: fullPhone,
-    });
+    const fullPhone = `${formData.countryCode} ${formData.phoneNumber}`.trim();
+    setPendingVerification({ type: "phone", recipient: fullPhone });
     setOtpType("phone");
     setShowOTPDialog(true);
   };
 
+  const handleOTPVerify = async (otp: string) => {
+    // email OTP via server, phone OTP stays simulated
+    if (!pendingVerification) return;
 
-
-////
-
-
-  const handleOTPVerify = (otp: string) => {
-    // Simulate OTP verification
-    if (otp && otp.length >= 4) {
-      if (pendingVerification?.type === "email") {
+    if (pendingVerification.type === "email") {
+      const email = formData.email?.trim();
+      const versionId = getActiveVersionId();
+      if (!email || versionId == null) return;
+      try {
+        setOtpValidating(true);
+        await validateEmailOtp(email, versionId, otp);
         setIsEmailVerified(true);
-      } else if (pendingVerification?.type === "phone") {
-        setIsPhoneVerified(true);
+        toast({ title: "Email verified", description: "Your email was successfully verified." });
+        setShowOTPDialog(false);
+        setPendingVerification(null);
+      } catch (err: any) {
+        toast({
+          title: "Invalid OTP",
+          description: err?.message || "Please check the code and try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setOtpValidating(false);
       }
-      setShowOTPDialog(false);
-      setPendingVerification(null);
-      toast({ 
-        title: "Verification successful", 
-        description: `Your ${pendingVerification?.type || "contact"} was successfully verified.` 
-      });
     } else {
+      // phone simulated success
+      if (otp && otp.length >= 4) {
+        setIsPhoneVerified(true);
+        toast({ title: "Phone verified", description: "Your phone number was successfully verified." });
+        setShowOTPDialog(false);
+        setPendingVerification(null);
+      } else {
+        toast({ title: "Invalid OTP", description: "Please enter a valid OTP.", variant: "destructive" });
+      }
+    }
+  };
+
+  const handleOTPResend = async () => {
+    if (pendingVerification?.type !== "email") return;
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId();
+    if (!email || versionId == null) return;
+
+    try {
+      setOtpSending(true);
+      await generateEmailOtp(email, versionId);
+      toast({ title: "OTP resent", description: `A new OTP was sent to ${email}.` });
+    } catch (err: any) {
       toast({
-        title: "Invalid OTP",
-        description: "Please enter a valid OTP.",
+        title: "Failed to resend",
+        description: err?.message || "Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setOtpSending(false);
     }
   };
-
-  const handleOTPResend = () => {
-    // Simulate OTP resend
-    if (pendingVerification) {
-      toast({ 
-        title: "OTP resent", 
-        description: `A new OTP was sent to ${pendingVerification.recipient}.` 
-      });
-    }
-  };
-
-
-
-
-
-
 
   const handleOTPClose = () => {
     setShowOTPDialog(false);
     setPendingVerification(null);
   };
 
-  const handleConsentClose = () => {
-    setShowConsentDialog(false);
-  };
-
-  const handleConsentAgree = () => {
-    setHasConsented(true);
-    setShowConsentDialog(false);
-  };
+  const handleConsentClose = () => setShowConsentDialog(false);
+  const handleConsentAgree = () => { setHasConsented(true); setShowConsentDialog(false); };
 
   const handleIdentityDocumentComplete = () => {
     setIsIdentityDocumentCompleted(true);
-
-    // Show success toast (only once)
     if (!hasShownStep2Toast) {
-      toast({
-        title: "Step 2 completed",
-        description: "Step 2 completed. Please proceed to the final step",
-      });
+      toast({ title: "Step 2 completed", description: "Step 2 completed. Please proceed to the final step" });
       setHasShownStep2Toast(true);
     }
-
-    // Advance to step 3 (ensure mobile menu is closed so content is visible)
     setTimeout(() => {
       setCurrentStep(3);
       setExpandedSections([3]);
@@ -423,94 +359,55 @@ export function IdentityVerificationPage({
   };
 
   const handleSubmit = () => {
-    if (isFormValid()) {
-      // Navigate to verification progress page
-      navigate("/verification-progress");
-    }
+    if (isFormValid()) navigate("/verification-progress");
   };
 
-  const toggleSection = (sectionIndex: number) => {
-    setExpandedSections((prev) =>
-      prev.includes(sectionIndex)
-        ? prev.filter((i) => i !== sectionIndex)
-        : [...prev, sectionIndex],
-    );
+  const toggleSection = (idx: number) => {
+    setExpandedSections((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
   };
 
-  // Ensure the currently active step is expanded on mobile when currentStep changes
   useEffect(() => {
-    setExpandedSections((prev) =>
-      prev.includes(currentStep) ? prev : [currentStep],
-    );
-    // Close mobile menu once we advance beyond step 1 so content is visible
+    setExpandedSections((prev) => (prev.includes(currentStep) ? prev : [currentStep]));
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
 
   const isFormValid = () => {
     if (!templateVersion) return false;
-    
-    const personalInfo = getPersonalInfoConfig();
-    
-    // Check each field only if it's required (true) in the API config
-    const validations = [];
-    
-    if (personalInfo.firstName) {
-      validations.push(isValidName(formData.firstName));
-    }
-    
-    if (personalInfo.lastName) {
-      validations.push(isValidName(formData.lastName));
-    }
-    
-    if (personalInfo.middleName) {
-      validations.push(isValidName(formData.middleName));
-    }
-    
-    if (personalInfo.dateOfBirth) {
-      validations.push(isValidDOB(formData.dateOfBirth));
-    }
-    
+    const personalInfo: any = getPersonalInfoConfig();
+    const checks: boolean[] = [];
+
+    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
+    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
+    if (personalInfo.middleName) checks.push(isValidName(formData.middleName));
+    if (personalInfo.dateOfBirth) checks.push(isValidDOB(formData.dateOfBirth));
     if (personalInfo.email) {
-      validations.push(isValidEmail(formData.email));
-      validations.push(isEmailVerified);
+      checks.push(isValidEmail(formData.email));
+      checks.push(isEmailVerified);
     }
-    
     if (personalInfo.phoneNumber) {
-      validations.push(!!formData.countryCode);
-      validations.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-      validations.push(isPhoneVerified);
+      checks.push(!!formData.countryCode);
+      checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
+      checks.push(isPhoneVerified);
     }
-    
     if (personalInfo.currentAddress) {
-      validations.push(isValidAddress(formData.address));
-      validations.push(!!formData.city);
-      validations.push(isValidPostalCode(formData.postalCode));
+      checks.push(isValidAddress(formData.address));
+      checks.push(!!formData.city);
+      checks.push(isValidPostalCode(formData.postalCode));
     }
-    
     if (personalInfo.permanentAddress) {
-      validations.push(isValidAddress(formData.permanentAddress));
-      validations.push(!!formData.permanentCity);
-      validations.push(isValidPostalCode(formData.permanentPostalCode));
+      checks.push(isValidAddress(formData.permanentAddress));
+      checks.push(!!formData.permanentCity);
+      checks.push(isValidPostalCode(formData.permanentPostalCode));
     }
-    
-    // All personal info validations must pass, plus document and selfie completion
-    const personalInfoValid = validations.length > 0 && validations.every(validation => validation === true);
-    
-    // Check if documents section exists and if it's completed
-    const documentsSection = templateVersion.sections.find(
-      (section) => section.sectionType === "documents"
-    );
-    const documentsRequired = documentsSection?.isActive || false;
-    
-    // Check if biometrics section exists and if it's completed
-    const biometricsSection = templateVersion.sections.find(
-      (section) => section.sectionType === "biometrics"
-    );
-    const biometricsRequired = biometricsSection?.isActive || false;
-    
-    return personalInfoValid && 
-           (!documentsRequired || isIdentityDocumentCompleted) &&
-           (!biometricsRequired || isSelfieCompleted);
+
+    const personalOk = checks.length > 0 && checks.every(Boolean);
+
+    const docsSection = templateVersion.sections.find((s) => s.sectionType === "documents");
+    const biometricsSection = templateVersion.sections.find((s) => s.sectionType === "biometrics");
+    const docsRequired = !!docsSection?.isActive;
+    const bioRequired = !!biometricsSection?.isActive;
+
+    return personalOk && (!docsRequired || isIdentityDocumentCompleted) && (!bioRequired || isSelfieCompleted);
   };
 
   if (loading) {
@@ -524,27 +421,20 @@ export function IdentityVerificationPage({
   if (error) {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
-        <div className="text-destructive font-roboto text-lg">
-          Error: {error}
-        </div>
+        <div className="text-destructive font-roboto text-lg">Error: {error}</div>
       </div>
     );
   }
 
-  // Handle template version data - filter active sections and sort by orderIndex
-  let activeSections: any[] = [];
-  
-  if (templateVersion) {
-    // Filter only active sections and sort by orderIndex
-    activeSections = templateVersion.sections
-      .filter((s) => s.isActive)
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-  } else {
+  // active sections by order
+  const activeSections = (templateVersion?.sections || [])
+    .filter((s) => s.isActive)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+
+  if (!templateVersion || activeSections.length === 0) {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
-        <div className="text-destructive font-roboto text-lg">
-          No template data available
-        </div>
+        <div className="text-destructive font-roboto text-lg">No template data available</div>
       </div>
     );
   }
