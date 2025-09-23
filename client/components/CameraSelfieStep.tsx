@@ -9,6 +9,7 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
   const [cameraError, setCameraError] = useState(false);
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
   const [selfieCaptured, setSelfieCaptured] = useState(false);
+  const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Ask for camera access on mount
@@ -50,16 +51,31 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
     const ctx = canvas.getContext("2d");
     ctx?.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
-    const selfieDataUrl = canvas.toDataURL("image/png"); // you can send this to backend
+    const selfieDataUrl = canvas.toDataURL("image/png");
     console.log("Selfie captured:", selfieDataUrl);
 
+    // Set the captured image and freeze the camera view
+    setCapturedImageUrl(selfieDataUrl);
     setSelfieCaptured(true);
+  };
+
+  // Confirm the captured selfie and complete the step
+  const confirmSelfie = () => {
+    // Here you would typically send the captured image to the backend
+    console.log("Selfie confirmed:", capturedImageUrl);
     onComplete?.();
+  };
+
+  // Retake the selfie (clear captured image and show live video again)
+  const retakeSelfie = () => {
+    setCapturedImageUrl(null);
+    setSelfieCaptured(false);
   };
 
   // Retry initializing camera without reloading the page
   const handleRetry = async () => {
     setSelfieCaptured(false);
+    setCapturedImageUrl(null);
     setCameraError(false);
 
     // Stop existing tracks if any
@@ -139,7 +155,23 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
                           camera.
                         </div>
                       </div>
+                    ) : selfieCaptured && capturedImageUrl ? (
+                      // Show captured image when selfie is taken
+                      <div className="flex flex-col items-center gap-3 w-full">
+                        <img
+                          src={capturedImageUrl}
+                          alt="Captured selfie"
+                          className="w-full max-w-[350px] rounded-lg"
+                        />
+                        <div className="text-text-primary text-center font-roboto text-[13px] font-medium">
+                          Selfie Captured
+                        </div>
+                        <div className="text-text-muted text-center font-roboto text-[12px] font-normal">
+                          Review your photo and confirm or retake if needed
+                        </div>
+                      </div>
                     ) : (
+                      // Show live video feed
                       <video
                         ref={videoRef}
                         autoPlay
@@ -153,28 +185,43 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
 
               {/* Retry & Capture Buttons */}
               <div className="flex w-full max-w-[440px] p-2 pr-4 flex-row items-center gap-2 rounded-b bg-[#F6F7FB] justify-end">
-                <button
-                  onClick={handleRetry}
-                  className="flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded bg-primary hover:bg-primary/90 transition-colors"
-                >
-                  <span className="text-white font-roboto text-[13px] font-medium">
-                    Retry
-                  </span>
-                </button>
+                {selfieCaptured && capturedImageUrl ? (
+                  // Show retake button when selfie is captured
+                  <button
+                    onClick={retakeSelfie}
+                    className="flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded bg-gray-500 hover:bg-gray-600 transition-colors"
+                  >
+                    <span className="text-white font-roboto text-[13px] font-medium">
+                      Retake
+                    </span>
+                  </button>
+                ) : (
+                  // Show retry and capture buttons when no selfie is captured
+                  <>
+                    <button
+                      onClick={handleRetry}
+                      className="flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded bg-primary hover:bg-primary/90 transition-colors"
+                    >
+                      <span className="text-white font-roboto text-[13px] font-medium">
+                        Retry
+                      </span>
+                    </button>
 
-                <button
-                  onClick={captureSelfie}
-                  disabled={cameraError}
-                  className={`flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded ${
-                    cameraError
-                      ? "bg-primary opacity-50"
-                      : "bg-primary hover:bg-primary/90"
-                  }`}
-                >
-                  <span className="text-white font-roboto text-[13px] font-medium">
-                    {selfieCaptured ? "Captured" : "Capture Selfie"}
-                  </span>
-                </button>
+                    <button
+                      onClick={captureSelfie}
+                      disabled={cameraError}
+                      className={`flex h-8 py-[9px] px-3 justify-center items-center gap-1 rounded ${
+                        cameraError
+                          ? "bg-primary opacity-50"
+                          : "bg-primary hover:bg-primary/90"
+                      }`}
+                    >
+                      <span className="text-white font-roboto text-[13px] font-medium">
+                        Capture Selfie
+                      </span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
