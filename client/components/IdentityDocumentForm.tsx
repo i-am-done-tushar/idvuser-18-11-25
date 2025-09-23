@@ -195,14 +195,7 @@ export function IdentityDocumentForm({
             </select>
           </div>
 
-          {/* Document Type Dropdown - hidden for now */}
-          <div className="flex h-[38px] px-3 py-[15px] justify-between items-center flex-1 rounded border border-[#C3C6D4] bg-white">
-            <div className="flex items-center gap-2 flex-1">
-              <div className="text-[#676879] font-roboto text-[13px] font-normal leading-5">
-                Select
-              </div>
-            </div>
-          </div>
+          
         </div>
       </div>
 
