@@ -104,6 +104,68 @@ export function IdentityVerificationPage({
     fetchTemplate();
   }, [templateId, templateData]);
 
+
+
+
+
+
+
+  //
+  const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:5027"; // same-origin if empty
+  const getToken = () =>
+    (typeof window !== "undefined" && localStorage.getItem("access")) || null;
+
+  // Resolve the active version id from either templateVersion (new API) or template (old API)
+  function getActiveVersionId(
+    templateVersion: TemplateVersionResponse | null,
+    template: TemplateResponse | null
+  ): number | null {
+    if (templateVersion?.versionId != null) return Number(templateVersion.versionId);
+    const active = template?.versions?.find(v => v.isActive);
+    return active?.versionId != null ? Number(active.versionId) : null;
+  }
+
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpValidating, setOtpValidating] = useState(false);
+
+  async function generateEmailOtp(email: string, versionId: number) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/Otp/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ email, versionId }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `Failed to send OTP (HTTP ${res.status})`);
+    }
+  }
+
+  async function validateEmailOtp(email: string, versionId: number, otp: string) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/Otp/validate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ email, versionId, otp }), // change 'otp' key if your API uses 'code'
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `Invalid OTP (HTTP ${res.status})`);
+    }
+  }
+
+
+
+
+
   // Step 1 specific validation (personal info + email/phone)
   const isStep1Complete = () => {
     return (
@@ -181,14 +243,51 @@ export function IdentityVerificationPage({
     }
   }, [currentStep, isIdentityDocumentCompleted, hasShownStep2Toast, toast]);
 
-  const handleSendEmailOTP = () => {
-    setPendingVerification({
-      type: "email",
-      recipient: formData.email,
-    });
-    setOtpType("email");
-    setShowOTPDialog(true);
+  // const handleSendEmailOTP = () => {
+  //   setPendingVerification({
+  //     type: "email",
+  //     recipient: formData.email,
+  //   });
+  //   setOtpType("email");
+  //   setShowOTPDialog(true);
+  // };
+
+  const handleSendEmailOTP = async () => {
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId(templateVersion, template);
+
+    if (!email || !isValidEmail(email)) {
+      toast({ title: "Invalid email", description: "Please enter a valid email first." });
+      return;
+    }
+    if (versionId == null) {
+      toast({ title: "Missing version", description: "No active template version found." });
+      return;
+    }
+
+    try {
+      setOtpSending(true);
+      await generateEmailOtp(email, versionId);
+      setPendingVerification({ type: "email", recipient: email });
+      setOtpType("email");
+      setShowOTPDialog(true);
+      toast({ title: "OTP sent", description: `An OTP was sent to ${email}.` });
+    } catch (err: any) {
+      toast({
+        title: "Failed to send OTP",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpSending(false);
+    }
   };
+
+
+
+
+
+
 
   const handleSendPhoneOTP = () => {
     const fullPhone = `${formData.countryCode} ${formData.phoneNumber}`;
@@ -200,26 +299,62 @@ export function IdentityVerificationPage({
     setShowOTPDialog(true);
   };
 
+
+
+////
+
+
   const handleOTPVerify = async (otp: string) => {
-    // Simulate OTP verification
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId(templateVersion, template);
 
-    if (pendingVerification?.type === "email") {
+    if (!pendingVerification || pendingVerification.type !== "email") return;
+    if (!email || versionId == null) return;
+
+    try {
+      setOtpValidating(true);
+      await validateEmailOtp(email, versionId, otp);
       setIsEmailVerified(true);
-    } else if (pendingVerification?.type === "phone") {
-      setIsPhoneVerified(true);
+      setShowOTPDialog(false);
+      setPendingVerification(null);
+      toast({ title: "Email verified", description: "Your email was successfully verified." });
+    } catch (err: any) {
+      toast({
+        title: "Invalid OTP",
+        description: err?.message || "Please check the code and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpValidating(false);
     }
-
-    setShowOTPDialog(false);
-    setPendingVerification(null);
   };
 
-  const handleOTPResend = () => {
-    // Simulate resending OTP
-    console.log(
-      `Resending ${otpType} OTP to ${pendingVerification?.recipient}`,
-    );
+  const handleOTPResend = async () => {
+    const email = formData.email?.trim();
+    const versionId = getActiveVersionId(templateVersion, template);
+
+    if (!email || versionId == null) return;
+
+    try {
+      setOtpSending(true);
+      await generateEmailOtp(email, versionId);
+      toast({ title: "OTP resent", description: `A new OTP was sent to ${email}.` });
+    } catch (err: any) {
+      toast({
+        title: "Failed to resend",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpSending(false);
+    }
   };
+
+
+
+
+
+
 
   const handleOTPClose = () => {
     setShowOTPDialog(false);

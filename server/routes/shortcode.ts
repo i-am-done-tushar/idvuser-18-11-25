@@ -3,6 +3,8 @@ import { ShortCodeResolveResponse, TemplateVersionResponse } from "@shared/api";
 
 // Hardcoded API base URL - you can move this to environment variables later
 const API_BASE_URL = "http://10.10.2.133:8080";
+// const API_BASE_URL = "http://localhost:5027";
+
 
 export const handleResolveShortCode: RequestHandler = async (req, res) => {
   const { shortCode } = req.params;
