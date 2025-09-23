@@ -10,6 +10,11 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  import.meta.env.VITE_API_URL ||
+  "http://10.10.2.133:8080";
+
   useEffect(() => {
     if (shortCode) {
       // If we have a shortcode, resolve it to get template version ID
@@ -23,7 +28,7 @@ export default function Index() {
     
     try {
       // Step 1: Resolve shortcode to get template version ID
-      const resolveResponse = await fetch(`/api/templates-link-generation/resolve/${code}`);
+      const resolveResponse = await fetch(`${API_BASE}/api/templates-link-generation/resolve/${code}`);
       if (!resolveResponse.ok) {
         throw new Error("Failed to resolve shortcode");
       }
@@ -32,7 +37,7 @@ export default function Index() {
       console.log("Shortcode resolved:", resolveData);
       
       // Step 2: Get template version details
-      const templateResponse = await fetch(`/api/TemplateVersion/${resolveData.templateVersionId}`);
+      const templateResponse = await fetch(`${API_BASE}/api/TemplateVersion/${resolveData.templateVersionId}`);
       if (!templateResponse.ok) {
         throw new Error("Failed to get template version");
       }
