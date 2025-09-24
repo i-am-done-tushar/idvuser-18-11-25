@@ -26,6 +26,9 @@ const API_BASE =
   import.meta.env.VITE_API_URL ||
   "http://10.10.2.133:8080";
 
+// 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
+const BYPASS_OTP_FOR_DEVELOPMENT = true;
+
 // token helper (kept minimal)
 const getToken = () =>
   (typeof window !== "undefined" && localStorage.getItem("access")) || null;
@@ -175,12 +178,12 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
     if (personalInfo.dateOfBirth) checks.push(isValidDOB(formData.dateOfBirth));
     if (personalInfo.email) {
       checks.push(isValidEmail(formData.email));
-      checks.push(isEmailVerified);
+      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified); // 🚀 Bypass OTP in dev
     }
     if (personalInfo.phoneNumber) {
       checks.push(!!formData.countryCode);
       checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-      checks.push(isPhoneVerified);
+      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified); // 🚀 Bypass OTP in dev
     }
     if (personalInfo.currentAddress) {
       checks.push(isValidAddress(formData.address));
@@ -359,7 +362,19 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
   };
 
   const handleSubmit = () => {
-    if (isFormValid()) navigate("/verification-progress");
+    if (isFormValid()) {
+      navigate("/verification-progress");
+    } else {
+      // Show missing fields in toast
+      const missingFields = getMissingFields();
+      if (missingFields.length > 0) {
+        toast({
+          title: "Form Incomplete",
+          description: `Please complete the following: ${missingFields.join(", ")}`,
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const toggleSection = (idx: number) => {
@@ -382,12 +397,18 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
     if (personalInfo.dateOfBirth) checks.push(isValidDOB(formData.dateOfBirth));
     if (personalInfo.email) {
       checks.push(isValidEmail(formData.email));
-      checks.push(isEmailVerified);
+      // Skip email verification for development
+      if (!BYPASS_OTP_FOR_DEVELOPMENT) {
+        checks.push(isEmailVerified);
+      }
     }
     if (personalInfo.phoneNumber) {
       checks.push(!!formData.countryCode);
       checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-      checks.push(isPhoneVerified);
+      // Skip phone verification for development
+      if (!BYPASS_OTP_FOR_DEVELOPMENT) {
+        checks.push(isPhoneVerified);
+      }
     }
     if (personalInfo.currentAddress) {
       checks.push(isValidAddress(formData.address));
@@ -408,6 +429,79 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
     const bioRequired = !!biometricsSection?.isActive;
 
     return personalOk && (!docsRequired || isIdentityDocumentCompleted) && (!bioRequired || isSelfieCompleted);
+  };
+
+  const getMissingFields = () => {
+    if (!templateVersion) return ["Template data not loaded"];
+    
+    const personalInfo: any = getPersonalInfoConfig();
+    const missing: string[] = [];
+
+    // Check personal information fields
+    if (personalInfo.firstName && !isValidName(formData.firstName)) {
+      missing.push("First Name");
+    }
+    if (personalInfo.lastName && !isValidName(formData.lastName)) {
+      missing.push("Last Name");
+    }
+    if (personalInfo.middleName && !isValidName(formData.middleName)) {
+      missing.push("Middle Name");
+    }
+    if (personalInfo.dateOfBirth && !isValidDOB(formData.dateOfBirth)) {
+      missing.push("Date of Birth");
+    }
+    if (personalInfo.email) {
+      if (!isValidEmail(formData.email)) {
+        missing.push("Valid Email");
+      } else if (!isEmailVerified && !BYPASS_OTP_FOR_DEVELOPMENT) {
+        missing.push("Email Verification (OTP)");
+      }
+    }
+    if (personalInfo.phoneNumber) {
+      if (!formData.countryCode) {
+        missing.push("Country Code");
+      } else if (!isValidPhoneForCountry(formData.countryCode, formData.phoneNumber)) {
+        missing.push("Valid Phone Number");
+      } else if (!isPhoneVerified && !BYPASS_OTP_FOR_DEVELOPMENT) {
+        missing.push("Phone Verification (OTP)");
+      }
+    }
+    if (personalInfo.currentAddress) {
+      if (!isValidAddress(formData.address)) {
+        missing.push("Current Address");
+      }
+      if (!formData.city) {
+        missing.push("Current City");
+      }
+      if (!isValidPostalCode(formData.postalCode)) {
+        missing.push("Current Postal Code");
+      }
+    }
+    if (personalInfo.permanentAddress) {
+      if (!isValidAddress(formData.permanentAddress)) {
+        missing.push("Permanent Address");
+      }
+      if (!formData.permanentCity) {
+        missing.push("Permanent City");
+      }
+      if (!isValidPostalCode(formData.permanentPostalCode)) {
+        missing.push("Permanent Postal Code");
+      }
+    }
+
+    // Check document verification
+    const docsSection = templateVersion.sections.find((s) => s.sectionType === "documents");
+    if (docsSection?.isActive && !isIdentityDocumentCompleted) {
+      missing.push("Document Verification");
+    }
+
+    // Check biometric verification
+    const biometricsSection = templateVersion.sections.find((s) => s.sectionType === "biometrics");
+    if (biometricsSection?.isActive && !isSelfieCompleted) {
+      missing.push("Selfie Verification");
+    }
+
+    return missing;
   };
 
   if (loading) {
@@ -528,7 +622,6 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
                   className={`flex h-8 py-[9px] px-3 justify-center items-center gap-0.5 rounded ${
                     isFormValid() ? "bg-primary" : "bg-primary opacity-50"
                   }`}
-                  disabled={!isFormValid()}
                 >
                   <span className="text-white font-roboto text-[13px] font-normal">
                     Submit
