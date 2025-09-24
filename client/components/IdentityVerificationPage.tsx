@@ -36,9 +36,10 @@ const getToken = () =>
 interface IdentityVerificationPageProps {
   // NOTE: despite the name, we call /TemplateVersion/{id} so this is a VERSION id
   templateId: number;
+  userId: number | null;
 }
 
-export function IdentityVerificationPage({ templateId }: IdentityVerificationPageProps) {
+export function IdentityVerificationPage({ templateId, userId }: IdentityVerificationPageProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -174,7 +175,10 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
 
     if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
     if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
-    if (personalInfo.middleName) checks.push(isValidName(formData.middleName));
+    // Middle name is optional - only validate if it has content
+    if (personalInfo.middleName && formData.middleName.trim()) {
+      checks.push(isValidName(formData.middleName));
+    }
     if (personalInfo.dateOfBirth) checks.push(isValidDOB(formData.dateOfBirth));
     if (personalInfo.email) {
       checks.push(isValidEmail(formData.email));
@@ -361,10 +365,8 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
     }, 1500);
   };
 
-  const handleSubmit = () => {
-    if (isFormValid()) {
-      navigate("/verification-progress");
-    } else {
+  const handleSubmit = async () => {
+    if (!isFormValid()) {
       // Show missing fields in toast
       const missingFields = getMissingFields();
       if (missingFields.length > 0) {
@@ -374,6 +376,122 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
           variant: "destructive",
         });
       }
+      return;
+    }
+
+    if (!userId || !templateVersion) {
+      toast({
+        title: "Missing Information",
+        description: "User ID or template version not found. Please refresh and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: "Submitting Form",
+        description: "Please wait while we submit your information...",
+      });
+
+      // Step 1: Create UserTemplateSubmission
+      const submissionResponse = await fetch(`${API_BASE}/api/UserTemplateSubmissions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          templateVersionId: templateVersion.versionId,
+          userId: userId,
+        }),
+      });
+
+      if (!submissionResponse.ok) {
+        throw new Error("Failed to create template submission");
+      }
+
+      const submissionData = await submissionResponse.json();
+      const submissionId = submissionData.id;
+
+      // Step 2: Submit form data for each section
+      const activeSections = templateVersion.sections.filter((s) => s.isActive);
+      
+      for (const section of activeSections) {
+        let fieldValue = "";
+        
+        if (section.sectionType === "personalInformation") {
+          // Map personal information data
+          const personalInfo = getPersonalInfoConfig();
+          const mappedData: any = {};
+          
+          if (personalInfo.firstName) mappedData.firstName = formData.firstName;
+          if (personalInfo.lastName) mappedData.lastName = formData.lastName;
+          if (personalInfo.middleName) mappedData.middleName = formData.middleName;
+          if (personalInfo.dateOfBirth) mappedData.dateOfBirth = formData.dateOfBirth;
+          if (personalInfo.email) mappedData.email = formData.email;
+          if (personalInfo.phoneNumber) {
+            mappedData.countryCode = formData.countryCode;
+            mappedData.phoneNumber = formData.phoneNumber;
+          }
+          if (personalInfo.gender) mappedData.gender = formData.gender;
+          if (personalInfo.currentAddress) {
+            mappedData.address = formData.address;
+            mappedData.city = formData.city;
+            mappedData.postalCode = formData.postalCode;
+          }
+          if (personalInfo.permanentAddress) {
+            mappedData.permanentAddress = formData.permanentAddress;
+            mappedData.permanentCity = formData.permanentCity;
+            mappedData.permanentPostalCode = formData.permanentPostalCode;
+          }
+          
+          fieldValue = JSON.stringify(mappedData);
+        } else if (section.sectionType === "documents") {
+          // Documents section - mark as completed if documents were uploaded
+          fieldValue = JSON.stringify({
+            documentsUploaded: isIdentityDocumentCompleted,
+            completedAt: new Date().toISOString(),
+          });
+        } else if (section.sectionType === "biometrics") {
+          // Biometrics section - mark as completed if selfie was uploaded
+          fieldValue = JSON.stringify({
+            selfieUploaded: isSelfieCompleted,
+            completedAt: new Date().toISOString(),
+          });
+        }
+
+        // Submit section data
+        const sectionResponse = await fetch(`${API_BASE}/api/${submissionId}/${section.id}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "*/*",
+          },
+          body: JSON.stringify({
+            fieldValue: fieldValue,
+          }),
+        });
+
+        if (!sectionResponse.ok) {
+          throw new Error(`Failed to submit ${section.sectionType} section`);
+        }
+      }
+
+      toast({
+        title: "Form Submitted Successfully!",
+        description: "Your identity verification form has been submitted.",
+      });
+
+      // Navigate to success page
+      navigate("/verification-progress");
+    } catch (error) {
+      console.error("Form submission error:", error);
+      toast({
+        title: "Submission Failed",
+        description: error instanceof Error ? error.message : "Failed to submit form. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -393,7 +511,10 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
 
     if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
     if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
-    if (personalInfo.middleName) checks.push(isValidName(formData.middleName));
+    // Middle name is optional - only validate if it has content
+    if (personalInfo.middleName && formData.middleName.trim()) {
+      checks.push(isValidName(formData.middleName));
+    }
     if (personalInfo.dateOfBirth) checks.push(isValidDOB(formData.dateOfBirth));
     if (personalInfo.email) {
       checks.push(isValidEmail(formData.email));
@@ -444,7 +565,8 @@ export function IdentityVerificationPage({ templateId }: IdentityVerificationPag
     if (personalInfo.lastName && !isValidName(formData.lastName)) {
       missing.push("Last Name");
     }
-    if (personalInfo.middleName && !isValidName(formData.middleName)) {
+    // Middle name is optional - only validate if it has content
+    if (personalInfo.middleName && formData.middleName.trim() && !isValidName(formData.middleName)) {
       missing.push("Middle Name");
     }
     if (personalInfo.dateOfBirth && !isValidDOB(formData.dateOfBirth)) {

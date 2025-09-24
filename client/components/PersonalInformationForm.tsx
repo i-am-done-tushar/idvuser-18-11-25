@@ -49,11 +49,31 @@ export function PersonalInformationForm({
 
   // Helper function to check if a field should be displayed
   const shouldShowField = (fieldName: string): boolean => {
+    // Debug: log every call to shouldShowField
+    if (fieldName === 'currentAddress' || fieldName === 'permanentAddress') {
+      console.log(`🔍 shouldShowField called with: ${fieldName}`);
+    }
+    
     // If no fieldConfig provided or it's an empty object, this means the API didn't provide proper config
     // In this case, show only essential fields as fallback
     if (!fieldConfig || Object.keys(fieldConfig).length === 0) {
       const essentialFields = ['firstName', 'lastName', 'email'];
       return essentialFields.includes(fieldName);
+    }
+    
+    // Handle direct section names like 'currentAddress' and 'permanentAddress'
+    if (fieldName === 'currentAddress') {
+      const shouldShow = fieldConfig.currentAddress === true;
+      console.log(`Field ${fieldName}: ${shouldShow} (config value: ${fieldConfig.currentAddress})`);
+      console.log('Full config:', fieldConfig);
+      return shouldShow;
+    }
+    
+    if (fieldName === 'permanentAddress') {
+      const shouldShow = fieldConfig.permanentAddress === true;
+      console.log(`Field ${fieldName}: ${shouldShow} (config value: ${fieldConfig.permanentAddress})`);
+      console.log('Full config:', fieldConfig);
+      return shouldShow;
     }
     
     // Map form field names to config field names
@@ -66,7 +86,6 @@ export function PersonalInformationForm({
       address: 'currentAddress',
       city: 'currentAddress', // City is part of current address
       postalCode: 'currentAddress', // Postal code is part of current address
-      permanentAddress: 'permanentAddress',
       permanentCity: 'permanentAddress', // Permanent city is part of permanent address
       permanentPostalCode: 'permanentAddress', // Permanent postal code is part of permanent address
       phoneNumber: 'phoneNumber',
@@ -82,8 +101,13 @@ export function PersonalInformationForm({
     
     const shouldShow = fieldConfig[configKey as keyof typeof fieldConfig] === true;
     
-    // Log only for currentAddress to debug the specific issue
-    if (fieldName === 'address' || fieldName === 'city' || fieldName === 'postalCode') {
+    // Enhanced logging for address fields and related fields to debug both current and permanent
+    if (fieldName.includes('Address') || 
+        fieldName === 'address' || 
+        fieldName === 'city' || 
+        fieldName === 'postalCode' ||
+        configKey === 'currentAddress' ||
+        configKey === 'permanentAddress') {
       console.log(`Field ${fieldName} (${configKey}): ${shouldShow} (config value: ${fieldConfig[configKey as keyof typeof fieldConfig]})`);
     }
     
