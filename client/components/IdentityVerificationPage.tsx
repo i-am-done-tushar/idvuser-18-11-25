@@ -22,9 +22,7 @@ import {
 
 // ---- single source of truth for API base ----
 const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  import.meta.env.VITE_API_URL ||
-  "";
+  import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 // 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
 const BYPASS_OTP_FOR_DEVELOPMENT = true;
@@ -39,11 +37,15 @@ interface IdentityVerificationPageProps {
   userId: number | null;
 }
 
-export function IdentityVerificationPage({ templateId, userId }: IdentityVerificationPageProps) {
+export function IdentityVerificationPage({
+  templateId,
+  userId,
+}: IdentityVerificationPageProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [templateVersion, setTemplateVersion] = useState<TemplateVersionResponse | null>(null);
+  const [templateVersion, setTemplateVersion] =
+    useState<TemplateVersionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +53,8 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [hasShownStep1Toast, setHasShownStep1Toast] = useState(false);
-  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] = useState(false);
+  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] =
+    useState(false);
   const [hasShownStep2Toast, setHasShownStep2Toast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
@@ -63,7 +66,10 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   // OTP dialog + state
   const [showOTPDialog, setShowOTPDialog] = useState(false);
   const [otpType, setOtpType] = useState<"email" | "phone">("email");
-  const [pendingVerification, setPendingVerification] = useState<{ type: "email" | "phone"; recipient: string } | null>(null);
+  const [pendingVerification, setPendingVerification] = useState<{
+    type: "email" | "phone";
+    recipient: string;
+  } | null>(null);
   const [otpSending, setOtpSending] = useState(false);
   const [otpValidating, setOtpValidating] = useState(false);
 
@@ -90,9 +96,12 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   const getPersonalInfoConfig = () => {
     if (!templateVersion) return {};
     const personalInfoSection = templateVersion.sections.find(
-      (section) => section.sectionType === "personalInformation"
+      (section) => section.sectionType === "personalInformation",
     );
-    if (!personalInfoSection || !personalInfoSection.fieldMappings?.[0]?.structure) {
+    if (
+      !personalInfoSection ||
+      !personalInfoSection.fieldMappings?.[0]?.structure
+    ) {
       return {};
     }
     const fieldConfig = personalInfoSection.fieldMappings[0].structure as any;
@@ -110,10 +119,13 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${API_BASE}/api/TemplateVersion/${templateId}`, {
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/api/TemplateVersion/${templateId}`,
+          {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          },
+        );
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           throw new Error(text || `Failed to fetch version ${templateId}`);
@@ -121,7 +133,8 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
         const data: TemplateVersionResponse = await res.json();
         setTemplateVersion(data);
       } catch (e: any) {
-        if (e?.name !== "AbortError") setError(e?.message || "Failed to load template version");
+        if (e?.name !== "AbortError")
+          setError(e?.message || "Failed to load template version");
       } finally {
         setLoading(false);
       }
@@ -147,7 +160,11 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     }
   }
 
-  async function validateEmailOtp(email: string, versionId: number, otp: string) {
+  async function validateEmailOtp(
+    email: string,
+    versionId: number,
+    otp: string,
+  ) {
     const token = getToken();
     const res = await fetch(`${API_BASE}/api/Otp/validate`, {
       method: "POST",
@@ -186,7 +203,9 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     }
     if (personalInfo.phoneNumber) {
       checks.push(!!formData.countryCode);
-      checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
+      checks.push(
+        isValidPhoneForCountry(formData.countryCode, formData.phoneNumber),
+      );
       checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified); // 🚀 Bypass OTP in dev
     }
     if (personalInfo.currentAddress) {
@@ -206,7 +225,10 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   useEffect(() => {
     const ok = isStep1Complete();
     if (currentStep === 1 && ok && !hasShownStep1Toast) {
-      toast({ title: "Step 1 completed", description: "Step 1 completed. Please proceed to the next step" });
+      toast({
+        title: "Step 1 completed",
+        description: "Step 1 completed. Please proceed to the next step",
+      });
       setHasShownStep1Toast(true);
       setTimeout(() => {
         setCurrentStep(2);
@@ -237,8 +259,15 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
 
   // advance to step 3 when docs complete
   useEffect(() => {
-    if (currentStep === 2 && isIdentityDocumentCompleted && !hasShownStep2Toast) {
-      toast({ title: "Step 2 completed", description: "Step 2 completed. Please proceed to the final step" });
+    if (
+      currentStep === 2 &&
+      isIdentityDocumentCompleted &&
+      !hasShownStep2Toast
+    ) {
+      toast({
+        title: "Step 2 completed",
+        description: "Step 2 completed. Please proceed to the final step",
+      });
       setHasShownStep2Toast(true);
       setTimeout(() => {
         setCurrentStep(3);
@@ -254,11 +283,17 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     const versionId = getActiveVersionId();
 
     if (!email || !isValidEmail(email)) {
-      toast({ title: "Invalid email", description: "Please enter a valid email first." });
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email first.",
+      });
       return;
     }
     if (versionId == null) {
-      toast({ title: "Missing version", description: "No active template version found." });
+      toast({
+        title: "Missing version",
+        description: "No active template version found.",
+      });
       return;
     }
     try {
@@ -298,7 +333,10 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
         setOtpValidating(true);
         await validateEmailOtp(email, versionId, otp);
         setIsEmailVerified(true);
-        toast({ title: "Email verified", description: "Your email was successfully verified." });
+        toast({
+          title: "Email verified",
+          description: "Your email was successfully verified.",
+        });
         setShowOTPDialog(false);
         setPendingVerification(null);
       } catch (err: any) {
@@ -314,11 +352,18 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
       // phone simulated success
       if (otp && otp.length >= 4) {
         setIsPhoneVerified(true);
-        toast({ title: "Phone verified", description: "Your phone number was successfully verified." });
+        toast({
+          title: "Phone verified",
+          description: "Your phone number was successfully verified.",
+        });
         setShowOTPDialog(false);
         setPendingVerification(null);
       } else {
-        toast({ title: "Invalid OTP", description: "Please enter a valid OTP.", variant: "destructive" });
+        toast({
+          title: "Invalid OTP",
+          description: "Please enter a valid OTP.",
+          variant: "destructive",
+        });
       }
     }
   };
@@ -332,7 +377,10 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     try {
       setOtpSending(true);
       await generateEmailOtp(email, versionId);
-      toast({ title: "OTP resent", description: `A new OTP was sent to ${email}.` });
+      toast({
+        title: "OTP resent",
+        description: `A new OTP was sent to ${email}.`,
+      });
     } catch (err: any) {
       toast({
         title: "Failed to resend",
@@ -350,12 +398,18 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   };
 
   const handleConsentClose = () => setShowConsentDialog(false);
-  const handleConsentAgree = () => { setHasConsented(true); setShowConsentDialog(false); };
+  const handleConsentAgree = () => {
+    setHasConsented(true);
+    setShowConsentDialog(false);
+  };
 
   const handleIdentityDocumentComplete = () => {
     setIsIdentityDocumentCompleted(true);
     if (!hasShownStep2Toast) {
-      toast({ title: "Step 2 completed", description: "Step 2 completed. Please proceed to the final step" });
+      toast({
+        title: "Step 2 completed",
+        description: "Step 2 completed. Please proceed to the final step",
+      });
       setHasShownStep2Toast(true);
     }
     setTimeout(() => {
@@ -382,7 +436,8 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     if (!userId || !templateVersion) {
       toast({
         title: "Missing Information",
-        description: "User ID or template version not found. Please refresh and try again.",
+        description:
+          "User ID or template version not found. Please refresh and try again.",
         variant: "destructive",
       });
       return;
@@ -395,17 +450,20 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
       });
 
       // Step 1: Create UserTemplateSubmission
-      const submissionResponse = await fetch(`${API_BASE}/api/UserTemplateSubmissions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
+      const submissionResponse = await fetch(
+        `${API_BASE}/api/UserTemplateSubmissions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            templateVersionId: templateVersion.versionId,
+            userId: userId,
+          }),
         },
-        body: JSON.stringify({
-          templateVersionId: templateVersion.versionId,
-          userId: userId,
-        }),
-      });
+      );
 
       if (!submissionResponse.ok) {
         throw new Error("Failed to create template submission");
@@ -416,19 +474,21 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
 
       // Step 2: Submit form data for each section
       const activeSections = templateVersion.sections.filter((s) => s.isActive);
-      
+
       for (const section of activeSections) {
         let fieldValue = "";
-        
+
         if (section.sectionType === "personalInformation") {
           // Map personal information data
           const personalInfo = getPersonalInfoConfig();
           const mappedData: any = {};
-          
+
           if (personalInfo.firstName) mappedData.firstName = formData.firstName;
           if (personalInfo.lastName) mappedData.lastName = formData.lastName;
-          if (personalInfo.middleName) mappedData.middleName = formData.middleName;
-          if (personalInfo.dateOfBirth) mappedData.dateOfBirth = formData.dateOfBirth;
+          if (personalInfo.middleName)
+            mappedData.middleName = formData.middleName;
+          if (personalInfo.dateOfBirth)
+            mappedData.dateOfBirth = formData.dateOfBirth;
           if (personalInfo.email) mappedData.email = formData.email;
           if (personalInfo.phoneNumber) {
             mappedData.countryCode = formData.countryCode;
@@ -445,7 +505,7 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
             mappedData.permanentCity = formData.permanentCity;
             mappedData.permanentPostalCode = formData.permanentPostalCode;
           }
-          
+
           fieldValue = JSON.stringify(mappedData);
         } else if (section.sectionType === "documents") {
           // Documents section - mark as completed if documents were uploaded
@@ -462,16 +522,19 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
         }
 
         // Submit section data
-        const sectionResponse = await fetch(`${API_BASE}/api/${submissionId}/${section.id}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "*/*",
+        const sectionResponse = await fetch(
+          `${API_BASE}/api/${submissionId}/${section.id}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "*/*",
+            },
+            body: JSON.stringify({
+              fieldValue: fieldValue,
+            }),
           },
-          body: JSON.stringify({
-            fieldValue: fieldValue,
-          }),
-        });
+        );
 
         if (!sectionResponse.ok) {
           throw new Error(`Failed to submit ${section.sectionType} section`);
@@ -489,18 +552,25 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
       console.error("Form submission error:", error);
       toast({
         title: "Submission Failed",
-        description: error instanceof Error ? error.message : "Failed to submit form. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to submit form. Please try again.",
         variant: "destructive",
       });
     }
   };
 
   const toggleSection = (idx: number) => {
-    setExpandedSections((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
+    setExpandedSections((prev) =>
+      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx],
+    );
   };
 
   useEffect(() => {
-    setExpandedSections((prev) => (prev.includes(currentStep) ? prev : [currentStep]));
+    setExpandedSections((prev) =>
+      prev.includes(currentStep) ? prev : [currentStep],
+    );
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
 
@@ -525,7 +595,9 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     }
     if (personalInfo.phoneNumber) {
       checks.push(!!formData.countryCode);
-      checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
+      checks.push(
+        isValidPhoneForCountry(formData.countryCode, formData.phoneNumber),
+      );
       // Skip phone verification for development
       if (!BYPASS_OTP_FOR_DEVELOPMENT) {
         checks.push(isPhoneVerified);
@@ -544,17 +616,25 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
 
     const personalOk = checks.length > 0 && checks.every(Boolean);
 
-    const docsSection = templateVersion.sections.find((s) => s.sectionType === "documents");
-    const biometricsSection = templateVersion.sections.find((s) => s.sectionType === "biometrics");
+    const docsSection = templateVersion.sections.find(
+      (s) => s.sectionType === "documents",
+    );
+    const biometricsSection = templateVersion.sections.find(
+      (s) => s.sectionType === "biometrics",
+    );
     const docsRequired = !!docsSection?.isActive;
     const bioRequired = !!biometricsSection?.isActive;
 
-    return personalOk && (!docsRequired || isIdentityDocumentCompleted) && (!bioRequired || isSelfieCompleted);
+    return (
+      personalOk &&
+      (!docsRequired || isIdentityDocumentCompleted) &&
+      (!bioRequired || isSelfieCompleted)
+    );
   };
 
   const getMissingFields = () => {
     if (!templateVersion) return ["Template data not loaded"];
-    
+
     const personalInfo: any = getPersonalInfoConfig();
     const missing: string[] = [];
 
@@ -566,7 +646,11 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
       missing.push("Last Name");
     }
     // Middle name is optional - only validate if it has content
-    if (personalInfo.middleName && formData.middleName.trim() && !isValidName(formData.middleName)) {
+    if (
+      personalInfo.middleName &&
+      formData.middleName.trim() &&
+      !isValidName(formData.middleName)
+    ) {
       missing.push("Middle Name");
     }
     if (personalInfo.dateOfBirth && !isValidDOB(formData.dateOfBirth)) {
@@ -582,7 +666,9 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     if (personalInfo.phoneNumber) {
       if (!formData.countryCode) {
         missing.push("Country Code");
-      } else if (!isValidPhoneForCountry(formData.countryCode, formData.phoneNumber)) {
+      } else if (
+        !isValidPhoneForCountry(formData.countryCode, formData.phoneNumber)
+      ) {
         missing.push("Valid Phone Number");
       } else if (!isPhoneVerified && !BYPASS_OTP_FOR_DEVELOPMENT) {
         missing.push("Phone Verification (OTP)");
@@ -612,13 +698,17 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
     }
 
     // Check document verification
-    const docsSection = templateVersion.sections.find((s) => s.sectionType === "documents");
+    const docsSection = templateVersion.sections.find(
+      (s) => s.sectionType === "documents",
+    );
     if (docsSection?.isActive && !isIdentityDocumentCompleted) {
       missing.push("Document Verification");
     }
 
     // Check biometric verification
-    const biometricsSection = templateVersion.sections.find((s) => s.sectionType === "biometrics");
+    const biometricsSection = templateVersion.sections.find(
+      (s) => s.sectionType === "biometrics",
+    );
     if (biometricsSection?.isActive && !isSelfieCompleted) {
       missing.push("Selfie Verification");
     }
@@ -637,7 +727,9 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   if (error) {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
-        <div className="text-destructive font-roboto text-lg">Error: {error}</div>
+        <div className="text-destructive font-roboto text-lg">
+          Error: {error}
+        </div>
       </div>
     );
   }
@@ -650,7 +742,9 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
   if (!templateVersion || activeSections.length === 0) {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
-        <div className="text-destructive font-roboto text-lg">No template data available</div>
+        <div className="text-destructive font-roboto text-lg">
+          No template data available
+        </div>
       </div>
     );
   }
@@ -836,7 +930,9 @@ export function IdentityVerificationPage({ templateId, userId }: IdentityVerific
                       isPhoneVerified={isPhoneVerified}
                       onSendEmailOTP={handleSendEmailOTP}
                       onSendPhoneOTP={handleSendPhoneOTP}
-                      onIdentityDocumentComplete={handleIdentityDocumentComplete}
+                      onIdentityDocumentComplete={
+                        handleIdentityDocumentComplete
+                      }
                       onSelfieComplete={() => setIsSelfieCompleted(true)}
                     />
                   ))}

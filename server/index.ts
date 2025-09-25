@@ -26,7 +26,10 @@ export function createServer() {
   app.get("/api/templates/:id", handleGetTemplate);
 
   // Shortcode resolution routes
-  app.get("/api/templates-link-generation/resolve/:shortCode", handleResolveShortCode);
+  app.get(
+    "/api/templates-link-generation/resolve/:shortCode",
+    handleResolveShortCode,
+  );
   app.get("/api/TemplateVersion/:versionId", handleGetTemplateVersionDirect);
 
   return app;
