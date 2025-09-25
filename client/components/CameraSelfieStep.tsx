@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { HowItWorksDialog } from "./HowItWorksDialog";
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+const API_BASE =
+  import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 interface CameraSelfieStepProps {
   onComplete?: () => void;
@@ -84,27 +85,32 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
       // If there is an existing uploaded file for this selfie, attempt to delete it first
       if (uploadedFileId) {
         try {
-          await fetch(`${API_BASE}/api/Files/${uploadedFileId}`, { method: 'DELETE' });
+          await fetch(`${API_BASE}/api/Files/${uploadedFileId}`, {
+            method: "DELETE",
+          });
         } catch (delErr) {
-          console.warn(`Failed to delete previous selfie id ${uploadedFileId}:`, delErr);
+          console.warn(
+            `Failed to delete previous selfie id ${uploadedFileId}:`,
+            delErr,
+          );
         }
       }
 
       const formData = new FormData();
-      formData.append('File', blob, 'selfie.jpg');
-      formData.append('DocumentDefinitionId', DOCUMENT_DEFINITION_ID);
-      formData.append('Bucket', 'string');
-      formData.append('UserTemplateSubmissionId', '5');
+      formData.append("File", blob, "selfie.jpg");
+      formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
+      formData.append("Bucket", "string");
+      formData.append("UserTemplateSubmissionId", "5");
 
       // Upload to the same endpoint as documents
       const uploadResponse = await fetch(`${API_BASE}/api/Files/upload`, {
-        method: 'POST',
+        method: "POST",
         body: formData,
       });
 
       if (uploadResponse.ok) {
         const result = await uploadResponse.json().catch(() => ({}));
-        if (result && typeof result.id === 'number') {
+        if (result && typeof result.id === "number") {
           setUploadedFileId(result.id);
         }
 
@@ -116,10 +122,10 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
         // Mark biometric verification as complete
         onComplete?.();
       } else {
-        throw new Error('Upload failed');
+        throw new Error("Upload failed");
       }
     } catch (error) {
-      console.error('Error uploading selfie:', error);
+      console.error("Error uploading selfie:", error);
       toast({
         title: "Upload Failed",
         description: "Failed to upload selfie. Please try again.",
