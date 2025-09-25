@@ -69,43 +69,46 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
 
     try {
       setUploading(true);
-      
+
       // Convert data URL to blob
       const response = await fetch(capturedImageUrl);
       const blob = await response.blob();
-      
+
       // Create FormData for upload
 
       const DOCUMENT_DEFINITION_ID = "5c5df74f-9684-413e-849f-c3b4d53e032d";
 
       const formData = new FormData();
-      formData.append('File', blob, 'selfie.jpg');
-      formData.append('DocumentDefinitionId', DOCUMENT_DEFINITION_ID);
-      formData.append('Bucket', 'string');
-      formData.append('UserTemplateSubmissionId', '5');
-      
+      formData.append("File", blob, "selfie.jpg");
+      formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
+      formData.append("Bucket", "string");
+      formData.append("UserTemplateSubmissionId", "5");
+
       // Upload to the same endpoint as documents
-      const uploadResponse = await fetch('http://10.10.2.133:8080/api/Files/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
+      const uploadResponse = await fetch(
+        "http://10.10.2.133:8080/api/Files/upload",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
       if (uploadResponse.ok) {
         const result = await uploadResponse.json();
-        console.log('Selfie uploaded successfully:', result);
-        
+        console.log("Selfie uploaded successfully:", result);
+
         toast({
           title: "Selfie Uploaded",
           description: "Your selfie has been uploaded successfully!",
         });
-        
+
         // Mark biometric verification as complete
         onComplete?.();
       } else {
-        throw new Error('Upload failed');
+        throw new Error("Upload failed");
       }
     } catch (error) {
-      console.error('Error uploading selfie:', error);
+      console.error("Error uploading selfie:", error);
       toast({
         title: "Upload Failed",
         description: "Failed to upload selfie. Please try again.",
