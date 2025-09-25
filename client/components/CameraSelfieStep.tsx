@@ -87,12 +87,22 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
       formData.append("Bucket", "string");
       formData.append("UserTemplateSubmissionId", "5");
 
-      const url = uploadedFileId
+      const isUpdate = !!uploadedFileId;
+      const url = isUpdate
         ? `${API_BASE}/api/Files/${uploadedFileId}`
         : `${API_BASE}/api/Files/upload`;
-      const method = uploadedFileId ? "PUT" : "POST";
 
-      const uploadResponse = await fetch(url, { method, body: formData });
+      let uploadResponse: Response;
+      if (isUpdate) {
+        const contentType = blob?.type && typeof blob.type === "string" ? blob.type : "application/octet-stream";
+        const headers: HeadersInit = {
+          "Content-Type": contentType,
+          "Content-Disposition": `attachment; filename="selfie.jpg"`,
+        };
+        uploadResponse = await fetch(url, { method: "PUT", headers, body: blob });
+      } else {
+        uploadResponse = await fetch(url, { method: "POST", body: formData });
+      }
 
       if (uploadResponse.ok) {
         const result = await uploadResponse.json().catch(() => ({}));
@@ -119,7 +129,7 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
 
         onComplete?.();
       } else {
-        throw new Error(`${method} failed`);
+        throw new Error(`${isUpdate ? "PUT" : "POST"} failed`);
       }
     } catch (error) {
       console.error("Error uploading selfie:", error);
