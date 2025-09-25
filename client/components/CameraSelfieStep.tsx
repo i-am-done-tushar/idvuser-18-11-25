@@ -81,15 +81,15 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
 
       const DOCUMENT_DEFINITION_ID = "5c5df74f-9684-413e-849f-c3b4d53e032d";
 
-      // If there is an existing uploaded file for this selfie, attempt to delete it first
+      // If there is an existing uploaded file for this selfie, attempt to delete it first (purge)
       if (uploadedFileId) {
         try {
-          await fetch(`${API_BASE}/api/Files/${uploadedFileId}`, {
+          await fetch(`${API_BASE}/api/Files/${uploadedFileId}/purge`, {
             method: "DELETE",
           });
         } catch (delErr) {
           console.warn(
-            `Failed to delete previous selfie id ${uploadedFileId}:`,
+            `Failed to purge previous selfie id ${uploadedFileId}:`,
             delErr,
           );
         }
@@ -109,8 +109,19 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
 
       if (uploadResponse.ok) {
         const result = await uploadResponse.json().catch(() => ({}));
-        if (result && typeof result.id === "number") {
-          setUploadedFileId(result.id);
+        const returnedId =
+          (result &&
+            result.file &&
+            typeof result.file.id === "number" &&
+            result.file.id) ||
+          (typeof result.id === "number" && result.id) ||
+          (result &&
+            result.mapping &&
+            typeof result.mapping.fileId === "number" &&
+            result.mapping.fileId) ||
+          null;
+        if (returnedId) {
+          setUploadedFileId(returnedId);
         }
 
         toast({
