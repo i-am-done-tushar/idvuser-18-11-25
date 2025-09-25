@@ -94,12 +94,19 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
 
       let uploadResponse: Response;
       if (isUpdate) {
-        const contentType = blob?.type && typeof blob.type === "string" ? blob.type : "application/octet-stream";
+        const contentType =
+          blob?.type && typeof blob.type === "string"
+            ? blob.type
+            : "application/octet-stream";
         const headers: HeadersInit = {
           "Content-Type": contentType,
           "Content-Disposition": `attachment; filename="selfie.jpg"`,
         };
-        uploadResponse = await fetch(url, { method: "PUT", headers, body: blob });
+        uploadResponse = await fetch(url, {
+          method: "PUT",
+          headers,
+          body: blob,
+        });
       } else {
         uploadResponse = await fetch(url, { method: "POST", body: formData });
       }
