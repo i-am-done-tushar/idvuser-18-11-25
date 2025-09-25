@@ -141,13 +141,30 @@ export function IdentityDocumentForm({
     filename: string,
     existingId?: number,
   ) => {
-    const formData = buildFormData(file, filename);
-    const url = existingId
+    const isUpdate = !!existingId;
+    const url = isUpdate
       ? `${API_BASE}/api/Files/${existingId}`
       : `${API_BASE}/api/Files/upload`;
-    const method = existingId ? "PUT" : "POST";
-    const res = await fetch(url, { method, body: formData });
-    if (!res.ok) throw new Error(`${method} failed: ${res.statusText}`);
+
+    let res: Response;
+    if (isUpdate) {
+      const contentType =
+        (file as any)?.type && typeof (file as any).type === "string"
+          ? (file as any).type
+          : "application/octet-stream";
+      const headers: HeadersInit = {
+        "Content-Type": contentType,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      };
+      res = await fetch(url, { method: "PUT", headers, body: file });
+    } else {
+      const formData = buildFormData(file, filename);
+      res = await fetch(url, { method: "POST", body: formData });
+    }
+    if (!res.ok) {
+      const methodUsed = isUpdate ? "PUT" : "POST";
+      throw new Error(`${methodUsed} failed: ${res.statusText}`);
+    }
     const result = await res.json().catch(() => ({}));
     const returnedId =
       (result &&
