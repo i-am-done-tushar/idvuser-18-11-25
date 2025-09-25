@@ -79,7 +79,6 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
       const response = await fetch(capturedImageUrl);
       const blob = await response.blob();
 
-      // Create FormData for upload
       const DOCUMENT_DEFINITION_ID = "5c5df74f-9684-413e-849f-c3b4d53e032d";
 
       // If there is an existing uploaded file for this selfie, attempt to delete it first

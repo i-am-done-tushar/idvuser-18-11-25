@@ -34,6 +34,7 @@ export function CameraDialog({ isOpen, onClose, onSubmit }: CameraDialogProps) {
     front: false,
     back: false,
   });
+
   // store uploaded file ids returned by the server so we can delete on re-upload
   const [uploadedFileIds, setUploadedFileIds] = useState<{
     front?: number;
