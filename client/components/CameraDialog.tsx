@@ -22,11 +22,13 @@ export function CameraDialog({ isOpen, onClose, onSubmit }: CameraDialogProps) {
   const [showCamera, setShowCamera] = useState<'front' | 'back' | null>(null);
   const [cameraError, setCameraError] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<{ front: boolean; back: boolean }>({ 
-    front: false, 
-    back: false 
+  const [uploadedFiles, setUploadedFiles] = useState<{ front: boolean; back: boolean }>({
+    front: false,
+    back: false
   });
-  
+  // store uploaded file ids returned by the server so we can delete on re-upload
+  const [uploadedFileIds, setUploadedFileIds] = useState<{ front?: number; back?: number }>({});
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -126,7 +128,18 @@ export function CameraDialog({ isOpen, onClose, onSubmit }: CameraDialogProps) {
   const uploadImage = async (image: CapturedImage, side: 'front' | 'back') => {
     try {
       setUploading(true);
-      
+
+      // If there's a previous uploaded file for this side, attempt to delete it first
+      const previousId = uploadedFileIds[side];
+      if (previousId) {
+        try {
+          await fetch(`${API_BASE}/api/Files/${previousId}`, { method: 'DELETE' });
+        } catch (delErr) {
+          // log and continue - deletion failure shouldn't block new upload
+          console.warn(`Failed to delete previous file id ${previousId}:`, delErr);
+        }
+      }
+
       const formData = new FormData();
       formData.append('File', image.blob, `${side}-document.jpg`);
       formData.append('DocumentDefinitionId', DOCUMENT_DEFINITION_ID);
@@ -139,6 +152,12 @@ export function CameraDialog({ isOpen, onClose, onSubmit }: CameraDialogProps) {
       });
 
       if (response.ok) {
+        const result = await response.json().catch(() => ({}));
+        // Save returned id so we can delete on subsequent uploads
+        if (result && typeof result.id === 'number') {
+          setUploadedFileIds(prev => ({ ...prev, [side]: result.id }));
+        }
+
         setUploadedFiles(prev => ({ ...prev, [side]: true }));
         toast({
           title: "Upload Successful",
