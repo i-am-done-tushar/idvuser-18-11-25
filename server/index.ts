@@ -3,7 +3,8 @@ import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import { handleGetTemplate } from "./routes/templates";
-import { handleResolveShortCode, handleGetTemplateVersion } from "./routes/shortcode";
+import { handleResolveShortCode } from "./routes/shortcode";
+import { handleGetTemplateVersionDirect } from "./routes/templateVersionDirect";
 
 export function createServer() {
   const app = express();
@@ -26,7 +27,7 @@ export function createServer() {
 
   // Shortcode resolution routes
   app.get("/api/templates-link-generation/resolve/:shortCode", handleResolveShortCode);
-  app.get("/api/TemplateVersion/:versionId", handleGetTemplateVersion);
+  app.get("/api/TemplateVersion/:versionId", handleGetTemplateVersionDirect);
 
   return app;
 }
