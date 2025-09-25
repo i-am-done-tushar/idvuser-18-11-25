@@ -160,12 +160,29 @@ export function CameraDialog({
       formData.append("UserTemplateSubmissionId", "5");
 
       const existingId = uploadedFileIds[side];
-      const url = existingId
-        ? `${API_BASE}/api/Files/${existingId}`
-        : `${API_BASE}/api/Files/upload`;
-      const method = existingId ? "PUT" : "POST";
+    const isUpdate = !!existingId;
+    const url = isUpdate
+      ? `${API_BASE}/api/Files/${existingId}`
+      : `${API_BASE}/api/Files/upload`;
 
-      const response = await fetch(url, { method, body: formData });
+    let response: Response;
+    if (isUpdate) {
+      const contentType =
+        image.blob?.type && typeof image.blob.type === "string"
+          ? image.blob.type
+          : "application/octet-stream";
+      const headers: HeadersInit = {
+        "Content-Type": contentType,
+        "Content-Disposition": `attachment; filename="${side}-document.jpg"`,
+      };
+      response = await fetch(url, {
+        method: "PUT",
+        headers,
+        body: image.blob,
+      });
+    } else {
+      response = await fetch(url, { method: "POST", body: formData });
+    }
 
       if (response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -192,7 +209,7 @@ export function CameraDialog({
           description: `${side === "front" ? "Front" : "Back"} side ${existingId ? "updated" : "uploaded"} successfully.`,
         });
       } else {
-        throw new Error(`${method} failed: ${response.statusText}`);
+        throw new Error(`${isUpdate ? "PUT" : "POST"} failed: ${response.statusText}`);
       }
     } catch (error) {
       console.error(`Error uploading ${side} image:`, error);
