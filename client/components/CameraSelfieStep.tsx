@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useState, useEffect, useRef } from "react";
 import { HowItWorksDialog } from "./HowItWorksDialog";
 import { useToast } from "@/hooks/use-toast";
 
