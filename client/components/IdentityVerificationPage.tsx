@@ -26,7 +26,7 @@ const API_BASE =
   import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 // 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
-const BYPASS_OTP_FOR_DEVELOPMENT = true;
+const BYPASS_OTP_FOR_DEVELOPMENT = false;
 
 // token helper (kept minimal)
 const getToken = () =>
@@ -70,7 +70,10 @@ export function IdentityVerificationPage({
   const [pendingVerification, setPendingVerification] = useState<{
     type: "email" | "phone";
     recipient: string;
+    otpId?: number;
+    expiresAt?: string;
   } | null>(null);
+
   const [otpSending, setOtpSending] = useState(false);
   const [otpValidating, setOtpValidating] = useState(false);
 
@@ -181,6 +184,69 @@ export function IdentityVerificationPage({
       throw new Error(text || `Invalid OTP (HTTP ${res.status})`);
     }
   }
+
+  // ---- PHONE OTP API calls ----
+  async function startPhoneOtp(
+    phoneCountryCode: string,
+    phoneNationalNumber: string,
+    versionId: number,
+    channel = "whatsapp",
+    purpose = "phoneVerification"
+  ) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/Otp/phone/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        phoneCountryCode,
+        phoneNationalNumber,
+        channel,
+        purpose,
+        versionId,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `Failed to start phone OTP (HTTP ${res.status})`);
+    }
+
+    // { success: true, otpId: number, expiresAt: string }
+    return res.json() as Promise<{ success: boolean; otpId: number; expiresAt: string }>;
+  }
+
+  async function verifyPhoneOtp(otpId: number, code: string) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/Otp/phone/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ otpId, code: String(code).trim() }),
+    });
+
+    // read body as text first (API may respond text/plain)
+    const bodyText = await res.text().catch(() => "");
+    let json: any = null;
+    try { json = bodyText ? JSON.parse(bodyText) : null; } catch {}
+
+    // Throw on HTTP error OR success:false
+    if (!res.ok || (json && json.success === false)) {
+      const msg = (json?.message || bodyText || `Invalid OTP (HTTP ${res.status})`).toString();
+      throw new Error(msg);
+    }
+
+    // treat missing payload as success only if HTTP was 2xx
+    return (json ?? { success: true }) as { success: boolean };
+  }
+
+
 
   // ---- versionId resolver (new page only deals with TemplateVersionResponse) ----
   const getActiveVersionId = () => templateVersion?.versionId ?? null;
@@ -363,12 +429,47 @@ export function IdentityVerificationPage({
     }
   };
 
-  const handleSendPhoneOTP = () => {
-    const fullPhone = `${formData.countryCode} ${formData.phoneNumber}`.trim();
-    setPendingVerification({ type: "phone", recipient: fullPhone });
-    setOtpType("phone");
-    setShowOTPDialog(true);
+  const handleSendPhoneOTP = async () => {
+    const versionId = getActiveVersionId();
+    if (versionId == null) {
+      toast({ title: "Missing version", description: "No active template version found." });
+      return;
+    }
+
+    const cc = (formData.countryCode || "").trim(); // keep as provided (e.g. +91 or 91)
+    const nn = (formData.phoneNumber || "").replace(/\D+/g, ""); // national digits only
+
+    if (!cc || !nn || !isValidPhoneForCountry(formData.countryCode, formData.phoneNumber)) {
+      toast({ title: "Invalid phone", description: "Please enter a valid phone number first." });
+      return;
+    }
+
+    try {
+      setOtpSending(true);
+      const { success, otpId, expiresAt } = await startPhoneOtp(cc, nn, versionId,
+        "whatsapp", "phoneVerification");
+      if (!success) throw new Error("Failed to start phone OTP.");
+
+      setPendingVerification({
+        type: "phone",
+        recipient: `${cc} ${formData.phoneNumber}`,
+        otpId,
+        expiresAt,
+      });
+      setOtpType("phone");
+      setShowOTPDialog(true);
+      toast({ title: "OTP sent", description: `An OTP was sent to ${cc} ${formData.phoneNumber}.` });
+    } catch (err: any) {
+      toast({
+        title: "Failed to send OTP",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtpSending(false);
+    }
   };
+
 
   const handleOTPVerify = async (otp: string) => {
     // email OTP via server, phone OTP stays simulated
@@ -397,47 +498,75 @@ export function IdentityVerificationPage({
       } finally {
         setOtpValidating(false);
       }
-    } else {
-      // phone simulated success
-      if (otp && otp.length >= 4) {
-        setIsPhoneVerified(true);
-        toast({
-          title: "Phone verified",
-          description: "Your phone number was successfully verified.",
-        });
-        setShowOTPDialog(false);
-        setPendingVerification(null);
       } else {
-        toast({
-          title: "Invalid OTP",
-          description: "Please enter a valid OTP.",
-          variant: "destructive",
-        });
+        // PHONE verify via backend
+        const code = String(otp || "").trim();
+        if (code.length < 4) {
+          toast({ title: "Invalid OTP", description: "Please enter a valid OTP.", variant: "destructive" });
+          return;
+        }
+        if (!pendingVerification.otpId) {
+          toast({ title: "Missing OTP", description: "No OTP session found. Please resend the code.", variant: "destructive" });
+          return;
+        }
+
+        try {
+          setOtpValidating(true);
+          const { success } = await verifyPhoneOtp(pendingVerification.otpId, code);
+          if (!success) throw new Error("Invalid or expired code.");
+
+          setIsPhoneVerified(true);
+          toast({ title: "Phone verified", description: "Your phone number was successfully verified." });
+          setShowOTPDialog(false);
+          setPendingVerification(null);
+        } catch (err: any) {
+          toast({
+            title: "Invalid OTP",
+            description: err?.message || "Please check the code and try again.",
+            variant: "destructive",
+          });
+        } finally {
+          setOtpValidating(false);
+        }
       }
-    }
   };
 
   const handleOTPResend = async () => {
-    if (pendingVerification?.type !== "email") return;
-    const email = formData.email?.trim();
     const versionId = getActiveVersionId();
-    if (!email || versionId == null) return;
 
-    try {
-      setOtpSending(true);
-      await generateEmailOtp(email, versionId);
-      toast({
-        title: "OTP resent",
-        description: `A new OTP was sent to ${email}.`,
-      });
-    } catch (err: any) {
-      toast({
-        title: "Failed to resend",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setOtpSending(false);
+    if (pendingVerification?.type === "email") {
+      const email = formData.email?.trim();
+      if (!email || versionId == null) return;
+      try {
+        setOtpSending(true);
+        await generateEmailOtp(email, versionId);
+        toast({ title: "OTP resent", description: `A new OTP was sent to ${email}.` });
+      } catch (err: any) {
+        toast({ title: "Failed to resend", description: err?.message || "Please try again.", variant: "destructive" });
+      } finally {
+        setOtpSending(false);
+      }
+    }
+
+    if (pendingVerification?.type === "phone") {
+      if (versionId == null) return;
+      const cc = (formData.countryCode || "").trim();
+      const nn = (formData.phoneNumber || "").replace(/\D+/g, "");
+      if (!cc || !nn) return;
+
+      try {
+        setOtpSending(true);
+        const { success, otpId, expiresAt } = await startPhoneOtp(cc, nn, versionId, "whatsapp", "phoneVerification");
+        if (!success) throw new Error("Failed to start phone OTP.");
+        setPendingVerification((pv) =>
+          pv ? { ...pv, otpId, expiresAt } : { type: "phone", recipient: `${cc} ${formData.phoneNumber}`, otpId, expiresAt }
+        );
+        toast({ title: "OTP resent", description: `A new OTP was sent to ${cc} ${formData.phoneNumber}.` });
+      } catch (err: any) {
+        toast({ title: "Failed to resend", description: err?.message || "Please try again.", variant: "destructive" });
+      } finally {
+        setOtpSending(false);
+      }
     }
   };
 
