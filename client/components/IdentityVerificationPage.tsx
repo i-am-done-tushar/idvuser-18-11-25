@@ -232,7 +232,7 @@ export function IdentityVerificationPage({
       setHasShownStep1Toast(true);
       setTimeout(() => {
         setCurrentStep(2);
-        setExpandedSections([2]);
+        setExpandedSections((prev) => (prev.includes(2) ? prev : [...prev, 2]));
       }, 1500);
     }
   }, [
@@ -271,7 +271,7 @@ export function IdentityVerificationPage({
       setHasShownStep2Toast(true);
       setTimeout(() => {
         setCurrentStep(3);
-        setExpandedSections([3]);
+        setExpandedSections((prev) => (prev.includes(3) ? prev : [...prev, 3]));
         setShowMobileMenu(false);
       }, 1500);
     }
@@ -299,7 +299,7 @@ export function IdentityVerificationPage({
 
     if (nextStep !== currentStep) {
       setCurrentStep(nextStep);
-      setExpandedSections([nextStep]);
+      setExpandedSections((prev) => (prev.includes(nextStep) ? prev : [...prev, nextStep]));
       setShowMobileMenu(false);
     }
   }, [
@@ -460,7 +460,7 @@ export function IdentityVerificationPage({
     }
     setTimeout(() => {
       setCurrentStep(3);
-      setExpandedSections([3]);
+      setExpandedSections((prev) => (prev.includes(3) ? prev : [...prev, 3]));
       setShowMobileMenu(false);
     }, 1500);
   };
@@ -609,30 +609,27 @@ export function IdentityVerificationPage({
 
   const toggleSection = (idx: number) => {
     setExpandedSections((prev) => {
-      // Allow collapsing the current step
-      if (prev.includes(idx) && idx === currentStep) {
-        return prev.filter((i) => i !== idx);
-      }
-
-      // Only the current step can be opened
-      if (idx !== currentStep) {
+      // Lock future steps (greater than current)
+      if (idx > currentStep) {
         toast({
           title: "Step locked",
           description:
-            "You can only access the current step. Complete it to unlock the next one.",
+            "You can only access unlocked steps. Complete the current step to continue.",
           variant: "destructive",
         });
         return prev;
       }
 
-      // Open the current step (single-section expanded for clarity)
-      return [idx];
+      // Toggle visibility for current or completed steps
+      return prev.includes(idx)
+        ? prev.filter((i) => i !== idx)
+        : [...prev, idx];
     });
   };
 
   useEffect(() => {
-    // Always ensure only the current step is expanded when the step changes
-    setExpandedSections([currentStep]);
+    // Ensure the current step is expanded, but keep previously expanded sections open
+    setExpandedSections((prev) => (prev.includes(currentStep) ? prev : [...prev, currentStep]));
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
 
