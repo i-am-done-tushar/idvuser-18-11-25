@@ -211,7 +211,7 @@ export function DesktopDynamicSection({
                   </div>
                 </div>
                 <div className="flex w-full h-[308px] border-t border-border bg-background">
-                  <LockedStepComponent message="You'll be able to complete this step after submitting your identity document." />
+                  <LockedStepComponent message="This step is locked until you complete the previous step." />
                 </div>
               </div>
             </div>
