@@ -584,9 +584,8 @@ export function IdentityVerificationPage({
   };
 
   useEffect(() => {
-    setExpandedSections((prev) =>
-      prev.includes(currentStep) ? prev : [currentStep],
-    );
+    // Always ensure only the current step is expanded when the step changes
+    setExpandedSections([currentStep]);
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
 
