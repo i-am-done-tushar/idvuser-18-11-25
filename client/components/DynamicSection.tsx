@@ -39,8 +39,8 @@ export function DynamicSection({
   onSelfieComplete,
 }: DynamicSectionProps) {
   const renderSectionContent = () => {
-    // Only the current step is active; all others are locked
-    if (sectionIndex !== currentStep) {
+    // Show content for current and completed steps; only future steps are locked
+    if (sectionIndex > currentStep) {
       return (
         <div className="flex w-full h-[308px] border-t border-border bg-background">
           <LockedStepComponent
