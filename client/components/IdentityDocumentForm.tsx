@@ -337,7 +337,7 @@ export function IdentityDocumentForm({
               Select the ID you'd like to use for verification.
             </div>
           </div>
-
+          {/* 1st change */}
           {/* Document Options Grid */}
           <div className="flex flex-col items-start gap-4 self-stretch">
             {currentDocuments.map((docName, index) => {
