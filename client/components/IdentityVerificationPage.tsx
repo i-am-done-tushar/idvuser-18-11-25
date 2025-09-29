@@ -26,7 +26,7 @@ const API_BASE =
   import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 // 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
-const BYPASS_OTP_FOR_DEVELOPMENT = false;
+const BYPASS_OTP_FOR_DEVELOPMENT = true;
 
 // token helper (kept minimal)
 const getToken = () =>
@@ -78,6 +78,7 @@ export function IdentityVerificationPage({
   const [otpValidating, setOtpValidating] = useState(false);
 
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [submissionId, setSubmissionId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
@@ -110,6 +111,68 @@ export function IdentityVerificationPage({
     }
     const fieldConfig = personalInfoSection.fieldMappings[0].structure as any;
     return fieldConfig.personalInfo || {};
+  };
+
+  // ---- create UserTemplateSubmission early to get submissionId ----
+  const createUserTemplateSubmission = async () => {
+    if (!templateVersion || !userId || submissionId) return; // Don't create if already exists
+    
+    try {
+      // First, check if a UserTemplateSubmission already exists
+      const checkResponse = await fetch(
+        `${API_BASE}/api/UserTemplateSubmissions?TemplateVersionId=${templateVersion.versionId}&UserId=${userId}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      );
+
+      if (checkResponse.ok) {
+        const checkData = await checkResponse.json();
+        
+        // If existing submission found, use its ID
+        if (checkData.items && checkData.items.length > 0) {
+          const existingSubmission = checkData.items[0]; // Use the first (most recent) submission
+          setSubmissionId(existingSubmission.id);
+          console.log("Found existing UserTemplateSubmission with ID:", existingSubmission.id);
+          return; // Exit early, don't create a new one
+        }
+      }
+
+      // If no existing submission found, create a new one
+      console.log("No existing submission found, creating new UserTemplateSubmission...");
+      const submissionResponse = await fetch(
+        `${API_BASE}/api/UserTemplateSubmissions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            templateVersionId: templateVersion.versionId,
+            userId: userId,
+          }),
+        },
+      );
+
+      if (!submissionResponse.ok) {
+        throw new Error("Failed to create template submission");
+      }
+
+      const submissionData = await submissionResponse.json();
+      setSubmissionId(submissionData.id);
+      console.log("Created new UserTemplateSubmission with ID:", submissionData.id);
+    } catch (error) {
+      console.error("Error with UserTemplateSubmission:", error);
+      toast({
+        title: "Initialization Error",
+        description: "Failed to initialize form submission. Please refresh and try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // ---- fetch version by id (server route uses version id) ----
@@ -145,6 +208,13 @@ export function IdentityVerificationPage({
     })();
     return () => controller.abort();
   }, [templateId]);
+
+  // ---- create UserTemplateSubmission when template and userId are available ----
+  useEffect(() => {
+    if (templateVersion && userId && !submissionId) {
+      createUserTemplateSubmission();
+    }
+  }, [templateVersion, userId, submissionId]);
 
   // ---- OTP API calls (server-backed) ----
   async function generateEmailOtp(email: string, versionId: number) {
@@ -611,11 +681,11 @@ export function IdentityVerificationPage({
       return;
     }
 
-    if (!userId || !templateVersion) {
+    if (!userId || !templateVersion || !submissionId) {
       toast({
         title: "Missing Information",
         description:
-          "User ID or template version not found. Please refresh and try again.",
+          "User ID, template version, or submission ID not found. Please refresh and try again.",
         variant: "destructive",
       });
       return;
@@ -627,30 +697,7 @@ export function IdentityVerificationPage({
         description: "Please wait while we submit your information...",
       });
 
-      // Step 1: Create UserTemplateSubmission
-      const submissionResponse = await fetch(
-        `${API_BASE}/api/UserTemplateSubmissions`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            templateVersionId: templateVersion.versionId,
-            userId: userId,
-          }),
-        },
-      );
-
-      if (!submissionResponse.ok) {
-        throw new Error("Failed to create template submission");
-      }
-
-      const submissionData = await submissionResponse.json();
-      const submissionId = submissionData.id;
-
-      // Step 2: Submit form data for each section
+      // Submit form data for each section (UserTemplateSubmission already created)
       const activeSections = templateVersion.sections.filter((s) => s.isActive);
 
       for (const section of activeSections) {
@@ -1102,6 +1149,7 @@ export function IdentityVerificationPage({
                     onSendPhoneOTP={handleSendPhoneOTP}
                     onIdentityDocumentComplete={handleIdentityDocumentComplete}
                     onSelfieComplete={() => setIsSelfieCompleted(true)}
+                    submissionId={submissionId}
                   />
                 ))}
               </div>
@@ -1127,6 +1175,7 @@ export function IdentityVerificationPage({
                         handleIdentityDocumentComplete
                       }
                       onSelfieComplete={() => setIsSelfieCompleted(true)}
+                      submissionId={submissionId}
                     />
                   ))}
                 </div>

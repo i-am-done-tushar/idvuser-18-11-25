@@ -7,6 +7,7 @@ interface CameraDialogProps {
   onSubmit: () => void;
   previousFileIds?: { front?: number; back?: number };
   onUploaded?: (side: "front" | "back", id: number) => void;
+  submissionId?: number | null;
 }
 
 interface CapturedImage {
@@ -26,6 +27,7 @@ export function CameraDialog({
   onSubmit,
   previousFileIds,
   onUploaded,
+  submissionId,
 }: CameraDialogProps) {
   const { toast } = useToast();
   const [frontCaptured, setFrontCaptured] = useState<CapturedImage | null>(
@@ -157,7 +159,9 @@ export function CameraDialog({
       formData.append("File", image.blob, `${side}-document.jpg`);
       formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
       formData.append("Bucket", "string");
-      formData.append("UserTemplateSubmissionId", "1");
+      const submissionIdToUse = submissionId?.toString() || "1";
+      console.log("CameraDialog: Using UserTemplateSubmissionId:", submissionIdToUse);
+      formData.append("UserTemplateSubmissionId", submissionIdToUse);
 
       // Always use POST for uploads, never PUT
       const url = `${API_BASE}/api/Files/upload`;

@@ -7,9 +7,10 @@ const API_BASE =
 
 interface CameraSelfieStepProps {
   onComplete?: () => void;
+  submissionId?: number | null;
 }
 
-export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
+export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepProps) {
   const { toast } = useToast();
   const [cameraError, setCameraError] = useState(false);
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
@@ -86,7 +87,9 @@ export function CameraSelfieStep({ onComplete }: CameraSelfieStepProps) {
       formData.append("File", blob, "selfie.jpg");
       formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
       formData.append("Bucket", "string");
-      formData.append("UserTemplateSubmissionId", "1");
+      const submissionIdToUse = submissionId?.toString() || "1";
+      console.log("CameraSelfieStep: Using UserTemplateSubmissionId:", submissionIdToUse);
+      formData.append("UserTemplateSubmissionId", submissionIdToUse);
 
       // Always use POST for uploads, never PUT
       const url = `${API_BASE}/api/Files/upload`;

@@ -21,6 +21,7 @@ interface DynamicSectionProps {
   onSendPhoneOTP?: () => void;
   onIdentityDocumentComplete?: () => void;
   onSelfieComplete?: () => void;
+  submissionId?: number | null;
 }
 
 export function DynamicSection({
@@ -37,6 +38,7 @@ export function DynamicSection({
   onSendPhoneOTP,
   onIdentityDocumentComplete,
   onSelfieComplete,
+  submissionId,
 }: DynamicSectionProps) {
   const renderSectionContent = () => {
     // Show content for current and completed steps; only future steps are locked
@@ -85,6 +87,7 @@ export function DynamicSection({
             <IdentityDocumentForm
               onComplete={onIdentityDocumentComplete || (() => {})}
               documentConfig={documentConfig}
+              submissionId={submissionId}
             />
           </div>
         );
@@ -93,7 +96,10 @@ export function DynamicSection({
         return (
           <div className="flex p-3 flex-col justify-center items-center self-stretch border-t border-border bg-background">
             <div className="flex w-full flex-col items-center gap-2">
-              <CameraSelfieStep onComplete={onSelfieComplete || (() => {})} />
+              <CameraSelfieStep 
+                onComplete={onSelfieComplete || (() => {})} 
+                submissionId={submissionId}
+              />
             </div>
           </div>
         );

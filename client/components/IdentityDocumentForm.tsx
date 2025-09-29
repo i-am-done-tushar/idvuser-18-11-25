@@ -17,11 +17,13 @@ interface UploadedFile {
 interface IdentityDocumentFormProps {
   onComplete?: () => void;
   documentConfig?: DocumentConfig;
+  submissionId?: number | null;
 }
 
 export function IdentityDocumentForm({
   onComplete,
   documentConfig = {},
+  submissionId,
 }: IdentityDocumentFormProps) {
   const [country, setCountry] = useState("");
   const [selectedDocument, setSelectedDocument] = useState("");
@@ -132,7 +134,9 @@ export function IdentityDocumentForm({
     formData.append("File", file, filename);
     formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
     formData.append("Bucket", "string");
-    formData.append("UserTemplateSubmissionId", "1");
+    const submissionIdToUse = submissionId?.toString() || "1";
+    console.log("IdentityDocumentForm: Using UserTemplateSubmissionId:", submissionIdToUse);
+    formData.append("UserTemplateSubmissionId", submissionIdToUse);
     return formData;
   };
 
@@ -626,6 +630,7 @@ export function IdentityDocumentForm({
             },
           }));
         }}
+        submissionId={submissionId}
         onSubmit={() => {
           setShowCameraDialog(false);
           if (selectedDocument) {

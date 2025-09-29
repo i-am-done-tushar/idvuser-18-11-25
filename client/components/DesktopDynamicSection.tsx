@@ -18,6 +18,7 @@ interface DesktopDynamicSectionProps {
   onSendPhoneOTP?: () => void;
   onIdentityDocumentComplete?: () => void;
   onSelfieComplete?: () => void;
+  submissionId?: number | null;
 }
 
 export function DesktopDynamicSection({
@@ -32,6 +33,7 @@ export function DesktopDynamicSection({
   onSendPhoneOTP,
   onIdentityDocumentComplete,
   onSelfieComplete,
+  submissionId,
 }: DesktopDynamicSectionProps) {
   const renderSectionContent = () => {
     // Render based on section type
@@ -166,6 +168,7 @@ export function DesktopDynamicSection({
                   <IdentityDocumentForm
                     onComplete={onIdentityDocumentComplete || (() => {})}
                     documentConfig={documentConfig}
+                    submissionId={submissionId}
                   />
                 </div>
               ) : (
@@ -180,7 +183,10 @@ export function DesktopDynamicSection({
       case "biometrics":
         if (currentStep >= sectionIndex) {
           return (
-            <CameraSelfieStep onComplete={onSelfieComplete || (() => {})} />
+            <CameraSelfieStep 
+              onComplete={onSelfieComplete || (() => {})} 
+              submissionId={submissionId}
+            />
           );
         } else {
           return (
