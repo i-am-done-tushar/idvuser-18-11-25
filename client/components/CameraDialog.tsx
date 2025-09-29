@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { getDocumentDefinitionId } from "@/lib/document-definitions";
 
 interface CameraDialogProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface CameraDialogProps {
   previousFileIds?: { front?: number; back?: number };
   onUploaded?: (side: "front" | "back", id: number) => void;
   submissionId?: number | null;
+  country?: string;
+  selectedDocumentName?: string;
 }
 
 interface CapturedImage {
@@ -19,7 +22,6 @@ const API_BASE =
   import.meta.env.VITE_API_BASE ||
   import.meta.env.VITE_API_URL ||
   "http://10.10.2.133:8080";
-const DOCUMENT_DEFINITION_ID = "543d16b7-78fd-48d5-9ae0-60481f2952a6";
 
 export function CameraDialog({
   isOpen,
@@ -28,6 +30,8 @@ export function CameraDialog({
   previousFileIds,
   onUploaded,
   submissionId,
+  country = "",
+  selectedDocumentName = "",
 }: CameraDialogProps) {
   const { toast } = useToast();
   const [frontCaptured, setFrontCaptured] = useState<CapturedImage | null>(
@@ -157,10 +161,15 @@ export function CameraDialog({
 
       const formData = new FormData();
       formData.append("File", image.blob, `${side}-document.jpg`);
-      formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
+      
+      // Get dynamic document definition ID based on selected country and document
+      const documentDefinitionId = getDocumentDefinitionId(country, selectedDocumentName);
+      formData.append("DocumentDefinitionId", documentDefinitionId);
+      
       formData.append("Bucket", "string");
       const submissionIdToUse = submissionId?.toString() || "1";
       console.log("CameraDialog: Using UserTemplateSubmissionId:", submissionIdToUse);
+      console.log("CameraDialog: Using DocumentDefinitionId:", documentDefinitionId, "for document:", selectedDocumentName);
       formData.append("UserTemplateSubmissionId", submissionIdToUse);
 
       // Always use POST for uploads, never PUT

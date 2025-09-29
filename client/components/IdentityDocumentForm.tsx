@@ -2,10 +2,10 @@ import { useState } from "react";
 import { CameraDialog } from "./CameraDialog";
 import { UploadDialog } from "./UploadDialog";
 import { DocumentConfig } from "@shared/templates";
+import { getDocumentDefinitionId } from "@/lib/document-definitions";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
-const DOCUMENT_DEFINITION_ID = "543d16b7-78fd-48d5-9ae0-60481f2952a6";
 
 interface UploadedFile {
   id: string;
@@ -132,10 +132,18 @@ export function IdentityDocumentForm({
   const buildFormData = (file: Blob, filename: string) => {
     const formData = new FormData();
     formData.append("File", file, filename);
-    formData.append("DocumentDefinitionId", DOCUMENT_DEFINITION_ID);
+    
+    // Get dynamic document definition ID based on selected country and document
+    const selectedDocumentName = currentDocuments.find((docName) => 
+      docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
+    ) || "";
+    const documentDefinitionId = getDocumentDefinitionId(country, selectedDocumentName);
+    
+    formData.append("DocumentDefinitionId", documentDefinitionId);
     formData.append("Bucket", "string");
-    const submissionIdToUse = submissionId?.toString();
+    const submissionIdToUse = submissionId?.toString() || "1";
     console.log("IdentityDocumentForm: Using UserTemplateSubmissionId:", submissionIdToUse);
+    console.log("IdentityDocumentForm: Using DocumentDefinitionId:", documentDefinitionId, "for document:", selectedDocumentName);
     formData.append("UserTemplateSubmissionId", submissionIdToUse);
     return formData;
   };
@@ -631,6 +639,10 @@ export function IdentityDocumentForm({
           }));
         }}
         submissionId={submissionId}
+        country={country}
+        selectedDocumentName={currentDocuments.find((docName) => 
+          docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
+        ) || ""}
         onSubmit={() => {
           setShowCameraDialog(false);
           if (selectedDocument) {
