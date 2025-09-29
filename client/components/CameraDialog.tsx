@@ -79,7 +79,7 @@ export function CameraDialog({
       setFrontCaptured(null);
       setBackCaptured(null);
       setUploadedFiles({ front: false, back: false });
-      setCameraError(false);
+      setCameraError(false); // Reset camera error when dialog closes
     }
   }, [isOpen]);
 
@@ -94,12 +94,30 @@ export function CameraDialog({
         streamRef.current = stream;
       }
       setCameraError(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error accessing camera:", err);
       setCameraError(true);
+      
+      let errorMessage = "Unable to access camera. ";
+      let errorTitle = "Camera Error";
+      
+      // Check if it's a known error type
+      if (err.name === "NotAllowedError") {
+        errorMessage += "Please allow camera permissions and try again.";
+      } else if (err.name === "NotSecureError" || window.location.protocol !== "https:") {
+        errorTitle = "HTTPS Required";
+        errorMessage = "Camera access requires HTTPS. Please use a secure connection or try file upload instead.";
+      } else if (err.name === "NotFoundError") {
+        errorMessage += "No camera device found.";
+      } else if (err.name === "NotReadableError") {
+        errorMessage += "Camera is being used by another application.";
+      } else {
+        errorMessage += "Please try file upload instead.";
+      }
+      
       toast({
-        title: "Camera Error",
-        description: "Unable to access camera. Please check permissions.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -274,11 +292,14 @@ export function CameraDialog({
           {/* Camera View */}
           <div className="flex-1 flex items-center justify-center">
             {cameraError ? (
-              <div className="text-white text-center">
-                <div className="text-xl mb-2">Camera not available</div>
-                <div className="text-sm opacity-75">
-                  Please check your camera permissions
-                </div>
+              <div className="text-white text-center max-w-sm">
+                <div className="text-xl mb-4">📷 Camera Unavailable</div>
+                <div className="text-sm opacity-90 mb-4">
+                  {window.location.protocol !== "https:" 
+                    ? "Camera access requires HTTPS. Please use a secure connection or try uploading a file instead."
+                    : "Unable to access camera. Please check permissions or try uploading a file instead."
+                  }
+                </div>  
               </div>
             ) : (
               <div className="relative">
