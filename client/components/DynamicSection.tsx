@@ -30,6 +30,7 @@ interface DynamicSectionProps {
   isFilled?: boolean;
 }
 
+
 export function DynamicSection({
   section,
   sectionIndex,
@@ -50,6 +51,7 @@ export function DynamicSection({
   userId,
   isFilled,
 }: DynamicSectionProps) {
+  
   const renderSectionContent = () => {
     // Show content for current and completed steps; only future steps are locked
     if (sectionIndex > currentStep) {
