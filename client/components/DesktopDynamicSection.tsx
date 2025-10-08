@@ -23,6 +23,10 @@ interface DesktopDynamicSectionProps {
   shortCode?: string;
   templateVersionId?: number;
   userId?: number | null;
+  // Section completion state
+  isFilled?: boolean;
+  isExpanded?: boolean;
+  onToggle?: (sectionIndex: number) => void;
 }
 
 export function DesktopDynamicSection({
@@ -41,8 +45,66 @@ export function DesktopDynamicSection({
   shortCode,
   templateVersionId,
   userId,
+  isFilled,
+  isExpanded,
+  onToggle,
 }: DesktopDynamicSectionProps) {
+  const renderSectionHeader = () => (
+    <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
+      <div className="flex pb-1 items-center gap-2 self-stretch">
+        <button
+          onClick={() => onToggle?.(sectionIndex)}
+          className="flex items-center gap-2"
+        >
+          <svg
+            className={`w-[18px] h-[18px] transform transition-transform ${
+              isExpanded ? "rotate-0" : "rotate-180"
+            }`}
+            viewBox="0 0 18 19"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M6.00391 9.33203H12.0039M16.5039 9.33203C16.5039 13.4741 13.146 16.832 9.00391 16.832C4.86177 16.832 1.50391 13.4741 1.50391 9.33203C1.50391 5.18989 4.86177 1.83203 9.00391 1.83203C13.146 1.83203 16.5039 5.18989 16.5039 9.33203Z"
+              stroke="#323238"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <div className="text-text-primary font-roboto text-base font-bold leading-3">
+            {section.name}
+          </div>
+        </button>
+      </div>
+      <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
+        <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
+          {!isExpanded && isFilled ? (
+            <span className="text-green-600 font-medium">This section has been filled</span>
+          ) : (
+            section.description ||
+            `Complete the ${section.name.toLowerCase()} section.`
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderSectionContent = () => {
+    // If section is locked (future step)
+    if (sectionIndex > currentStep) {
+      return (
+        <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
+          <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
+            {renderSectionHeader()}
+            <div className="flex w-full h-[308px] border-t border-border bg-background">
+              <LockedStepComponent message="This step is locked until you complete the previous step." />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // Render based on section type
     switch (section.sectionType) {
       case "personalInformation":
@@ -52,37 +114,11 @@ export function DesktopDynamicSection({
         const fieldConfig =
           section.fieldMappings?.[0]?.structure?.personalInfo || {};
 
-        if (currentStep >= sectionIndex) {
-          return (
-            <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
-              <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
-                <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
-                  <div className="flex pb-1 items-center gap-2 self-stretch">
-                    <svg
-                      className="w-[18px] h-[18px] aspect-1"
-                      viewBox="0 0 18 18"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M6.00391 9.33203H12.0039M16.5039 9.33203C16.5039 13.4741 13.146 16.832 9.00391 16.832C4.86177 16.832 1.50391 13.4741 1.50391 9.33203C1.50391 5.18989 4.86177 1.83203 9.00391 1.83203C13.146 1.83203 16.5039 5.18989 16.5039 9.33203Z"
-                        stroke="#323238"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                      {section.name}
-                    </div>
-                  </div>
-                  <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
-                    <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
-                      {section.description ||
-                        `Complete the ${section.name.toLowerCase()} section.`}
-                    </div>
-                  </div>
-                </div>
+        return (
+          <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
+            <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
+              {renderSectionHeader()}
+              {isExpanded && (
                 <div className="flex py-5 px-[34px] flex-col items-start self-stretch border-t border-border bg-background">
                   <PersonalInformationForm
                     formData={formData}
@@ -94,43 +130,7 @@ export function DesktopDynamicSection({
                     fieldConfig={fieldConfig}
                   />
                 </div>
-              </div>
-            </div>
-          );
-        }
-        return (
-          <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
-            <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
-              <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
-                <div className="flex pb-1 items-center gap-2 self-stretch">
-                  <svg
-                    className="w-[18px] h-[18px] aspect-1"
-                    viewBox="0 0 18 18"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M6.00391 9.33203H12.0039M16.5039 9.33203C16.5039 13.4741 13.146 16.832 9.00391 16.832C4.86177 16.832 1.50391 13.4741 1.50391 9.33203C1.50391 5.18989 4.86177 1.83203 9.00391 1.83203C13.146 1.83203 16.5039 5.18989 16.5039 9.33203Z"
-                      stroke="#323238"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                    {section.name}
-                  </div>
-                </div>
-                <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
-                  <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
-                    {section.description ||
-                      `Complete the ${section.name.toLowerCase()} section.`}
-                  </div>
-                </div>
-              </div>
-              <div className="flex w-full h-[308px] border-t border-border bg-background">
-                <LockedStepComponent message="This step is locked until you complete the previous step." />
-              </div>
+              )}
             </div>
           </div>
         );
@@ -143,34 +143,8 @@ export function DesktopDynamicSection({
         return (
           <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-[#DEDEDD] bg-white">
-              <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-white">
-                <div className="flex pb-1 items-center gap-2 self-stretch">
-                  <svg
-                    className="w-[18px] h-[18px] aspect-1"
-                    viewBox="0 0 18 18"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M6.00391 9.33203H12.0039M16.5039 9.33203C16.5039 13.4741 13.146 16.832 9.00391 16.832C4.86177 16.832 1.50391 13.4741 1.50391 9.33203C1.50391 5.18989 4.86177 1.83203 9.00391 1.83203C13.146 1.83203 16.5039 5.18989 16.5039 9.33203Z"
-                      stroke="#323238"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                    {section.name}
-                  </div>
-                </div>
-                <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
-                  <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
-                    {section.description ||
-                      `Complete the ${section.name.toLowerCase()} section.`}
-                  </div>
-                </div>
-              </div>
-              {currentStep >= sectionIndex ? (
+              {renderSectionHeader()}
+              {isExpanded && (
                 <div className="flex py-4 px-[34px] flex-col items-start self-stretch border-t border-[#DEDEDD] bg-white">
                   <IdentityDocumentForm
                     onComplete={onIdentityDocumentComplete || (() => {})}
@@ -181,78 +155,42 @@ export function DesktopDynamicSection({
                     userId={userId}
                   />
                 </div>
-              ) : (
-                <div className="flex w-full h-[308px] border-t border-border bg-background">
-                  <LockedStepComponent message="This step is locked until you complete the previous step." />
-                </div>
               )}
             </div>
           </div>
         );
 
       case "biometrics":
-        if (currentStep >= sectionIndex) {
-          return (
-            <CameraSelfieStep 
-              onComplete={onSelfieComplete || (() => {})} 
-              submissionId={submissionId}
-            />
-          );
-        } else {
-          return (
-            <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
-              <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
-                <div className="flex p-3 flex-col justify-center items-center gap-2 self-stretch bg-background">
-                  <div className="flex pb-1 items-center gap-2 self-stretch">
-                    <svg
-                      className="w-[18px] h-[18px] aspect-1"
-                      viewBox="0 0 18 18"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M6.00391 9.33203H12.0039M16.5039 9.33203C16.5039 13.4741 13.146 16.832 9.00391 16.832C4.86177 16.832 1.50391 13.4741 1.50391 9.33203C1.50391 5.18989 4.86177 1.83203 9.00391 1.83203C13.146 1.83203 16.5039 5.18989 16.5039 9.33203Z"
-                        stroke="#323238"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                      {section.name}
-                    </div>
-                  </div>
-                  <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
-                    <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
-                      {section.description ||
-                        `Complete the ${section.name.toLowerCase()} section.`}
-                    </div>
+        return (
+          <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
+            <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
+              {renderSectionHeader()}
+              {isExpanded && (
+                <div className="flex p-3 flex-col justify-center items-center self-stretch border-t border-border bg-background">
+                  <div className="flex w-full flex-col items-center gap-2">
+                    <CameraSelfieStep 
+                      onComplete={onSelfieComplete || (() => {})} 
+                      submissionId={submissionId}
+                    />
                   </div>
                 </div>
-                <div className="flex w-full h-[308px] border-t border-border bg-background">
-                  <LockedStepComponent message="This step is locked until you complete the previous step." />
-                </div>
-              </div>
+              )}
             </div>
-          );
-        }
+          </div>
+        );
 
       default:
         return (
           <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
-              <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
-                <div className="flex pb-1 items-center gap-2 self-stretch">
-                  <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                    {section.name}
-                  </div>
-                </div>
-                <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
-                  <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
+              {renderSectionHeader()}
+              {isExpanded && (
+                <div className="flex p-4 flex-col items-start self-stretch border-t border-border bg-background">
+                  <div className="text-text-primary font-roboto text-sm">
                     Unknown section type: {section.sectionType}
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         );

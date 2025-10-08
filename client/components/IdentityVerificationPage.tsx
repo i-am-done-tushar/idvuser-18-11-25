@@ -64,7 +64,10 @@ export function IdentityVerificationPage({
   const [showConsentDialog, setShowConsentDialog] = useState(true);
   const [hasConsented, setHasConsented] = useState(false);
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<number[]>([1]);
+  // Track which section is expanded (only one at a time)
+  const [expandedSectionIndex, setExpandedSectionIndex] = useState<number>(1);
+  // Track completed state for each section
+  const [completedSections, setCompletedSections] = useState<Record<number, boolean>>({});
 
   // OTP dialog + state
   const [showOTPDialog, setShowOTPDialog] = useState(false);
@@ -218,6 +221,71 @@ export function IdentityVerificationPage({
     }
   }, [templateVersion, userId, submissionId]);
 
+  // Helper: POST section data
+  const postSectionData = async (section: any) => {
+    if (!templateVersion || !userId || !submissionId) return;
+    let fieldValue = "";
+    if (section.sectionType === "personalInformation") {
+      const personalInfo = getPersonalInfoConfig();
+      const mappedData: any = {};
+      if (personalInfo.firstName) mappedData.firstName = formData.firstName;
+      if (personalInfo.lastName) mappedData.lastName = formData.lastName;
+      if (personalInfo.middleName) mappedData.middleName = formData.middleName;
+      if (personalInfo.dateOfBirth) mappedData.dateOfBirth = formData.dateOfBirth;
+      if (personalInfo.email) mappedData.email = formData.email;
+      if (personalInfo.phoneNumber) {
+        mappedData.countryCode = formData.countryCode;
+        mappedData.phoneNumber = formData.phoneNumber;
+      }
+      if (personalInfo.gender) mappedData.gender = formData.gender;
+      if (personalInfo.currentAddress) {
+        mappedData.address = formData.address;
+        mappedData.city = formData.city;
+        mappedData.postalCode = formData.postalCode;
+      }
+      if (personalInfo.permanentAddress) {
+        mappedData.permanentAddress = formData.permanentAddress;
+        mappedData.permanentCity = formData.permanentCity;
+        mappedData.permanentPostalCode = formData.permanentPostalCode;
+      }
+      fieldValue = JSON.stringify(mappedData);
+    } else if (section.sectionType === "documents") {
+      fieldValue = JSON.stringify({
+        documentsUploaded: isIdentityDocumentCompleted,
+        completedAt: new Date().toISOString(),
+      });
+    } else if (section.sectionType === "biometrics") {
+      fieldValue = JSON.stringify({
+        selfieUploaded: isSelfieCompleted,
+        completedAt: new Date().toISOString(),
+      });
+    }
+    try {
+      await fetch(
+        `${API_BASE}/api/${submissionId}/${section.id}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "*/*",
+          },
+          body: JSON.stringify({ fieldValue }),
+        }
+      );
+      console.log(`Posted section data for ${section.sectionType}`);
+    } catch (err) {
+      console.error("Failed to POST section data", err);
+    }
+  };
+
+  // Collapse and mark section as filled when completed
+  const handleSectionComplete = async (sectionIndex: number, section: any) => {
+    setCompletedSections((prev) => ({ ...prev, [sectionIndex]: true }));
+    setExpandedSectionIndex(-1); // Collapse
+    await postSectionData(section);
+    toast({ title: "Section completed", description: "This section has been filled." });
+  };
+
   // ---- OTP API calls (server-backed) ----
   async function generateEmailOtp(email: string, versionId: number) {
     const token = getToken();
@@ -360,9 +428,28 @@ export function IdentityVerificationPage({
     return checks.length > 0 && checks.every(Boolean);
   };
 
-  // advance to step 2 when step 1 complete
+  // Auto-mark sections as completed when valid
   useEffect(() => {
+    const sections = activeSections;
+    
+    // Auto-mark personal information section as completed when valid
     const ok = isStep1Complete();
+    if (ok && !completedSections[1] && sections[0]) {
+      // Mark section 1 as completed when form is valid
+      handleSectionComplete(1, sections[0]);
+    }
+    
+    // Auto-mark documents section as completed when valid
+    if (isIdentityDocumentCompleted && !completedSections[2] && sections[1]) {
+      handleSectionComplete(2, sections[1]);
+    }
+    
+    // Auto-mark biometrics section as completed when valid
+    if (isSelfieCompleted && !completedSections[3] && sections[2]) {
+      handleSectionComplete(3, sections[2]);
+    }
+    
+    // advance to step 2 when step 1 complete
     if (currentStep === 1 && ok && !hasShownStep1Toast) {
       toast({
         title: "Step 1 completed",
@@ -371,7 +458,7 @@ export function IdentityVerificationPage({
       setHasShownStep1Toast(true);
       setTimeout(() => {
         setCurrentStep(2);
-        setExpandedSections((prev) => (prev.includes(2) ? prev : [...prev, 2]));
+        setExpandedSectionIndex(2);
       }, 1500);
     }
   }, [
@@ -391,8 +478,11 @@ export function IdentityVerificationPage({
     formData.permanentAddress,
     formData.permanentCity,
     formData.permanentPostalCode,
+    isIdentityDocumentCompleted,
+    isSelfieCompleted,
     currentStep,
     hasShownStep1Toast,
+    completedSections,
     toast,
   ]);
 
@@ -410,7 +500,7 @@ export function IdentityVerificationPage({
       setHasShownStep2Toast(true);
       setTimeout(() => {
         setCurrentStep(3);
-        setExpandedSections((prev) => (prev.includes(3) ? prev : [...prev, 3]));
+        setExpandedSectionIndex(3);
         setShowMobileMenu(false);
       }, 1500);
     }
@@ -438,9 +528,7 @@ export function IdentityVerificationPage({
 
     if (nextStep !== currentStep) {
       setCurrentStep(nextStep);
-      setExpandedSections((prev) =>
-        prev.includes(nextStep) ? prev : [...prev, nextStep],
-      );
+      setExpandedSectionIndex(nextStep);
       setShowMobileMenu(false);
     }
   }, [
@@ -662,9 +750,11 @@ export function IdentityVerificationPage({
       });
       setHasShownStep2Toast(true);
     }
+    // Mark section 2 as completed and auto-collapse
+    setCompletedSections((prev) => ({ ...prev, 2: true }));
     setTimeout(() => {
       setCurrentStep(3);
-      setExpandedSections((prev) => (prev.includes(3) ? prev : [...prev, 3]));
+      setExpandedSectionIndex(3);
       setShowMobileMenu(false);
     }, 1500);
   };
@@ -788,33 +878,43 @@ export function IdentityVerificationPage({
     }
   };
 
-  const toggleSection = (idx: number) => {
-    setExpandedSections((prev) => {
-      // Lock future steps (greater than current)
-      if (idx > currentStep) {
-        toast({
-          title: "Step locked",
-          description:
-            "You can only access unlocked steps. Complete the current step to continue.",
-          variant: "destructive",
-        });
-        return prev;
+  // Toggle section: expand/collapse, send POST if closing a filled section
+  const toggleSection = async (idx: number) => {
+    if (idx > currentStep) {
+      toast({
+        title: "Step locked",
+        description:
+          "You can only access unlocked steps. Complete the current step to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (expandedSectionIndex === idx) {
+      // Collapse section, send POST if filled
+      if (completedSections[idx]) {
+        const section = activeSections[idx - 1];
+        if (section) await postSectionData(section);
       }
-
-      // Toggle visibility for current or completed steps
-      return prev.includes(idx)
-        ? prev.filter((i) => i !== idx)
-        : [...prev, idx];
-    });
+      setExpandedSectionIndex(-1);
+    } else {
+      // If previous section was expanded and filled, send POST before switching
+      if (expandedSectionIndex > 0 && completedSections[expandedSectionIndex]) {
+        const prevSection = activeSections[expandedSectionIndex - 1];
+        if (prevSection) await postSectionData(prevSection);
+      }
+      setExpandedSectionIndex(idx);
+    }
   };
 
   useEffect(() => {
-    // Ensure the current step is expanded, but keep previously expanded sections open
-    setExpandedSections((prev) =>
-      prev.includes(currentStep) ? prev : [...prev, currentStep],
-    );
+    setExpandedSectionIndex(currentStep);
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
+
+  // active sections by order
+  const activeSections = (templateVersion?.sections || [])
+    .filter((s) => s.isActive)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
 
   const isFormValid = () => {
     if (!templateVersion) return false;
@@ -976,11 +1076,6 @@ export function IdentityVerificationPage({
     );
   }
 
-  // active sections by order
-  const activeSections = (templateVersion?.sections || [])
-    .filter((s) => s.isActive)
-    .sort((a, b) => a.orderIndex - b.orderIndex);
-
   if (!templateVersion || activeSections.length === 0) {
     return (
       <div className="w-full h-screen bg-page-background flex items-center justify-center">
@@ -1141,7 +1236,7 @@ export function IdentityVerificationPage({
                     section={section}
                     sectionIndex={index + 1}
                     currentStep={currentStep}
-                    isExpanded={expandedSections.includes(index + 1)}
+                    isExpanded={expandedSectionIndex === index + 1}
                     onToggle={toggleSection}
                     formData={formData}
                     setFormData={setFormData}
@@ -1149,12 +1244,13 @@ export function IdentityVerificationPage({
                     isPhoneVerified={isPhoneVerified}
                     onSendEmailOTP={handleSendEmailOTP}
                     onSendPhoneOTP={handleSendPhoneOTP}
-                    onIdentityDocumentComplete={handleIdentityDocumentComplete}
-                    onSelfieComplete={() => setIsSelfieCompleted(true)}
+                    onIdentityDocumentComplete={() => handleSectionComplete(index + 1, section)}
+                    onSelfieComplete={() => handleSectionComplete(index + 1, section)}
                     submissionId={submissionId}
                     shortCode={shortCode}
                     templateVersionId={templateVersion?.versionId}
                     userId={userId}
+                    isFilled={!!completedSections[index + 1]}
                   />
                 ))}
               </div>
@@ -1176,14 +1272,15 @@ export function IdentityVerificationPage({
                       isPhoneVerified={isPhoneVerified}
                       onSendEmailOTP={handleSendEmailOTP}
                       onSendPhoneOTP={handleSendPhoneOTP}
-                      onIdentityDocumentComplete={
-                        handleIdentityDocumentComplete
-                      }
-                      onSelfieComplete={() => setIsSelfieCompleted(true)}
+                      onIdentityDocumentComplete={() => handleSectionComplete(index + 1, section)}
+                      onSelfieComplete={() => handleSectionComplete(index + 1, section)}
                       submissionId={submissionId}
                       shortCode={shortCode}
                       templateVersionId={templateVersion?.versionId}
                       userId={userId}
+                      isFilled={!!completedSections[index + 1]}
+                      isExpanded={expandedSectionIndex === index + 1}
+                      onToggle={toggleSection}
                     />
                   ))}
                 </div>

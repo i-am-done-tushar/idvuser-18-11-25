@@ -26,6 +26,8 @@ interface DynamicSectionProps {
   shortCode?: string;
   templateVersionId?: number;
   userId?: number | null;
+  // Section completion state
+  isFilled?: boolean;
 }
 
 export function DynamicSection({
@@ -46,6 +48,7 @@ export function DynamicSection({
   shortCode,
   templateVersionId,
   userId,
+  isFilled,
 }: DynamicSectionProps) {
   const renderSectionContent = () => {
     // Show content for current and completed steps; only future steps are locked
@@ -157,8 +160,12 @@ export function DynamicSection({
           </div>
           <div className="flex pl-6 justify-center items-center gap-2.5 self-stretch">
             <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
-              {section.description ||
-                `Complete the ${section.name.toLowerCase()} section.`}
+              {!isExpanded && isFilled ? (
+                <span className="text-green-600 font-medium">This section has been filled</span>
+              ) : (
+                section.description ||
+                `Complete the ${section.name.toLowerCase()} section.`
+              )}
             </div>
           </div>
         </div>

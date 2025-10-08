@@ -16,7 +16,7 @@ interface UploadedFile {
   size: string;
   type: string;
 }
-
+//just a comment 
 interface IdentityDocumentFormProps {
   onComplete?: () => void;
   documentConfig?: DocumentConfig;
@@ -679,6 +679,7 @@ export function IdentityDocumentForm({
                   </div>
                   <button
                     onClick={() => removeUploadedFile(file.id)}
+                    aria-label="Remove file"
                     className="flex w-7 h-7 justify-center items-center gap-2.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
                   >
                     <svg
