@@ -54,6 +54,21 @@ interface DesktopDynamicSectionProps {
   isFilled?: boolean;
   isExpanded?: boolean;
   onToggle?: (sectionIndex: number) => void;
+  // Document form state
+  documentFormState?: {
+    country: string;
+    selectedDocument: string;
+    uploadedDocuments: string[];
+    uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
+    documentUploadIds: Record<string, { front?: number; back?: number }>;
+  };
+  setDocumentFormState?: (state: any) => void;
+  // Biometric form state
+  biometricFormState?: {
+    capturedImage: string | null;
+    isImageCaptured: boolean;
+  };
+  setBiometricFormState?: (state: any) => void;
   // personalInfoConfig?: any;
   // personalInfoRequired?: PersonalInfoRequired;
   // documentsConfig?: DocumentsConfig;
@@ -79,6 +94,10 @@ export function DesktopDynamicSection({
   isFilled,
   isExpanded,
   onToggle,
+  documentFormState,
+  setDocumentFormState,
+  biometricFormState,
+  setBiometricFormState,
 }: DesktopDynamicSectionProps) {
   const renderSectionHeader = () => (
     <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
@@ -235,6 +254,8 @@ export function DesktopDynamicSection({
                     shortCode={shortCode}
                     templateVersionId={templateVersionId}
                     userId={userId}
+                    documentFormState={documentFormState}
+                    setDocumentFormState={setDocumentFormState}
                   />
                 </div>
               )}
