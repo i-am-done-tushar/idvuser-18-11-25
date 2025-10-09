@@ -260,18 +260,31 @@ export function IdentityDocumentForm({
   const buildFormData = (file: Blob, filename: string) => {
     const formData = new FormData();
     formData.append("File", file, filename);
-    
+
     // Get dynamic document definition ID based on selected country and document
-    const selectedDocumentName = currentDocuments.find((docName) => 
-      docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
-    ) || "";
-    const documentDefinitionId = getDocumentDefinitionId(country, selectedDocumentName);
-    
+    const selectedDocumentName =
+      currentDocuments.find(
+        (docName) =>
+          docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument,
+      ) || "";
+    const documentDefinitionId = getDocumentDefinitionId(
+      country,
+      selectedDocumentName,
+    );
+
     formData.append("DocumentDefinitionId", documentDefinitionId);
     formData.append("Bucket", "string");
     const submissionIdToUse = submissionId?.toString() || "1";
-    console.log("IdentityDocumentForm: Using UserTemplateSubmissionId:", submissionIdToUse);
-    console.log("IdentityDocumentForm: Using DocumentDefinitionId:", documentDefinitionId, "for document:", selectedDocumentName);
+    console.log(
+      "IdentityDocumentForm: Using UserTemplateSubmissionId:",
+      submissionIdToUse,
+    );
+    console.log(
+      "IdentityDocumentForm: Using DocumentDefinitionId:",
+      documentDefinitionId,
+      "for document:",
+      selectedDocumentName,
+    );
     formData.append("UserTemplateSubmissionId", submissionIdToUse);
     return formData;
   };
@@ -285,10 +298,12 @@ export function IdentityDocumentForm({
     const url = `${API_BASE}/api/Files/upload`;
     const formData = buildFormData(file, filename);
     const res = await fetch(url, { method: "POST", body: formData });
-    
-    if (!res.ok) {
+
+    // Check for 201 Created or 200 OK
+    if (!res.ok && res.status !== 201) {
       throw new Error(`POST failed: ${res.statusText}`);
     }
+
     const result = await res.json().catch(() => ({}));
     const returnedId =
       (result &&
@@ -476,7 +491,10 @@ export function IdentityDocumentForm({
                 const docStyle = getDocumentStyle(docName);
 
                 return (
-                  <div key={docId} className="flex flex-col">
+                  <div
+                  key={docId}
+                  className="flex flex-col"
+                >
                     {/* Document Button */}
                     <button
                       onClick={() => {
@@ -749,7 +767,7 @@ export function IdentityDocumentForm({
             </div>
           </div>
 
-          {/* Uploaded Files Grid */}
+          {/* Uploaded Files Grid - Matches Figma Design */}
           <div className="flex flex-wrap items-start gap-4 self-stretch">
             {uploadedFiles.length > 0 ? (
               uploadedFiles.map((file) => {
