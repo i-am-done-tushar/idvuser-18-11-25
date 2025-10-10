@@ -50,6 +50,7 @@ export function IdentityDocumentForm({
   const [localSelectedDocument, setLocalSelectedDocument] = useState("");
   const [showCameraDialog, setShowCameraDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
   const [localUploadedDocuments, setLocalUploadedDocuments] = useState<string[]>([]);
   const [localUploadedFiles, setLocalUploadedFiles] = useState<UploadedFile[]>([]);
   const [localDocumentUploadIds, setLocalDocumentUploadIds] = useState<
@@ -709,17 +710,23 @@ export function IdentityDocumentForm({
                 <div className="flex flex-col items-center gap-4 self-stretch border-2 border-dashed border-[#C3C6D4] rounded-lg bg-white p-6">
                   <div className="flex flex-col items-center gap-3">
                     <div className="flex flex-col items-center gap-2">
-                      <QRCodeDisplay
-                        shortCode={shortCode}
-                        templateVersionId={templateVersionId}
-                        userId={userId}
-                        sessionId={sessionState?.sessionId || 'default-session'}
-                        currentStep="document-upload"
-                        size="large"
-                        showUrl={false}
-                      />
+                      <div 
+                        className="cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setShowQRModal(true)}
+                        title="Click to view larger QR code"
+                      >
+                        <QRCodeDisplay
+                          shortCode={shortCode}
+                          templateVersionId={templateVersionId}
+                          userId={userId}
+                          sessionId={sessionState?.sessionId || 'default-session'}
+                          currentStep="document-upload"
+                          size="large"
+                          showUrl={false}
+                        />
+                      </div>
                       <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
-                        Scan this QR code with your mobile device to continue verification
+                        Scan this QR code with your mobile device to continue verification (Click to enlarge)
                       </div>
                     </div>
                   </div>
@@ -1095,6 +1102,44 @@ export function IdentityDocumentForm({
           }
         }}
       />
+
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowQRModal(false);
+            }
+          }}
+        >
+          <div className="relative bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 text-xl font-bold transition-colors"
+            >
+              ×
+            </button>
+            <div className="flex flex-col items-center gap-6">
+              <h3 className="text-xl font-semibold text-gray-800">Scan QR Code</h3>
+              <div className="scale-150 transform">
+                <QRCodeDisplay
+                  shortCode={shortCode}
+                  templateVersionId={templateVersionId}
+                  userId={userId}
+                  sessionId={sessionState?.sessionId || 'default-session'}
+                  currentStep="document-upload"
+                  size="large"
+                  showUrl={true}
+                />
+              </div>
+              <p className="text-center text-sm text-gray-600 max-w-xs leading-relaxed">
+                Scan this QR code with your mobile device to continue the verification process
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
