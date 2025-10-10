@@ -726,7 +726,7 @@ export function IdentityDocumentForm({
                         />
                       </div>
                       <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
-                        Scan this QR code with your other device to continue verificatio
+                        Scan this QR code with your other device to continue verification.
                       </div>
                     </div>
                   </div>

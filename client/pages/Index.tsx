@@ -12,7 +12,7 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [inputShortCode, setInputShortCode] = useState("");
 
-  const DEMO_SHORTCODE = "AUUjTRki720FsI827EgyntezgkMZ7g4hnZPVkpJyaZQ_dvOUTeRFml1SRjAyAeU_h2twOeJ8oI0SB5LCPV7632zrDKgroiUMybLOWtwl0CEZ5KCiK40C3n9Lbviy2qu-tEk_PH_UhNawpcKPIS5yebDJikf6kz8_rUI1e6lqgMYKD-oL1UMx8uE-om2x6oE1FtMiOEHHe70VWJE5zHdOtis7tGoI2W4HPx0cNObLnCLjbIV-ZBdCF3fT5fUEOWCd-QssMaAT12ovHRxs43um3hN5wmez6d4_";
+  const DEMO_SHORTCODE = "AVM31lUFQUC1OJCnDk7ZZewtDiVcApsd-KHLL9lypqX4sPon658xkmrTA4L8_MBqWGEkorjxqfq0X_7fiGXR5Yc4YR1j161n9juaA1WkaX3iSqcPBSUw8OuCQuiiTL5xtdwx9aqP9D4930lX6RaL9j7qoQm33pWwby9HBZzJVm0IccKLhDfrUUXvoeRq7io2f4FlAirX9JwtZwIyguU113gv_CLwKfD6sNazdJZpkVS1OuWYQ-OfaaKMd5d-D2U24c0SXAMBVhkeqh0CwkyCoP_nlZYiag";
 
   const API_BASE =
     import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
