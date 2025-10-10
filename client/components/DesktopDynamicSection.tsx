@@ -9,6 +9,7 @@ interface DesktopDynamicSectionProps {
   section: TemplateVersionSection;
   sectionIndex: number;
   currentStep: number;
+  onSectionFocus?: (sectionIndex: number) => void;
   // Form related props
   formData?: FormData;
   setFormData?: (data: FormData) => void;
@@ -48,6 +49,7 @@ export function DesktopDynamicSection({
   section,
   sectionIndex,
   currentStep,
+  onSectionFocus,
   formData,
   setFormData,
   isEmailVerified,
@@ -143,7 +145,11 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div className="flex py-5 px-[34px] flex-col items-start self-stretch border-t border-border bg-background">
+                <div 
+                  className="flex py-5 px-[34px] flex-col items-start self-stretch border-t border-border bg-background"
+                  onClick={() => onSectionFocus?.(sectionIndex)}
+                  onFocus={() => onSectionFocus?.(sectionIndex)}
+                >
                   <PersonalInformationForm
                     formData={formData}
                     setFormData={setFormData}
@@ -192,7 +198,11 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-[#DEDEDD] bg-white">
               {renderSectionHeader()}
               {isExpanded && (
-                <div className="flex py-4 px-[34px] flex-col items-start self-stretch border-t border-[#DEDEDD] bg-white">
+                <div 
+                  className="flex py-4 px-[34px] flex-col items-start self-stretch border-t border-[#DEDEDD] bg-white"
+                  onClick={() => onSectionFocus?.(sectionIndex)}
+                  onFocus={() => onSectionFocus?.(sectionIndex)}
+                >
                   {/* summary chips so the new fields are visible */}
                   <div className="text-xs text-muted-foreground flex flex-wrap gap-2 mb-3">
                     <span className="px-2 py-1 rounded-full border bg-white">
@@ -251,7 +261,10 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <>
+                <div
+                  onClick={() => onSectionFocus?.(sectionIndex)}
+                  onFocus={() => onSectionFocus?.(sectionIndex)}
+                >
                   {/* summary chips */}
                   <div className="flex w-full py-3 px-[34px] border-t border-border bg-background">
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
@@ -283,7 +296,7 @@ export function DesktopDynamicSection({
                       />
                     </div>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -296,7 +309,11 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div className="flex p-4 flex-col items-start self-stretch border-t border-border bg-background">
+                <div 
+                  className="flex p-4 flex-col items-start self-stretch border-t border-border bg-background"
+                  onClick={() => onSectionFocus?.(sectionIndex)}
+                  onFocus={() => onSectionFocus?.(sectionIndex)}
+                >
                   <div className="text-text-primary font-roboto text-sm">
                     Unknown section type: {section.sectionType}
                   </div>

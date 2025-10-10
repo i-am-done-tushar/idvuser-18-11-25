@@ -12,6 +12,7 @@ interface DynamicSectionProps {
   currentStep: number;
   isExpanded: boolean;
   onToggle: (sectionIndex: number) => void;
+  onSectionFocus?: (sectionIndex: number) => void;
   // Form related props
   formData?: FormData;
   setFormData?: (data: FormData) => void;
@@ -52,6 +53,7 @@ export function DynamicSection({
   currentStep,
   isExpanded,
   onToggle,
+  onSectionFocus,
   formData,
   setFormData,
   isEmailVerified,
@@ -260,7 +262,14 @@ export function DynamicSection({
             </div>
           </div>
         </div>
-        {isExpanded && renderSectionContent()}
+        {isExpanded && (
+          <div 
+            onClick={() => onSectionFocus?.(sectionIndex)}
+            onFocus={() => onSectionFocus?.(sectionIndex)}
+          >
+            {renderSectionContent()}
+          </div>
+        )}
       </div>
     </div>
   );
