@@ -12,7 +12,7 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [inputShortCode, setInputShortCode] = useState("");
 
-  const DEMO_SHORTCODE = "AVM31lUFQUC1OJCnDk7ZZewtDiVcApsd-KHLL9lypqX4sPon658xkmrTA4L8_MBqWGEkorjxqfq0X_7fiGXR5Yc4YR1j161n9juaA1WkaX3iSqcPBSUw8OuCQuiiTL5xtdwx9aqP9D4930lX6RaL9j7qoQm33pWwby9HBZzJVm0IccKLhDfrUUXvoeRq7io2f4FlAirX9JwtZwIyguU113gv_CLwKfD6sNazdJZpkVS1OuWYQ-OfaaKMd5d-D2U24c0SXAMBVhkeqh0CwkyCoP_nlZYiag";
+  const DEMO_SHORTCODE = "AfwaCy43wz1ByXZnqB6vhY_YRtj1B9QF2v-ZotEeLf7i66_Rb4uV4E4jeQy2qwDs4CZz6XkPGRKsjyCpSPsMkh8_q-UTLju9ojEWIdi77ZvLfI32MnQM8knGlPGK-Sgp8PV-ffbbZZ5Oka2nflxk3qV7UTcaJnwlRYGpPGzqD0ql0LYtSMCo_AEA0PO2O1boFBosklbBBYbbIpZXdUlY6iiGM2lxixfNBrANSUsfWwNpaxe6_S9PST-M1AhpPCLPpj9iR8bN6K6V6c5agcrwkYvECCxM9CaPOQ";
 
   const API_BASE =
     import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
