@@ -246,6 +246,98 @@ export function IdentityVerificationPage({
     }
   }, [templateVersion, userId, submissionId]);
 
+  // ---- fetch and populate submission values if submissionId exists ----
+  useEffect(() => {
+    if (!submissionId || !templateVersion) return;
+
+    const fetchSubmissionValues = async () => {
+      try {
+        console.log("Fetching submission values for submissionId:", submissionId);
+        const response = await fetch(
+          `${API_BASE}/api/submissions/${submissionId}/values`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+          },
+        );
+
+        if (!response.ok) {
+          console.error("Failed to fetch submission values:", response.status);
+          return;
+        }
+
+        const submissionValues = await response.json();
+        console.log("Fetched submission values:", submissionValues);
+
+        // Parse and populate each section's data
+        submissionValues.forEach((submission: any) => {
+          const section = templateVersion.sections.find(
+            (s) => s.id === submission.templateSectionId,
+          );
+
+          if (!section) return;
+
+          try {
+            const parsedValue = JSON.parse(submission.fieldValue);
+
+            // Populate personal information section
+            if (section.sectionType === "personalInformation") {
+              setFormData((prev) => ({
+                ...prev,
+                firstName: parsedValue.firstName || prev.firstName,
+                lastName: parsedValue.lastName || prev.lastName,
+                middleName: parsedValue.middleName || prev.middleName,
+                dateOfBirth: parsedValue.dateOfBirth || prev.dateOfBirth,
+                email: parsedValue.email || prev.email,
+                countryCode: parsedValue.countryCode || prev.countryCode,
+                phoneNumber: parsedValue.phoneNumber || prev.phoneNumber,
+                gender: parsedValue.gender || prev.gender,
+                address: parsedValue.address || prev.address,
+                city: parsedValue.city || prev.city,
+                postalCode: parsedValue.postalCode || prev.postalCode,
+                permanentAddress: parsedValue.permanentAddress || prev.permanentAddress,
+                permanentCity: parsedValue.permanentCity || prev.permanentCity,
+                permanentPostalCode: parsedValue.permanentPostalCode || prev.permanentPostalCode,
+              }));
+              console.log("Populated personal information from submission");
+            }
+
+            // Populate document section
+            if (section.sectionType === "documents" && parsedValue) {
+              setDocumentFormState((prev) => ({
+                ...prev,
+                country: parsedValue.country || prev.country,
+                selectedDocument: parsedValue.selectedDocument || prev.selectedDocument,
+                uploadedDocuments: parsedValue.uploadedDocuments || prev.uploadedDocuments,
+                uploadedFiles: parsedValue.uploadedFiles || prev.uploadedFiles,
+                documentUploadIds: parsedValue.documentUploadIds || prev.documentUploadIds,
+              }));
+              console.log("Populated document information from submission");
+            }
+
+            // Populate biometric section
+            if (section.sectionType === "biometrics" && parsedValue) {
+              setBiometricFormState((prev) => ({
+                ...prev,
+                capturedImage: parsedValue.capturedImage || prev.capturedImage,
+                isImageCaptured: parsedValue.isImageCaptured || prev.isImageCaptured,
+              }));
+              console.log("Populated biometric information from submission");
+            }
+          } catch (parseError) {
+            console.error("Error parsing fieldValue for section:", section.sectionType, parseError);
+          }
+        });
+      } catch (error) {
+        console.error("Error fetching submission values:", error);
+      }
+    };
+
+    fetchSubmissionValues();
+  }, [submissionId, templateVersion]);
+
   // Helper: POST section data
   const postSectionData = async (section: any) => {
     if (!templateVersion || !userId || !submissionId) return;
