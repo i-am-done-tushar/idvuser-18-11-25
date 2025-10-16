@@ -56,6 +56,39 @@ export function IdentityDocumentForm({
   const [localDocumentUploadIds, setLocalDocumentUploadIds] = useState<
     Record<string, { front?: number; back?: number }>
   >({});
+  const [isDigilockerLoading, setIsDigilockerLoading] = useState(false);
+  const getBackString = "arcon"; //use submissionid or userid (dynamic, so that on redirect from digilocker, this id can be used to fetch previously filled form data)
+
+  // call backend to get DigiLocker URL and redirect
+  const handleDigilockerClick = async () => {
+    try {
+      setIsDigilockerLoading(true);
+
+      const res = await fetch(
+        `https://localhost:62435/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(getBackString)}`,
+        { method: "GET", headers: { accept: "*/*" } }
+      );
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`Failed to generate auth URL: ${res.status} ${txt}`);
+      }
+
+      const { url, codeVerifier } = await res.json();
+
+      // Persist the PKCE code_verifier + state so we can use it after redirect
+      sessionStorage.setItem("digilocker_code_verifier", codeVerifier || "");
+      sessionStorage.setItem("digilocker_state", getBackString);
+
+      // Hard redirect to DigiLocker consent page
+      window.location.href = url;
+    } catch (err) {
+      console.error(err);
+      alert("Could not start DigiLocker flow. Please try again.");
+    } finally {
+      setIsDigilockerLoading(false);
+    }
+  };
 
   // Determine if we're using lifted state or local state
   const isUsingLiftedState = !!(documentFormState && setDocumentFormState);
@@ -156,6 +189,77 @@ export function IdentityDocumentForm({
       currentStep: 'document-upload',
     });
   }, [uploadedDocuments, country, selectedDocument, updateSession]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authCode = params.get("code");           // from DigiLocker
+    const state = params.get("state");             // "arcon" or your dynamic value
+    if (!authCode || !state) return;
+
+    const run = async () => {
+      const codeVerifier = sessionStorage.getItem("digilocker_code_verifier") || "";
+      const expectedState = sessionStorage.getItem("digilocker_state") || "";
+
+      if (expectedState && state !== expectedState) {
+        console.warn("DigiLocker state mismatch");
+        return;
+      }
+
+      // Map your selected document id to the label DigiLocker expects
+      // e.g. "aadhaar_card" -> "Aadhaar card"
+      const toRequestedDocType = (id: string) => {
+        const map: Record<string, string> = {
+          aadhaar_card: "Aadhaar card",
+          passport: "Passport",
+          pan_card: "PAN card",
+          // add others as needed
+        };
+        return map[id] ?? id.replace(/_/g, " ");
+      };
+
+      // You may already know these from your form context
+      const requestedDocType = toRequestedDocType(selectedDocument || "aadhaar_card");
+      const email = "admin@idv.local";         // or from logged-in user context
+      const documentId = 1;                     // your internal doc def id
+      const templateName = "template p";        // current template name
+
+      const url = new URL(`https://localhost:62435/api/IdentityVerification/fetch-document`);
+      url.searchParams.set("AuthCode", authCode);
+      url.searchParams.set("CodeVerifier", codeVerifier);
+      url.searchParams.set("RequestedDocType", requestedDocType);
+      url.searchParams.set("EmailID", email);
+      url.searchParams.set("DocumentID", String(documentId));
+      url.searchParams.set("TemplateName", templateName);
+
+      try {
+        const res = await fetch(url.toString(), {
+          method: "POST",
+          headers: { accept: "*/*" },
+          body: ""
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`fetch-document failed: ${res.status} ${text}`);
+        }
+
+        const data = await res.json().catch(() => ({}));
+        // TODO: use `data` to mark the document as uploaded, store files, etc.
+        // setUploadedDocuments([...]); setUploadedFiles([...]);
+
+      } catch (e) {
+        console.error(e);
+        alert("Could not fetch DigiLocker document. Please try again.");
+      } finally {
+        // Clean URL (remove ?code&state for nicer UX)
+        const clean = new URL(window.location.href);
+        clean.search = "";
+        window.history.replaceState({}, "", clean.toString());
+      }
+    };
+
+    run();
+  }, ["https://localhost:62435", selectedDocument]);
 
   // Load session state from URL if coming from QR scan
   useEffect(() => {
@@ -665,7 +769,7 @@ export function IdentityDocumentForm({
                   </div>
 
                   {/* Right Section - DigiLocker */}
-                  <div className="flex flex-col gap-4">
+                  {/* <div className="flex flex-col gap-4">
                     <div className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer">
                       <div className="flex flex-col justify-center items-center gap-3">
                         <div className="flex w-[48px] h-[48px] p-2 justify-center items-center rounded-xl bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]">
@@ -701,9 +805,35 @@ export function IdentityDocumentForm({
                         </div>
                       </div>
                     </div>
-                    
-                    
-                  </div>
+                  </div> */}
+                  <div className="flex flex-col gap-4">
+                  <button
+                    onClick={handleDigilockerClick}
+                    disabled={isDigilockerLoading}
+                    className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    <div className="flex flex-col justify-center items-center gap-3">
+                      <div className="flex w-[48px] h-[48px] p-2 justify-center items-center rounded-xl bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]">
+                        {/* lock icon (unchanged) */}
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                          xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 10V8C6 6.93913 6.42143 5.92172 7.17157 5.17157C7.92172 4.42143 8.93913 4 10 4H14C15.0609 4 16.0783 4.42143 16.8284 5.17157C17.5786 5.92172 18 6.93913 18 8V10M5 10H19C19.5523 10 20 10.4477 20 11V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V11C4 10.4477 4.44772 10 5 10Z"
+                            stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <circle cx="12" cy="15" r="1.5" fill="white"/>
+                        </svg>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="text-[#6366F1] text-center font-figtree text-[14px] font-semibold">
+                          {isDigilockerLoading ? "Opening DigiLocker…" : "DigiLocker"}
+                        </div>
+                        <div className="text-[#676879] text-center font-roboto text-[11px] font-normal leading-4">
+                          Your documents anytime, anywhere
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
                 </div>
 
                 {/* QR Code Upload - Dynamic QR Code */}
