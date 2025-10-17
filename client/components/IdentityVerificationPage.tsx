@@ -59,6 +59,7 @@ export function IdentityVerificationPage({
   const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] =
     useState(false);
   const [hasShownStep2Toast, setHasShownStep2Toast] = useState(false);
+  const [hasShownWelcomeBackToast, setHasShownWelcomeBackToast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
   const [showConsentDialog, setShowConsentDialog] = useState(true);
@@ -108,9 +109,18 @@ export function IdentityVerificationPage({
   const [documentFormState, setDocumentFormState] = useState({
     country: "",
     selectedDocument: "",
-    uploadedDocuments: [] as string[],
+    uploadedDocuments: [] as string[], // List of document names uploaded (e.g., ["Passport", "Driver's License"])
     uploadedFiles: [] as Array<{id: string, name: string, size: string, type: string}>,
-    documentUploadIds: {} as Record<string, { front?: number; back?: number }>,
+    documentUploadIds: {} as Record<string, { front?: number; back?: number }>, // Maps document name to file IDs
+    // New: Detailed document tracking for backend storage
+    documentsDetails: [] as Array<{
+      documentName: string; // e.g., "Passport"
+      documentDefinitionId: number; // From API config
+      frontFileId: number;
+      backFileId?: number; // Optional for single-sided documents
+      status: "uploaded" | "pending";
+      uploadedAt: string; // ISO timestamp
+    }>,
   });
 
   // Wrap setDocumentFormState to add logging
@@ -271,6 +281,9 @@ export function IdentityVerificationPage({
         const submissionValues = await response.json();
         console.log("Fetched submission values:", submissionValues);
 
+        // Track which sections are completed based on API response
+        const completedSectionIds = new Set<number>();
+        
         // Parse and populate each section's data
         submissionValues.forEach((submission: any) => {
           const section = templateVersion.sections.find(
@@ -278,6 +291,9 @@ export function IdentityVerificationPage({
           );
 
           if (!section) return;
+
+          // Mark this section as completed (data exists in backend)
+          completedSectionIds.add(submission.templateSectionId);
 
           try {
             const parsedValue = JSON.parse(submission.fieldValue);
@@ -301,7 +317,7 @@ export function IdentityVerificationPage({
                 permanentCity: parsedValue.permanentCity || prev.permanentCity,
                 permanentPostalCode: parsedValue.permanentPostalCode || prev.permanentPostalCode,
               }));
-              console.log("Populated personal information from submission");
+              console.log("✅ Populated personal information from submission");
             }
 
             // Populate document section
@@ -313,8 +329,16 @@ export function IdentityVerificationPage({
                 uploadedDocuments: parsedValue.uploadedDocuments || prev.uploadedDocuments,
                 uploadedFiles: parsedValue.uploadedFiles || prev.uploadedFiles,
                 documentUploadIds: parsedValue.documentUploadIds || prev.documentUploadIds,
+                // Restore detailed document information
+                documentsDetails: parsedValue.documentsDetails || prev.documentsDetails,
               }));
-              console.log("Populated document information from submission");
+              
+              // Mark document section as completed
+              if (parsedValue.documentsUploaded) {
+                setIsIdentityDocumentCompleted(true);
+              }
+              console.log("✅ Populated document information from submission");
+              console.log("📄 Restored documents details:", parsedValue.documentsDetails);
             }
 
             // Populate biometric section
@@ -324,12 +348,44 @@ export function IdentityVerificationPage({
                 capturedImage: parsedValue.capturedImage || prev.capturedImage,
                 isImageCaptured: parsedValue.isImageCaptured || prev.isImageCaptured,
               }));
-              console.log("Populated biometric information from submission");
+              
+              // Mark biometric section as completed
+              if (parsedValue.isImageCaptured) {
+                setIsSelfieCompleted(true);
+              }
+              console.log("✅ Populated biometric information from submission");
             }
           } catch (parseError) {
             console.error("Error parsing fieldValue for section:", section.sectionType, parseError);
           }
         });
+
+        // Update completedSections state based on which sections have data
+        const sections = templateVersion.sections
+          .filter((s) => s.isActive)
+          .sort((a, b) => a.orderIndex - b.orderIndex);
+        
+        const newCompletedSections: Record<number, boolean> = {};
+        
+        sections.forEach((section, index) => {
+          const sectionIndex = index + 1; // 1-based indexing
+          
+          // Check if this section's ID exists in the API response
+          if (completedSectionIds.has(section.id)) {
+            newCompletedSections[sectionIndex] = true;
+            console.log(`✅ Section ${sectionIndex} (${section.name}) marked as completed`);
+          } else {
+            console.log(`⏳ Section ${sectionIndex} (${section.name}) not yet completed`);
+          }
+        });
+        
+        // Set all completed sections at once
+        setCompletedSections(newCompletedSections);
+        
+        // Log summary
+        const completedCount = Object.values(newCompletedSections).filter(Boolean).length;
+        console.log(`📊 Summary: ${completedCount}/${sections.length} sections completed`);
+        
       } catch (error) {
         console.error("Error fetching submission values:", error);
       }
@@ -337,6 +393,63 @@ export function IdentityVerificationPage({
 
     fetchSubmissionValues();
   }, [submissionId, templateVersion]);
+
+  // Show welcome-back toast for already-completed sections on page load
+  useEffect(() => {
+    if (!templateVersion || Object.keys(completedSections).length === 0) return;
+    if (hasShownWelcomeBackToast) return; // Prevent showing multiple times
+    
+    // Only run once when completedSections is first populated
+    const hasAnyCompletedSections = Object.values(completedSections).some(Boolean);
+    if (!hasAnyCompletedSections) return;
+    
+    const sections = templateVersion.sections
+      .filter((s) => s.isActive)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    
+    const completedSectionNames: string[] = [];
+    let firstIncompleteSection: number | null = null;
+    
+    sections.forEach((section, index) => {
+      const sectionIndex = index + 1;
+      if (completedSections[sectionIndex]) {
+        completedSectionNames.push(section.name);
+      } else if (firstIncompleteSection === null) {
+        // Track the first incomplete section
+        firstIncompleteSection = sectionIndex;
+      }
+    });
+    
+    if (completedSectionNames.length > 0) {
+      const completedCount = completedSectionNames.length;
+      const totalCount = sections.length;
+      
+      // Navigate to the first incomplete section (or last section if all complete)
+      const targetSection = firstIncompleteSection || sections.length;
+      
+      console.log(`🎯 Navigating to section ${targetSection} (first incomplete section)`);
+      setCurrentStep(targetSection);
+      setExpandedSections(prev => ({ ...prev, [targetSection]: true }));
+      
+      // Show a single summary toast
+      setTimeout(() => {
+        const nextSectionName = firstIncompleteSection 
+          ? sections[firstIncompleteSection - 1]?.name 
+          : null;
+        
+        toast({
+          title: "🎉 Welcome Back!",
+          description: `You've already completed ${completedCount}/${totalCount} section${completedCount > 1 ? 's' : ''}: ${completedSectionNames.join(', ')}${
+            nextSectionName ? `. Continue with ${nextSectionName}.` : ''
+          }`,
+          duration: 6000,
+        });
+        setHasShownWelcomeBackToast(true); // Mark as shown
+      }, 500); // Small delay to ensure page has loaded
+    }
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedSections, templateVersion, hasShownWelcomeBackToast]); // Only run when completedSections is populated
 
   // Helper: POST section data
   const postSectionData = async (section: any) => {
@@ -367,10 +480,14 @@ export function IdentityVerificationPage({
       }
       fieldValue = JSON.stringify(mappedData);
     } else if (section.sectionType === "documents") {
-      fieldValue = JSON.stringify({
-        documentsUploaded: isIdentityDocumentCompleted,
-        completedAt: new Date().toISOString(),
-      });
+      // Build clean document data structure
+      const documentData = {
+        country: documentFormState.country,
+        documents: documentFormState.documentsDetails,
+      };
+      
+      fieldValue = JSON.stringify(documentData);
+      console.log("📤 Posting document section data:", documentData);
     } else if (section.sectionType === "biometrics") {
       fieldValue = JSON.stringify({
         selfieUploaded: isSelfieCompleted,
@@ -1168,6 +1285,20 @@ export function IdentityVerificationPage({
     }
   };
 
+  // Callback to auto-save document section data after each document upload
+  const handleDocumentUploaded = async () => {
+    console.log('📤 Document state changed, triggering auto-save...');
+    const documentsSection = activeSections.find(s => s.sectionType === "documents");
+    if (documentsSection) {
+      console.log('📋 Current documents state:', {
+        uploadedDocuments: documentFormState.uploadedDocuments,
+        documentsDetails: documentFormState.documentsDetails,
+      });
+      await postSectionData(documentsSection);
+      console.log('✅ Document section auto-saved successfully');
+    }
+  };
+
   const handleIdentityDocumentComplete = () => {
     setIsIdentityDocumentCompleted(true);
     
@@ -1288,10 +1419,10 @@ export function IdentityVerificationPage({
 
           fieldValue = JSON.stringify(mappedData);
         } else if (section.sectionType === "documents") {
-          // Documents section - mark as completed if documents were uploaded
+          // Documents section - clean structure
           fieldValue = JSON.stringify({
-            documentsUploaded: isIdentityDocumentCompleted,
-            completedAt: new Date().toISOString(),
+            country: documentFormState.country,
+            documents: documentFormState.documentsDetails,
           });
         } else if (section.sectionType === "biometrics") {
           // Biometrics section - mark as completed if selfie was uploaded
@@ -1754,6 +1885,7 @@ export function IdentityVerificationPage({
                     isFilled={!!completedSections[index + 1]}
                     documentFormState={documentFormState}
                     setDocumentFormState={setDocumentFormStateWithLogging}
+                    onDocumentUploaded={handleDocumentUploaded}
                     biometricFormState={biometricFormState}
                     setBiometricFormState={setBiometricFormState}
                     // personalInfoConfig={personalCfg}
@@ -1793,6 +1925,7 @@ export function IdentityVerificationPage({
                       onToggle={toggleSection}
                       documentFormState={documentFormState}
                       setDocumentFormState={setDocumentFormStateWithLogging}
+                      onDocumentUploaded={handleDocumentUploaded}
                       biometricFormState={biometricFormState}
                       setBiometricFormState={setBiometricFormState}
                       // personalInfoConfig={personalCfg}
