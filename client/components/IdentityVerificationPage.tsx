@@ -264,7 +264,7 @@ export function IdentityVerificationPage({
       try {
         console.log("Fetching submission values for submissionId:", submissionId);
         const response = await fetch(
-          `${API_BASE}/api/submissions/${submissionId}/values`,
+          `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
           {
             method: "GET",
             headers: {
@@ -528,7 +528,7 @@ export function IdentityVerificationPage({
     }
     try {
       await fetch(
-        `${API_BASE}/api/${submissionId}/${section.id}`,
+        `${API_BASE}/api/UserTemplateSubmissionValues/${submissionId}/${section.id}`,
         {
           method: "POST",
           headers: {
@@ -1466,7 +1466,7 @@ export function IdentityVerificationPage({
 
         // Submit section data
         const sectionResponse = await fetch(
-          `${API_BASE}/api/${submissionId}/${section.id}`,
+          `${API_BASE}/api/UserTemplateSubmissionValues/${submissionId}/${section.id}`,
           {
             method: "POST",
             headers: {
