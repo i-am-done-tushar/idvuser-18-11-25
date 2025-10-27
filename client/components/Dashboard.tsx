@@ -3,6 +3,7 @@ import { DashboardSidebar } from "./DashboardSidebar";
 import { DashboardCard } from "./DashboardCard";
 import { OngoingVerificationSection } from "./OngoingVerificationSection";
 import { ExpiredVerificationSection } from "./ExpiredVerificationSection";
+import { VerifiedCredentialsSection } from "./VerifiedCredentialsSection";
 
 export function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
