@@ -261,30 +261,6 @@ export function Dashboard() {
             </div>
           </div>
         </div>
-
-        {/* Sidebar - Right Side */}
-        <div className="hidden lg:flex lg:w-64 bg-white border-l border-border flex-shrink-0 h-full flex-col">
-          <nav className="flex-1 px-4 py-6 flex flex-col gap-2 overflow-auto">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => item.onClick()}
-                className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-all text-left ${
-                  item.isActive
-                    ? "bg-[#0073EA]/10 text-[#0073EA] border border-[#0073EA]/20"
-                    : "text-text-primary hover:bg-page-background"
-                }`}
-              >
-                <span className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-                  {item.icon}
-                </span>
-                <span className="font-roboto text-sm font-medium leading-normal">
-                  {item.label}
-                </span>
-              </button>
-            ))}
-          </nav>
-        </div>
       </div>
 
       {/* Mobile Sidebar */}
