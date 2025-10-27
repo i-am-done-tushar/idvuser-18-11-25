@@ -2,16 +2,31 @@ import { useState } from "react";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { DashboardCard } from "./DashboardCard";
 import { OngoingVerificationSection } from "./OngoingVerificationSection";
+import { ExpiredVerificationSection } from "./ExpiredVerificationSection";
 
 export function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("verified");
+
+  // Current dashboard user - use a single name so all verification cards show the same user
+  const currentUserName = "Sahil Angad";
 
   const handleNavigation = (section: string) => {
     setActiveSection(section);
   };
 
   const navItems = [
+    {
+      id: "main",
+      label: "Main Dashboard",
+      icon: (
+        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
+          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zM13 3v6h8V3h-8zm0 10v8h8v-8h-8z" />
+        </svg>
+      ),
+      onClick: () => handleNavigation("main"),
+      isActive: activeSection === "main",
+    },
     {
       id: "ongoing",
       label: "Ongoing Verification",
@@ -90,6 +105,7 @@ export function Dashboard() {
 
   const getPageTitle = () => {
     const titles: Record<string, string> = {
+      main: "Dashboard Home",
       ongoing: "Ongoing Verifications",
       expired: "Expired Verifications",
       verified: "Verified Credentials",
@@ -115,7 +131,8 @@ export function Dashboard() {
   return (
     <div className="w-full h-screen bg-page-background flex flex-row">
       {/* Desktop Sidebar - Left Side, Full Height */}
-      <div className="hidden lg:flex lg:w-64 bg-white border-r border-border flex-shrink-0 h-screen flex-col">
+      {/* Desktop Sidebar - Left Side, Full Height */}
+      <div className="hidden lg:flex lg:w-64 bg-white border-r border-border flex-shrink-0 h-screen flex-col z-10">
         <nav className="flex-1 px-4 py-6 flex flex-col gap-2 overflow-auto">
           {navItems.map((item) => (
             <button
@@ -141,7 +158,7 @@ export function Dashboard() {
       {/* Right Section - Header + Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex w-full h-14 items-center justify-between px-4 lg:px-8 border-b border-border bg-white gap-4 flex-shrink-0">
+        <div className="relative z-50 flex w-full h-14 items-center justify-between px-4 lg:px-8 border-b border-border bg-white gap-4 flex-shrink-0">
           {/* Mobile Menu Button */}
           <button
             onClick={() => setSidebarOpen(true)}
@@ -199,7 +216,9 @@ export function Dashboard() {
         <div className="flex-1 overflow-auto">
           <div className="w-full px-4 lg:px-8 py-6 gap-6 flex flex-col">
             {activeSection === "ongoing" ? (
-              <OngoingVerificationSection />
+              <OngoingVerificationSection userName={currentUserName} />
+            ) : activeSection === "expired" ? (
+              <ExpiredVerificationSection userName={currentUserName} />
             ) : (
               <>
                 {/* Page Title and Description */}
