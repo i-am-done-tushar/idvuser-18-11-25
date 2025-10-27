@@ -9,17 +9,19 @@ interface ExpiredVerification {
     | `Verification validity expired on ${string}.`;
 }
 
-export function ExpiredVerificationSection() {
+export function ExpiredVerificationSection({ userName }: { userName?: string }) {
+  const name = userName ?? "Expired User";
+
   const expiredVerifications: ExpiredVerification[] = [
     {
       id: "e1",
-      verificationName: "Amit Kumar",
+      verificationName: name,
       expiryDate: "12 Oct 2025",
       expiryReason: "Link expired before completion.",
     },
     {
       id: "e2",
-      verificationName: "Priya Singh",
+      verificationName: name,
       expiryDate: "03 Sep 2025",
       expiryReason: "Verification validity expired on 03 Sep 2025.",
     },
