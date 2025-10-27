@@ -17,6 +17,17 @@ export function Dashboard() {
 
   const navItems = [
     {
+      id: "main",
+      label: "Main Dashboard",
+      icon: (
+        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
+          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zM13 3v6h8V3h-8zm0 10v8h8v-8h-8z" />
+        </svg>
+      ),
+      onClick: () => handleNavigation("main"),
+      isActive: activeSection === "main",
+    },
+    {
       id: "ongoing",
       label: "Ongoing Verification",
       icon: (
@@ -94,6 +105,7 @@ export function Dashboard() {
 
   const getPageTitle = () => {
     const titles: Record<string, string> = {
+      main: "Dashboard Home",
       ongoing: "Ongoing Verifications",
       expired: "Expired Verifications",
       verified: "Verified Credentials",
@@ -119,28 +131,8 @@ export function Dashboard() {
   return (
     <div className="w-full h-screen bg-page-background flex flex-row">
       {/* Desktop Sidebar - Left Side, Full Height */}
-      <div className="hidden lg:flex lg:w-64 bg-white border-r border-border flex-shrink-0 h-screen flex-col">
-        <nav className="flex-1 px-4 py-6 flex flex-col gap-2 overflow-auto">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => item.onClick()}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-all text-left ${
-                item.isActive
-                  ? "bg-[#0073EA]/10 text-[#0073EA] border border-[#0073EA]/20"
-                  : "text-text-primary hover:bg-page-background"
-              }`}
-            >
-              <span className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-                {item.icon}
-              </span>
-              <span className="font-roboto text-sm font-medium leading-normal">
-                {item.label}
-              </span>
-            </button>
-          ))}
-        </nav>
-      </div>
+          {/* Left sidebar removed for desktop; top nav under header will be used instead */}
+      <div className="hidden" />
 
       {/* Right Section - Header + Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -197,6 +189,28 @@ export function Dashboard() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Top Navigation under header (desktop) */}
+        <div className="hidden lg:flex w-full border-b border-border bg-white">
+          <nav className="w-full px-4 lg:px-8 py-3 flex items-center gap-3">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => item.onClick()}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                  item.isActive
+                    ? "bg-[#0073EA]/10 text-[#0073EA] border border-[#0073EA]/20"
+                    : "text-text-primary hover:bg-page-background"
+                }`}
+              >
+                <span className="flex items-center justify-center w-4 h-4 flex-shrink-0">
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
         </div>
 
         {/* Content */}
