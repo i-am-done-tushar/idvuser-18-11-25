@@ -158,7 +158,7 @@ export function Dashboard() {
       {/* Right Section - Header + Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex w-full h-14 items-center justify-between px-4 lg:px-8 border-b border-border bg-white gap-4 flex-shrink-0">
+        <div className="relative z-50 flex w-full h-14 items-center justify-between px-4 lg:px-8 border-b border-border bg-white gap-4 flex-shrink-0">
           {/* Mobile Menu Button */}
           <button
             onClick={() => setSidebarOpen(true)}
