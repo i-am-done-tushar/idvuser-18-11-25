@@ -45,7 +45,8 @@ export function VerifiedCredentialCard({
       {/* Warning banner if nearing expiry */}
       {showExpiryWarning && (
         <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-yellow-800 text-sm rounded-t-lg">
-          Warning: Credential expires in {expiryDays} day{expiryDays === 1 ? "" : "s"}.
+          Warning: Credential expires in {expiryDays} day
+          {expiryDays === 1 ? "" : "s"}.
         </div>
       )}
 
@@ -94,7 +95,9 @@ export function VerifiedCredentialCard({
 
         {/* Expand indicator */}
         <div className="flex justify-end">
-          <div className="text-text-muted text-xs">{expanded ? "Hide details" : "Show details"}</div>
+          <div className="text-text-muted text-xs">
+            {expanded ? "Hide details" : "Show details"}
+          </div>
         </div>
       </div>
 
@@ -102,7 +105,9 @@ export function VerifiedCredentialCard({
         <div className="p-6 pt-0 border-t border-input-border bg-white">
           {/* User-filled Data */}
           <div className="mb-4">
-            <div className="text-text-primary font-roboto text-sm font-semibold mb-2">User-filled data</div>
+            <div className="text-text-primary font-roboto text-sm font-semibold mb-2">
+              User-filled data
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.keys(data).length === 0 ? (
                 <div className="text-text-muted">No data available.</div>
@@ -110,7 +115,9 @@ export function VerifiedCredentialCard({
                 Object.entries(data).map(([k, v]) => (
                   <div key={k} className="flex flex-col">
                     <span className="text-text-muted text-xs">{k}</span>
-                    <span className="text-text-primary text-sm font-medium">{v}</span>
+                    <span className="text-text-primary text-sm font-medium">
+                      {v}
+                    </span>
                   </div>
                 ))
               )}
@@ -119,15 +126,32 @@ export function VerifiedCredentialCard({
 
           {/* Consent Management */}
           <div>
-            <div className="text-text-primary font-roboto text-sm font-semibold mb-2">Consent</div>
+            <div className="text-text-primary font-roboto text-sm font-semibold mb-2">
+              Consent
+            </div>
             <div className="flex flex-col gap-2">
-              <div className="text-text-muted text-sm">Given: {consentGivenAt ? new Date(consentGivenAt).toLocaleDateString() : "-"}</div>
-              <div className="text-text-muted text-sm">Consent expiry: {consentExpiry ? new Date(consentExpiry).toLocaleDateString() : "N/A"}</div>
+              <div className="text-text-muted text-sm">
+                Given:{" "}
+                {consentGivenAt
+                  ? new Date(consentGivenAt).toLocaleDateString()
+                  : "-"}
+              </div>
+              <div className="text-text-muted text-sm">
+                Consent expiry:{" "}
+                {consentExpiry
+                  ? new Date(consentExpiry).toLocaleDateString()
+                  : "N/A"}
+              </div>
               {consentExpiry && consentExpiryDays <= 30 && (
-                <div className="px-3 py-2 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded">Consent expires in {consentExpiryDays} day{consentExpiryDays === 1 ? "" : "s"}.</div>
+                <div className="px-3 py-2 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded">
+                  Consent expires in {consentExpiryDays} day
+                  {consentExpiryDays === 1 ? "" : "s"}.
+                </div>
               )}
               <div className="pt-3">
-                <button className="px-3 py-2 rounded-md bg-white border border-input-border text-sm text-text-primary">Manage consent</button>
+                <button className="px-3 py-2 rounded-md bg-white border border-input-border text-sm text-text-primary">
+                  Manage consent
+                </button>
               </div>
             </div>
           </div>
