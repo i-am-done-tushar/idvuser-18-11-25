@@ -9,7 +9,11 @@ interface ExpiredVerification {
     | `Verification validity expired on ${string}.`;
 }
 
-export function ExpiredVerificationSection({ userName }: { userName?: string }) {
+export function ExpiredVerificationSection({
+  userName,
+}: {
+  userName?: string;
+}) {
   const name = userName ?? "Expired User";
 
   const expiredVerifications: ExpiredVerification[] = [

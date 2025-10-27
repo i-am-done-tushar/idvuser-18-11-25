@@ -9,7 +9,11 @@ interface OngoingVerification {
   status: "Not Started Yet" | "In Progress";
 }
 
-export function OngoingVerificationSection({ userName }: { userName?: string }) {
+export function OngoingVerificationSection({
+  userName,
+}: {
+  userName?: string;
+}) {
   const name = userName ?? "John Doe";
 
   const ongoingVerifications: OngoingVerification[] = [
