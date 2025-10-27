@@ -97,6 +97,8 @@ export function VerifiedCredentialsSection({
               data={item.data}
               consentGivenAt={item.consentGivenAt}
               consentExpiry={item.consentExpiry}
+              expanded={!!expandedMap[item.id]}
+              onToggle={() => toggle(item.id)}
             />
           ))}
         </div>
