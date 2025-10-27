@@ -9,11 +9,13 @@ interface OngoingVerification {
   status: "Not Started Yet" | "In Progress";
 }
 
-export function OngoingVerificationSection() {
+export function OngoingVerificationSection({ userName }: { userName?: string }) {
+  const name = userName ?? "John Doe";
+
   const ongoingVerifications: OngoingVerification[] = [
     {
       id: "1",
-      verificationName: "John Doe",
+      verificationName: name,
       documentType: "Aadhar Card",
       expiryDate: "15 Dec 2025",
       progress: 0,
@@ -21,7 +23,7 @@ export function OngoingVerificationSection() {
     },
     {
       id: "2",
-      verificationName: "Jane Smith",
+      verificationName: name,
       documentType: "Passport",
       expiryDate: "20 Jan 2026",
       progress: 45,
@@ -29,7 +31,7 @@ export function OngoingVerificationSection() {
     },
     {
       id: "3",
-      verificationName: "Robert Johnson",
+      verificationName: name,
       documentType: "Driving License",
       expiryDate: "10 Mar 2026",
       progress: 75,
@@ -37,7 +39,7 @@ export function OngoingVerificationSection() {
     },
     {
       id: "4",
-      verificationName: "Emily Brown",
+      verificationName: name,
       documentType: "Voter ID",
       expiryDate: "05 Feb 2026",
       progress: 25,
