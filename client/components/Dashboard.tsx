@@ -131,7 +131,7 @@ export function Dashboard() {
   return (
     <div className="w-full h-screen bg-page-background flex flex-row">
       {/* Desktop Sidebar - Left Side, Full Height */}
-          {/* Desktop Sidebar - Left Side, Full Height */}
+      {/* Desktop Sidebar - Left Side, Full Height */}
       <div className="hidden lg:flex lg:w-64 bg-white border-r border-border flex-shrink-0 h-screen flex-col z-10">
         <nav className="flex-1 px-4 py-6 flex flex-col gap-2 overflow-auto">
           {navItems.map((item) => (
