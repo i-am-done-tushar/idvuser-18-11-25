@@ -40,6 +40,31 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // MFA state
+  const storedMfa = (() => {
+    try {
+      const raw = sessionStorage.getItem("idv_mfa_settings");
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  const [mfa, setMfa] = useState<any>(
+    storedMfa || { enabled: false, method: null, value: null, enforced: !!(stored && (stored as any).mfaEnforced) },
+  );
+
+  const [mfaSetupOpen, setMfaSetupOpen] = useState(false);
+  const [mfaManageOpen, setMfaManageOpen] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<"email" | "phone">("email");
+  const [mfaContactValue, setMfaContactValue] = useState<string>((stored && (stored as any).email) || "");
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [sentCodeExpiresAt, setSentCodeExpiresAt] = useState<number | null>(null);
+  const [enteredCode, setEnteredCode] = useState("");
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
+  const [confirmCode, setConfirmCode] = useState("");
+
   const toast = useToast();
 
   const validation = validatePassword(newPassword);
