@@ -15,11 +15,7 @@ export function Dashboard() {
       id: "ongoing",
       label: "Ongoing Verification",
       icon: (
-        <svg
-          fill="currentColor"
-          viewBox="0 0 24 24"
-          className="w-5 h-5"
-        >
+        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
         </svg>
       ),
@@ -30,11 +26,7 @@ export function Dashboard() {
       id: "expired",
       label: "Expired Verification",
       icon: (
-        <svg
-          fill="currentColor"
-          viewBox="0 0 24 24"
-          className="w-5 h-5"
-        >
+        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
         </svg>
       ),
@@ -45,11 +37,7 @@ export function Dashboard() {
       id: "verified",
       label: "Verified Credentials",
       icon: (
-        <svg
-          fill="currentColor"
-          viewBox="0 0 24 24"
-          className="w-5 h-5"
-        >
+        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
           <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
         </svg>
       ),
@@ -60,11 +48,7 @@ export function Dashboard() {
       id: "contact",
       label: "Contact Admin",
       icon: (
-        <svg
-          fill="currentColor"
-          viewBox="0 0 24 24"
-          className="w-5 h-5"
-        >
+        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
           <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12h-8v-2h8v2zm0-3h-8V9h8v2zm0-3h-8V6h8v2z" />
         </svg>
       ),
