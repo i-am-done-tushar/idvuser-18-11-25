@@ -64,14 +64,27 @@ export function IdentityVerificationPage({
   const [hasShownWelcomeBackToast, setHasShownWelcomeBackToast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
-  // Check if we're coming from DigiLocker to skip consent
-  const [showConsentDialog, setShowConsentDialog] = useState(
-    !sessionStorage.getItem("digilocker_skip_consent")
-  );
-  const [hasConsented, setHasConsented] = useState(
-    !!sessionStorage.getItem("digilocker_skip_consent")
-  );
+  const [showConsentDialog, setShowConsentDialog] = useState(false);
+  const [hasConsented, setHasConsented] = useState(false);
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
+
+  // Check if we're coming from DigiLocker to skip consent
+  useEffect(() => {
+    const digilockerAuthCode = sessionStorage.getItem("digilocker_auth_code");
+    const skipConsent = sessionStorage.getItem("digilocker_skip_consent");
+    const isDigilockerReturn = !!digilockerAuthCode || !!skipConsent;
+    
+    // Set initial consent state
+    if (isDigilockerReturn) {
+      console.log("🔒 DigiLocker return detected, skipping consent");
+      setHasConsented(true);
+      // Clear the skip consent flag
+      sessionStorage.removeItem("digilocker_skip_consent");
+    } else {
+      // Only show consent dialog if not returning from DigiLocker
+      setShowConsentDialog(true);
+    }
+  }, []);
   // Track which sections are expanded (can have multiple expanded at once)
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({ 1: true });
   // Track completed state for each section

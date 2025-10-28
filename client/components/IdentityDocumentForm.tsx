@@ -60,6 +60,8 @@ interface IdentityDocumentFormProps {
   }>>;
   // Callback to trigger auto-save after document upload
   onDocumentUploaded?: () => void;
+  // Added prop to control identity document completion state
+  setIsIdentityDocumentCompleted?: (completed: boolean) => void;
 }
 
 export function IdentityDocumentForm({
@@ -72,6 +74,7 @@ export function IdentityDocumentForm({
   documentFormState,
   setDocumentFormState,
   onDocumentUploaded,
+  setIsIdentityDocumentCompleted,
 }: IdentityDocumentFormProps) {
   // Use lifted state directly if available, otherwise local state
   const [localCountry, setLocalCountry] = useState("");
@@ -354,6 +357,7 @@ export function IdentityDocumentForm({
       // You may already know these from your form context
       // const requestedDocType = toRequestedDocType(selectedDocument || "Pan Card");
       const requestedDocType = toRequestedDocType("Pan Card");
+      setSelectedDocument("Pan Card");
 
       const email = "siddhi.tawde@arconnet.com";         // or from logged-in user context
       const documentId = 3;                     // your internal doc def id
@@ -376,53 +380,249 @@ export function IdentityDocumentForm({
           body: ""
         });
 
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(`fetch-document failed: ${res.status} ${text}`);
-        }
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            console.error("❌ DigiLocker document fetch failed:", {
+              status: res.status,
+              statusText: res.statusText,
+              text
+            });
+            throw new Error(`Failed to fetch document: ${res.status} ${text}`);
+          }
 
-        const data = await res.json().catch(() => ({}));
-        console.log("✅ DigiLocker document fetched successfully:", data);
-        
-        // Mark document as successfully uploaded
-        if (selectedDocument) {
-          setUploadedDocuments(prev => [...prev, selectedDocument]);
-          setUploadedFiles(prev => [
-            ...prev,
-            {
-              id: String(data.id || Date.now()),
-              name: `${selectedDocument}_digilocker`,
-              size: "DigiLocker Document",
-              type: "application/pdf"
+          const data = await res.json().catch((err) => {
+            console.error("❌ Failed to parse DigiLocker response:", err);
+            throw new Error("Invalid response from DigiLocker service");
+          });
+
+          console.log("📝 DigiLocker response:", data);
+
+          // Only check for success flag, not data.id
+          if (!data || typeof data.success !== 'boolean') {
+            console.error("❌ Invalid DigiLocker response data:", data);
+            throw new Error("Invalid document data received from DigiLocker");
+          }
+
+          console.log("✅ DigiLocker document fetched successfully:", data);
+          
+          // Show success notification first
+          toast({
+            title: "Document Retrieved Successfully",
+            description: "Your document has been successfully fetched from DigiLocker",
+            duration: 5000,
+          });        // Mark document as successfully uploaded
+        if (selectedDocument && data.id) {
+          const docId = selectedDocument.toLowerCase().replace(/\s+/g, "_");
+          console.log("📄 Processing document with id:", docId, "and data:", data);
+          
+          // Update uploadedDocuments
+          setUploadedDocuments(prev => {
+            if (!prev.includes(docId)) {
+              console.log("📄 Adding document to uploadedDocuments:", docId);
+              return [...prev, docId];
             }
-          ]);
+            return prev;
+          });
+          
+          // Update uploaded files
+          const fileId = String(data.id);
+          setUploadedFiles(prev => {
+            // Remove any existing files for this document
+            const filtered = prev.filter(f => !f.id.startsWith(`${docId}-`));
+            const newFiles = [
+              ...filtered,
+              {
+                id: `${docId}-${fileId}`,
+                name: `${selectedDocument} (DigiLocker)`,
+                size: "DigiLocker Document",
+                type: "application/pdf"
+              }
+            ];
+            console.log("📄 Updated uploadedFiles:", newFiles);
+            return newFiles;
+          });
+
+          // Update document upload IDs
+          setDocumentUploadIds(prev => {
+            const newIds = {
+              ...prev,
+              [docId]: { front: data.id }
+            };
+            console.log("📄 Updated documentUploadIds:", newIds);
+            return newIds;
+          });
 
           // If using lifted state, add document details
           if (isUsingLiftedState) {
             const documentDefinitionId = getCurrentDocumentDefinitionId();
             if (documentDefinitionId) {
+              setDocumentFormState!((prevState) => ({
+                ...prevState,
+                documentsDetails: [
+                  // Remove any existing detail for this document
+                  ...prevState.documentsDetails.filter(
+                    doc => doc.documentName !== selectedDocument
+                  ),
+                  {
+                    documentName: selectedDocument,
+                    documentDefinitionId,
+                    frontFileId: data.id,
+                    status: "uploaded" as const,
+                    uploadedAt: new Date().toISOString()
+                  }
+                ]
+              }));
+
+              // Log the successful upload
+              console.log("📄 Document added successfully:", {
+                documentName: selectedDocument,
+                frontFileId: data.id
+              });
+            }
+          }
+
+          // Show success notification and trigger callbacks
+          toast({
+            title: "✅ Document Retrieved",
+            description: "Your document has been successfully fetched from DigiLocker",
+            duration: 5000,
+          });
+          
+          // Clear the selection and trigger callbacks
+          setSelectedDocument("");
+          onDocumentUploaded?.();
+          // Notify parent that document is complete to trigger state updates
+          onComplete?.();
+
+          // If using lifted state, add document details
+          if (isUsingLiftedState) {
+            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            if (documentDefinitionId && data.id) {
               addDocumentDetail(
                 selectedDocument,
                 documentDefinitionId,
                 data.id
               );
+
+              // Update documentsDetails and documentUploadIds
+              setDocumentFormState!((prevState) => ({
+                ...prevState,
+                documentsDetails: [
+                  ...prevState.documentsDetails,
+                  {
+                    documentName: selectedDocument,
+                    documentDefinitionId,
+                    frontFileId: data.id,
+                    status: "uploaded",
+                    uploadedAt: new Date().toISOString()
+                  }
+                ],
+                documentUploadIds: {
+                  ...prevState.documentUploadIds,
+                  [selectedDocument]: { front: data.id }
+                }
+              }));
             }
           }
 
-          // Show success notification
-          toast({
-            title: "Document Retrieved Successfully",
-            description: "Your document has been successfully fetched from DigiLocker",
-            duration: 5000,
-          });
-          
-          // Trigger auto-save callback if provided
-          onDocumentUploaded?.();
+          console.log("🔍 Checking response success:", data);
+          // Check for success response and show appropriate notification
+          if (data.success === true) {
+            const docId = "pan_card";
+            const displayName = "PAN Card";
+
+            if (!country) setCountry("India");
+
+            // --- Unified State Update ---
+            if (isUsingLiftedState) {
+              setDocumentFormState!(prev => {
+                const updatedDocs = prev.uploadedDocuments.includes(docId)
+                  ? prev.uploadedDocuments
+                  : [...prev.uploadedDocuments, docId];
+
+                const filteredFiles = prev.uploadedFiles.filter(f => !f.id.startsWith(`${docId}-`));
+                const updatedFiles = [
+                  ...filteredFiles,
+                  {
+                    id: `${docId}-remote`,
+                    name: `${displayName} (DigiLocker)`,
+                    size: "Fetched remotely",
+                    type: "application/pdf",
+                  },
+                ];
+
+                console.log("🔍 Render Check:", {
+                  uploadedDocuments,
+                  uploadedFiles,
+                  documentUploadIds,
+                  hasFileIdsForPAN: documentUploadIds["pan_card"],
+                });
+
+                return {
+                  ...prev,
+                  uploadedDocuments: updatedDocs,
+                  uploadedFiles: updatedFiles,
+                  documentUploadIds: {
+                    ...prev.documentUploadIds,
+                    [docId]: { front: data.id ?? -1 },
+                  },
+                };
+              });
+            } else {
+setUploadedDocuments(prev => 
+  prev.includes("Pan Card") ? prev : [...prev, "Pan Card"]
+);
+
+setUploadedFiles(prev => [
+  ...prev.filter(f => !f.id.startsWith("Pan Card")),
+  {
+    id: `Pan Card-${data.id}`,
+    name: "PAN Card (DigiLocker)",
+    size: "Fetched remotely",
+    type: "application/pdf",
+  },
+]);
+
+setDocumentUploadIds(prev => ({
+  ...prev,
+  "Pan Card": { front: data.id },
+}));
+
+// Move this AFTER UI updates
+setTimeout(() => setSelectedDocument(""), 500);
+
+            }
+            // setSelectedDocument("");
+            toast({
+              title: "PAN Card Uploaded",
+              description: data.message || "Document saved successfully.",
+              duration: 5000,
+            });
+
+            setIsIdentityDocumentCompleted?.(true);
+            onDocumentUploaded?.();
+            onComplete?.();
+          }
+        
+
+          else {
+            toast({
+              title: "Document Fetch Failed",
+              description: data.message || "Failed to fetch document from DigiLocker",
+              duration: 5000,
+              variant: "destructive",
+            });
+          }
         }
 
       } catch (e) {
         console.error("❌ Error fetching DigiLocker document:", e);
-        alert("Could not fetch DigiLocker document. Please try again.");
+        toast({
+          title: "Error",
+          description: "Could not fetch DigiLocker document. Please try again.",
+          duration: 5000,
+          variant: "destructive",
+        });
       } finally {
         // Clean up DigiLocker session data after processing
         sessionStorage.removeItem("digilocker_auth_code");
@@ -435,8 +635,21 @@ export function IdentityDocumentForm({
       }
     };
 
-    run();
-  }, [selectedDocument]); // Re-run if selectedDocument changes
+    // Only run if we have DigiLocker callback data
+    const handleDigilockerCallback = async () => {
+      if (authCode && callbackState) {
+        try {
+          await run();
+          // After successful document fetch, set identity document as completed
+          setIsIdentityDocumentCompleted?.(true);
+        } catch (error) {
+          console.error("Failed to process DigiLocker callback:", error);
+        }
+      }
+    };
+
+    handleDigilockerCallback();
+  }, []); // Only run once on mount to check for DigiLocker callback
   
   // Load session state from URL if coming from QR scan
   useEffect(() => {
@@ -1330,13 +1543,14 @@ export function IdentityDocumentForm({
 
       {/* Files Uploaded Section */}
       {(() => {
-        console.log('🔍 Checking Documents Uploaded section visibility:', {
-          uploadedFilesLength: uploadedFiles.length,
-          uploadedDocumentsLength: uploadedDocuments.length,
+        const hasUploadedDocs = uploadedDocuments && uploadedDocuments.length > 0;
+        console.log('🔍 Documents Uploaded section:', {
           uploadedFiles,
-          uploadedDocuments
+          uploadedDocuments,
+          hasUploadedDocs,
+          documentUploadIds
         });
-        return (uploadedFiles.length > 0 || uploadedDocuments.length > 0);
+        return hasUploadedDocs;
       })() && (
         <div className="flex flex-col items-start gap-4 self-stretch">
           {/* Section Header */}

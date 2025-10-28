@@ -59,7 +59,7 @@ export default function DigilockerCallback() {
       sessionStorage.setItem("digilocker_skip_consent", "true");
 
       console.log("✅ DigiLocker data stored in sessionStorage");
-  console.log(`🔀 Redirecting to: /form?code=${shortCodeFromState}`);
+  console.log(`🔀 Redirecting to: /form?code=${encodeURIComponent(shortCodeFromState)}`);
 
   // Redirect to form page with the shortCode in query string
   // The form will detect the DigiLocker data in sessionStorage and process it

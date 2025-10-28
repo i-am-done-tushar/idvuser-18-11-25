@@ -23,48 +23,51 @@ export default function Index() {
 
   // Check for DigiLocker callback at root URL
   useEffect(() => {
-    const code = searchParams.get("code");
-    const state = searchParams.get("state");
-    const jti = searchParams.get("jti");
+    const handleCallback = async () => {
+      const code = searchParams.get("code");
+      const state = searchParams.get("state");
+      const jti = searchParams.get("jti");
 
-    // If this is a DigiLocker callback (has code and state), handle it
-    if (code && state) {
-      console.log("🔐 DigiLocker callback detected at root URL");
-      
-      try {
-        // Parse state to extract shortCode and submissionId
-        const [shortCodeFromState, submissionIdFromState] = state.split(":");
+      // If this is a DigiLocker callback (has code and state), handle it
+      if (code && state) {
+        console.log("🔐 DigiLocker callback detected at root URL");
         
-        if (!shortCodeFromState || shortCodeFromState === "unknown") {
-          console.error("❌ Invalid shortCode in DigiLocker state");
-          alert("Invalid DigiLocker callback. Please try again.");
-          return;
+        try {
+          // Parse state to extract shortCode and submissionId
+          const [shortCodeFromState, submissionIdFromState] = state.split(":");
+          
+          if (!shortCodeFromState || shortCodeFromState === "unknown") {
+            console.error("❌ Invalid shortCode in DigiLocker state");
+            alert("Invalid DigiLocker callback. Please try again.");
+            return;
+          }
+
+          // Store DigiLocker data in sessionStorage
+          sessionStorage.setItem("digilocker_auth_code", code);
+          sessionStorage.setItem("digilocker_callback_state", state);
+          sessionStorage.setItem("digilocker_jti", jti || "");
+          sessionStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
+          // Flag to skip terms and conditions on form load
+          sessionStorage.setItem("digilocker_skip_consent", "true");
+
+          // Resolve the shortcode from DigiLocker state first
+          await resolveShortCode(shortCodeFromState);
+
+          console.log("✅ DigiLocker data stored, redirecting to /form?code=" + shortCodeFromState);
+          // Redirect to the form page with the shortCode in query string
+          navigate(`/form?code=${encodeURIComponent(shortCodeFromState)}`, { replace: true });
+        } catch (error) {
+          console.error("❌ Error processing DigiLocker callback:", error);
+          alert("Failed to process DigiLocker response. Please try again.");
         }
-
-        // Store DigiLocker data in sessionStorage
-        sessionStorage.setItem("digilocker_auth_code", code);
-        sessionStorage.setItem("digilocker_callback_state", state);
-        sessionStorage.setItem("digilocker_jti", jti || "");
-        sessionStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
-
-  console.log("✅ DigiLocker data stored, redirecting to /form?code=" + shortCodeFromState);
-
-  // Redirect to the form page with the shortCode in query string
-  navigate(`/form?code=${encodeURIComponent(shortCodeFromState)}`, { replace: true });
-      } catch (error) {
-        console.error("❌ Error processing DigiLocker callback:", error);
-        alert("Failed to process DigiLocker response. Please try again.");
+      } else if (code) {
+        // If we just have a code but no state, it's a regular shortcode to resolve
+        await resolveShortCode(code);
       }
-    }
-  }, [searchParams, navigate]);
+    };
 
-  useEffect(() => {
-    const code = searchParams.get("code");
-    if (code) {
-      // If we have a shortcode in query string, resolve it to get template version ID
-      resolveShortCode(code);
-    }
-  }, [searchParams]);
+    handleCallback();
+  }, [searchParams, navigate]);
 
   const resolveShortCode = async (code: string) => {
     setLoading(true);
