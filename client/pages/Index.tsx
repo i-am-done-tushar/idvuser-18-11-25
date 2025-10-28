@@ -14,7 +14,7 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [inputShortCode, setInputShortCode] = useState("");
 
-  const DEMO_SHORTCODE = "Ad-5fCStWvEJoqVbxLtt26bnAqpE8-lie1RD1JYlXh2l4faiZGjFOr5O_WtRZrJuYfYzF-b2GiM_2Al2hRWKRS9EBPfoFd40G11bugUEJIEIChk9LtrWLmmit8zkyDyF24-drMfaQk5Zyl2RnZVmmMKKiitrRQcCcNMftj6E-c7KxWN0MPuuFtJ5NAwlZAb-i669e9_iz2h8_y7umUfoxzRu7HPqYZBfEufgYwcV8Hnag55i1MPKlztQgLqYdasYDL5HEmGwSr24fdOluLlnIiN8MS6VJatd";
+  const DEMO_SHORTCODE = "AYemIxGWTQ1zjei90uyCquVea75MNcfcll7tYW6wp3WSPDKOSBLDMWEEoOmyM2ljt0vzkm75pVrSekH9uXS_TVRFNoIQ8BCJhPKRPdPLzywDu-13MBt3OF0smun8rIRjlIX43ORXimsrxPQ4ixGX8grfU0cqyNequuyYQKTqz3oGrY75eZTYvqxWk35tPnn4slRlRCKM2nJLv31L6YcBZo-SKdGrxSZokDzWQEVnd4mDSVwo7zUSpn-1r8ei4uFRcPTZDVvo8ODiAtdMf9D0a6IULBiXs14";
 
   // const API_BASE = "https://idvapi-test.arconnet.com:1019";
   const API_BASE = "https://idvapi-test.arconnet.com:1019";
