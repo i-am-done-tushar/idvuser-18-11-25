@@ -7,29 +7,34 @@ The `CameraSelfieStep` component has been significantly enhanced to match the fu
 ## Features Implemented
 
 ### 1. Face Detection & Alignment
+
 - Real-time face detection using `face-api.js`
 - Oval guide overlay for face alignment
 - Automatic feedback when face is properly positioned
 - Landmark-based alignment validation
 
 ### 2. Video Recording
+
 - Segmented recording (3 segments totaling 10 seconds)
 - Random segment duration distribution
 - Automatic face detection during recording
 - MediaRecorder integration for WebM format support
 
 ### 3. Brightness & Quality Checks
+
 - Real-time brightness analysis
 - Blur detection using variance calculation
 - Environmental lighting feedback
 - Automatic brightness-based overlay adjustment
 
 ### 4. Face Mismatch Detection
+
 - Reference face descriptor capture at session start
 - Continuous face identity verification
 - Mismatch detection with cooldown threshold
 
 ### 5. Status Messages & UI
+
 - Real-time status updates
 - Mobile-responsive message display
 - Color-coded feedback bubbles
@@ -38,6 +43,7 @@ The `CameraSelfieStep` component has been significantly enhanced to match the fu
 ## Installation
 
 ### Dependencies Added
+
 ```json
 {
   "@tensorflow/tfjs": "^4.17.0",
@@ -47,12 +53,15 @@ The `CameraSelfieStep` component has been significantly enhanced to match the fu
 ```
 
 ### Setup Steps
+
 1. Install dependencies: `pnpm install`
 2. Ensure `/public/assets/weights/` directory exists with face-api models
 3. The component will automatically load models on initialization
 
 ### Face-API Models Required
+
 The following models must be available in `/public/assets/weights/`:
+
 - `tiny_face_detector_model-weights_manifest.json`
 - `tiny_face_detector_model-weights.bin`
 - `face_landmark_68_model-weights_manifest.json`
@@ -66,8 +75,8 @@ The following models must be available in `/public/assets/weights/`:
 
 ```typescript
 interface CameraSelfieStepProps {
-  onComplete?: () => void;           // Called when recording is finished
-  submissionId?: number | null;      // User's submission ID for uploads
+  onComplete?: () => void; // Called when recording is finished
+  submissionId?: number | null; // User's submission ID for uploads
 }
 ```
 
@@ -82,29 +91,27 @@ export function MyPage() {
     // Navigate to next step
   };
 
-  return (
-    <CameraSelfieStep 
-      onComplete={handleComplete}
-      submissionId={123}
-    />
-  );
+  return <CameraSelfieStep onComplete={handleComplete} submissionId={123} />;
 }
 ```
 
 ## Technical Implementation
 
 ### State Management
+
 - React hooks for UI state
 - Refs for non-render-affecting state (camera stream, detection loop)
 - Separation of React state from animation frame callbacks
 
 ### Detection Loop
+
 - Uses `requestAnimationFrame` for efficient face detection
 - Periodic brightness checks (every 6 frames)
 - Face detection at 1 frame interval
 - Canvas overlay for real-time visual feedback
 
 ### Recording Flow
+
 1. User aligns face in oval guide
 2. Reference face descriptor captured
 3. Segment recording starts
@@ -116,29 +123,39 @@ export function MyPage() {
 ### Key Algorithms
 
 #### Face Alignment Validation
+
 ```typescript
 areLandmarksFullyInsideOval(landmarks: FaceLandmarks68): boolean
 ```
+
 Checks if all 68 facial landmarks are within the detection radius (120% of oval radius).
 
 #### Brightness Calculation
+
 Uses Rec. 709 luminance formula:
+
 ```
 L = 0.2126 * R + 0.7152 * G + 0.0722 * B
 ```
 
 #### Blur Detection
+
 Uses pixel variance calculation:
+
 ```
 variance = sum(pixel²) / count - mean(pixel)²
 ```
+
 Images with variance < 50 are considered blurry.
 
 #### Face Mismatch Detection
+
 Uses Euclidean distance between face descriptors:
+
 ```
 distance = sqrt(sum((descriptor1[i] - descriptor2[i])²))
 ```
+
 Distance > 0.6 indicates a different face.
 
 ## Performance Considerations
@@ -151,6 +168,7 @@ Distance > 0.6 indicates a different face.
 ## Error Handling
 
 The component handles:
+
 - Camera permission denial
 - Camera not found
 - Camera in use by another app
@@ -186,6 +204,7 @@ The component handles:
 ## Future Enhancements
 
 The following features from the Angular component could be implemented:
+
 1. Head movement verification (left, right, up, down)
 2. Advanced pose estimation
 3. Blink detection and counting
@@ -197,22 +216,26 @@ The following features from the Angular component could be implemented:
 ## Troubleshooting
 
 ### Models Not Loading
+
 - Verify `/public/assets/weights/` directory exists
 - Check browser console for CORS errors
 - Ensure model files are accessible
 
 ### Face Not Detected
+
 - Check lighting conditions
 - Ensure face is centered in frame
 - Verify camera is functioning properly
 - Clear browser cache and reload
 
 ### Recording Not Starting
+
 - Check browser microphone/camera permissions
 - Verify MediaRecorder supported MIME type
 - Check browser console for errors
 
 ### Video Not Playing
+
 - Verify video container size
 - Check video autoplay policies
 - Ensure stream is properly connected
@@ -239,14 +262,15 @@ CameraSelfieStep
 ## Constants
 
 ```typescript
-const TOTAL_DURATION = 10;                    // Total video length in seconds
-const TOTAL_SEGMENTS = 3;                     // Number of recording segments
-const MAX_HEAD_TURN_ATTEMPTS = 2;             // Attempts for head verification
-const FACE_MISMATCH_THRESHOLD = 3;            // Frames for mismatch detection
+const TOTAL_DURATION = 10; // Total video length in seconds
+const TOTAL_SEGMENTS = 3; // Number of recording segments
+const MAX_HEAD_TURN_ATTEMPTS = 2; // Attempts for head verification
+const FACE_MISMATCH_THRESHOLD = 3; // Frames for mismatch detection
 ```
 
 ## License
 
 This component uses:
+
 - face-api.js (MIT License)
 - TensorFlow.js (Apache 2.0 License)

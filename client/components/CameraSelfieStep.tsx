@@ -33,7 +33,10 @@ const FACE_MISMATCH_THRESHOLD = 3;
 type VerificationDirection = "left" | "right" | "up" | "down";
 type RecordingState = "inactive" | "recording" | "paused";
 
-export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepProps) {
+export function CameraSelfieStep({
+  onComplete,
+  submissionId,
+}: CameraSelfieStepProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -53,7 +56,8 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
   const [showHeadTurnPrompt, setShowHeadTurnPrompt] = useState(false);
-  const [headTurnDirection, setHeadTurnDirection] = useState<VerificationDirection | null>(null);
+  const [headTurnDirection, setHeadTurnDirection] =
+    useState<VerificationDirection | null>(null);
 
   // Camera & Stream
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -100,9 +104,15 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   const headMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const verificationDoneForSegmentRef = useRef<Record<number, boolean>>({});
   const headTurnAttemptsPerSegmentRef = useRef<Record<number, number>>({});
-  const partialSegmentBlobsPerSegmentRef = useRef<Record<number, PartialSegmentBlob[]>>({});
-  const firstVerificationDirectionRef = useRef<VerificationDirection | null>(null);
-  const secondVerificationDirectionRef = useRef<VerificationDirection | null>(null);
+  const partialSegmentBlobsPerSegmentRef = useRef<
+    Record<number, PartialSegmentBlob[]>
+  >({});
+  const firstVerificationDirectionRef = useRef<VerificationDirection | null>(
+    null,
+  );
+  const secondVerificationDirectionRef = useRef<VerificationDirection | null>(
+    null,
+  );
   const blinkingDirectionRef = useRef<VerificationDirection | null>(null);
   const blinkVisibleRef = useRef(false);
   const blinkIntervalIdRef = useRef<number | null>(null);
@@ -222,7 +232,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
         }, duration);
       }
     },
-    [isMobile]
+    [isMobile],
   );
 
   const startCamera = async () => {
@@ -345,14 +355,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
       const detection = await faceapi
         .detectSingleFace(
           videoElementRef.current,
-          new faceapi.TinyFaceDetectorOptions()
+          new faceapi.TinyFaceDetectorOptions(),
         )
         .withFaceDescriptor();
 
       if (detection && detection.descriptor) {
         const distance = faceapi.euclideanDistance(
           referenceFaceDescriptorRef.current,
-          detection.descriptor
+          detection.descriptor,
         );
 
         if (distance > 0.6) {
@@ -388,7 +398,10 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
         currentBrightnessRef.current = brightness;
 
         if (brightness < 60) {
-          showMessage("brightnessMessage", "🌑 Too dark — please move to a brighter place.");
+          showMessage(
+            "brightnessMessage",
+            "🌑 Too dark — please move to a brighter place.",
+          );
         } else if (brightness > 180) {
           showMessage("brightnessMessage", "☀️ Too bright — reduce lighting.");
         } else {
@@ -398,7 +411,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
         if (isVideoBlurred()) {
           showMessage(
             "dashedCircleAlignMessage",
-            "🔍 Video is blurry. Clean your camera lens or adjust focus."
+            "🔍 Video is blurry. Clean your camera lens or adjust focus.",
           );
         }
       }
@@ -432,12 +445,12 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
             if (smoothedFill < lowerBound) {
               showMessage(
                 "distanceMessage",
-                "📏 Please move closer to the camera."
+                "📏 Please move closer to the camera.",
               );
             } else if (smoothedFill > upperBound) {
               showMessage(
                 "distanceMessage",
-                "📏 Please move slightly farther away."
+                "📏 Please move slightly farther away.",
               );
             } else {
               sizeOK = true;
@@ -452,7 +465,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
               if (insideOvalFramesRef.current >= 3) {
                 showMessage(
                   "statusMessage",
-                  "✅ Perfect! Stay still inside the dashed circle."
+                  "✅ Perfect! Stay still inside the dashed circle.",
                 );
                 setIsFaceDetected(true);
 
@@ -481,7 +494,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   };
 
   const areLandmarksFullyInsideOval = (
-    landmarks: faceapi.FaceLandmarks68
+    landmarks: faceapi.FaceLandmarks68,
   ): boolean => {
     const { cx, cy, rOuter } = ovalRef.current;
     const detectionRadius = rOuter * 1.2;
@@ -549,7 +562,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     ctx.fillText(
       "Align your face within the white circles",
       cx,
-      cy + biggerRadius + 20
+      cy + biggerRadius + 20,
     );
 
     // Blinking arc for head turn guidance
@@ -607,7 +620,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     if (!isFaceDetected) {
       showMessage(
         "statusMessage",
-        "🙋 Please align your face inside the circle first."
+        "🙋 Please align your face inside the circle first.",
       );
       return;
     }
@@ -616,7 +629,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
       const detection = await faceapi
         .detectSingleFace(
           videoElementRef.current!,
-          new faceapi.TinyFaceDetectorOptions()
+          new faceapi.TinyFaceDetectorOptions(),
         )
         .withFaceLandmarks()
         .withFaceDescriptor();
@@ -671,7 +684,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
     showMessage(
       "recordingMessage",
-      `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`
+      `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`,
     );
 
     mediaRecorder.ondataavailable = (e) => {
