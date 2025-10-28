@@ -31,7 +31,7 @@ export function PasswordStrengthIndicator({
         <div className="flex items-center gap-1">
           {strength.requirements.minLength ? (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 10.5L8 15L17 5" stroke="#676879" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 10L8.5 13L14.5 7" stroke="#676879" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           ) : (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -46,7 +46,7 @@ export function PasswordStrengthIndicator({
         <div className="flex items-center gap-1">
           {strength.requirements.hasUppercase ? (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 10.5L8 15L17 5" stroke="#676879" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 10L8.5 13L14.5 7" stroke="#676879" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           ) : (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -61,7 +61,7 @@ export function PasswordStrengthIndicator({
         <div className="flex items-center gap-1">
           {strength.requirements.hasNumber ? (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 10.5L8 15L17 5" stroke="#676879" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 10L8.5 13L14.5 7" stroke="#676879" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           ) : (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -76,7 +76,7 @@ export function PasswordStrengthIndicator({
         <div className="flex items-center gap-1">
           {strength.requirements.hasSpecialChar ? (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 10.5L8 15L17 5" stroke="#676879" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 10L8.5 13L14.5 7" stroke="#676879" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           ) : (
             <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
