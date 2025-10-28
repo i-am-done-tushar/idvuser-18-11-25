@@ -350,11 +350,11 @@ export function IdentityDocumentForm({
 
       // You may already know these from your form context
       // const requestedDocType = toRequestedDocType(selectedDocument || "Pan Card");
-      const requestedDocType = toRequestedDocType("PAN Verification Record");
+      const requestedDocType = toRequestedDocType("Pan Card");
 
-      const email = "pranathi.narsupalli@arconnet.com";         // or from logged-in user context
+      const email = "siddhi.tawde@arconnet.com";         // or from logged-in user context
       const documentId = 3;                     // your internal doc def id
-      const templateName = "template p";        // current template name
+      const templateName = "Test Template";        // current template name
 
       const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
       // const url = new URL(`http://localhost:62435/api/IdentityVerification/fetch-document`);
