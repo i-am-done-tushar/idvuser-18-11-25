@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import * as faceapi from "face-api.js";
 import * as tf from "@tensorflow/tfjs";
+import * as ml5 from "ml5";
 import { useToast } from "@/hooks/use-toast";
 
 interface FaceGuideOval {
@@ -33,10 +33,7 @@ const FACE_MISMATCH_THRESHOLD = 3;
 type VerificationDirection = "left" | "right" | "up" | "down";
 type RecordingState = "inactive" | "recording" | "paused";
 
-export function CameraSelfieStep({
-  onComplete,
-  submissionId,
-}: CameraSelfieStepProps) {
+export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -56,8 +53,7 @@ export function CameraSelfieStep({
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
   const [showHeadTurnPrompt, setShowHeadTurnPrompt] = useState(false);
-  const [headTurnDirection, setHeadTurnDirection] =
-    useState<VerificationDirection | null>(null);
+  const [headTurnDirection, setHeadTurnDirection] = useState<VerificationDirection | null>(null);
 
   // Camera & Stream
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -69,13 +65,13 @@ export function CameraSelfieStep({
   const [segmentSecondsRecorded, setSegmentSecondsRecorded] = useState(0);
   const [isVerifyingHeadTurn, setIsVerifyingHeadTurn] = useState(false);
 
-  // Refs for internal state (not re-render triggers)
+  // Refs for internal state
   const streamRef = useRef<MediaStream | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const referenceFaceDescriptorRef = useRef<Float32Array | null>(null);
-  const lastLandmarksRef = useRef<faceapi.FaceLandmarks68 | null>(null);
-  const lastBoxRef = useRef<faceapi.Box | null>(null);
+  const faceDetectorRef = useRef<any>(null);
+  const referenceFaceDescriptorRef = useRef<any>(null);
+  const lastDetectionRef = useRef<any>(null);
   const ovalRef = useRef<FaceGuideOval>({
     cx: 0,
     cy: 0,
@@ -95,29 +91,6 @@ export function CameraSelfieStep({
   const fillBufferRef = useRef<number[]>([]);
   const currentBrightnessRef = useRef(100);
   const faceMismatchCounterRef = useRef(0);
-  const lastYawRef = useRef<number | undefined>();
-  const lastPitchRef = useRef<number | undefined>();
-
-  // Head turn verification refs
-  const headTurnAttemptsRef = useRef(0);
-  const headRecordedChunksRef = useRef<Blob[]>([]);
-  const headMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const verificationDoneForSegmentRef = useRef<Record<number, boolean>>({});
-  const headTurnAttemptsPerSegmentRef = useRef<Record<number, number>>({});
-  const partialSegmentBlobsPerSegmentRef = useRef<
-    Record<number, PartialSegmentBlob[]>
-  >({});
-  const firstVerificationDirectionRef = useRef<VerificationDirection | null>(
-    null,
-  );
-  const secondVerificationDirectionRef = useRef<VerificationDirection | null>(
-    null,
-  );
-  const blinkingDirectionRef = useRef<VerificationDirection | null>(null);
-  const blinkVisibleRef = useRef(false);
-  const blinkIntervalIdRef = useRef<number | null>(null);
-
-  const messageCooldownsRef = useRef<Record<string, boolean>>({});
 
   // Check mobile on resize
   useEffect(() => {
@@ -128,19 +101,19 @@ export function CameraSelfieStep({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Initialize camera and face-api models
+  // Initialize camera and ml5 models
   useEffect(() => {
     const init = async () => {
       try {
         await tf.setBackend("webgl");
         await tf.ready();
 
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
-          faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
-          faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights"),
-          faceapi.nets.faceExpressionNet.loadFromUri("/assets/weights"),
-        ]);
+        // Initialize ml5 face detector
+        const faceDetector = await ml5.faceDetection("facemesh", {
+          maxFaces: 2,
+          refineLandmarks: true,
+        });
+        faceDetectorRef.current = faceDetector;
 
         await startCamera();
         generateSegmentDurations();
@@ -158,7 +131,6 @@ export function CameraSelfieStep({
       }
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (blinkIntervalIdRef.current) clearInterval(blinkIntervalIdRef.current);
     };
   }, []);
 
@@ -232,7 +204,7 @@ export function CameraSelfieStep({
         }, duration);
       }
     },
-    [isMobile],
+    [isMobile]
   );
 
   const startCamera = async () => {
@@ -347,25 +319,27 @@ export function CameraSelfieStep({
   };
 
   const checkDifferentFace = async (): Promise<boolean> => {
-    if (!referenceFaceDescriptorRef.current || !videoElementRef.current) {
+    if (!referenceFaceDescriptorRef.current || !lastDetectionRef.current) {
       return false;
     }
 
     try {
-      const detection = await faceapi
-        .detectSingleFace(
-          videoElementRef.current,
-          new faceapi.TinyFaceDetectorOptions(),
-        )
-        .withFaceDescriptor();
+      const currentFace = lastDetectionRef.current;
+      
+      if (currentFace.landmarks && currentFace.landmarks.length > 0) {
+        // Compare face positions - if significantly different, it's likely a different face
+        const refLandmarks = referenceFaceDescriptorRef.current.landmarks;
+        let totalDistance = 0;
 
-      if (detection && detection.descriptor) {
-        const distance = faceapi.euclideanDistance(
-          referenceFaceDescriptorRef.current,
-          detection.descriptor,
-        );
+        for (let i = 0; i < Math.min(refLandmarks.length, currentFace.landmarks.length); i++) {
+          const dx = refLandmarks[i][0] - currentFace.landmarks[i][0];
+          const dy = refLandmarks[i][1] - currentFace.landmarks[i][1];
+          totalDistance += Math.sqrt(dx * dx + dy * dy);
+        }
 
-        if (distance > 0.6) {
+        const avgDistance = totalDistance / Math.min(refLandmarks.length, currentFace.landmarks.length);
+
+        if (avgDistance > 50) {
           faceMismatchCounterRef.current++;
 
           if (faceMismatchCounterRef.current >= FACE_MISMATCH_THRESHOLD) {
@@ -385,10 +359,8 @@ export function CameraSelfieStep({
   };
 
   const startDetectionLoop = () => {
-    const options = new faceapi.TinyFaceDetectorOptions();
-
     const loop = async () => {
-      if (!isCameraOn || !videoElementRef.current) return;
+      if (!isCameraOn || !videoElementRef.current || !faceDetectorRef.current) return;
 
       frameCountRef.current++;
 
@@ -398,10 +370,7 @@ export function CameraSelfieStep({
         currentBrightnessRef.current = brightness;
 
         if (brightness < 60) {
-          showMessage(
-            "brightnessMessage",
-            "🌑 Too dark — please move to a brighter place.",
-          );
+          showMessage("brightnessMessage", "🌑 Too dark — please move to a brighter place.");
         } else if (brightness > 180) {
           showMessage("brightnessMessage", "☀️ Too bright — reduce lighting.");
         } else {
@@ -411,7 +380,7 @@ export function CameraSelfieStep({
         if (isVideoBlurred()) {
           showMessage(
             "dashedCircleAlignMessage",
-            "🔍 Video is blurry. Clean your camera lens or adjust focus.",
+            "🔍 Video is blurry. Clean your camera lens or adjust focus."
           );
         }
       }
@@ -419,63 +388,67 @@ export function CameraSelfieStep({
       // Face detection
       if (frameCountRef.current % 1 === 0) {
         try {
-          const res = await faceapi
-            .detectSingleFace(videoElementRef.current, options)
-            .withFaceLandmarks();
+          const detections = await faceDetectorRef.current.estimateFaces(videoElementRef.current, false);
 
-          if (res) {
-            lastLandmarksRef.current = res.landmarks;
-            lastBoxRef.current = res.detection.box;
+          if (detections && detections.length > 0) {
+            const primaryFace = detections[0];
+            lastDetectionRef.current = primaryFace;
 
-            const box = res.detection.box;
-            const landmarks = res.landmarks;
-            const fillPct = (box.height / ovalRef.current.h) * 100;
+            const landmarks = primaryFace.landmarks;
+            const box = primaryFace.boundingBox;
 
-            fillBufferRef.current.push(fillPct);
-            if (fillBufferRef.current.length > 5) fillBufferRef.current.shift();
+            if (landmarks && landmarks.length > 0 && box) {
+              // Calculate face size relative to oval
+              const faceWidth = box.x[1] - box.x[0];
+              const fillPct = (faceWidth / ovalRef.current.w) * 100;
 
-            const smoothedFill =
-              fillBufferRef.current.reduce((a, b) => a + b, 0) /
-              fillBufferRef.current.length;
-            const lowerBound = 55,
-              upperBound = 80;
+              fillBufferRef.current.push(fillPct);
+              if (fillBufferRef.current.length > 5) fillBufferRef.current.shift();
 
-            let sizeOK = false;
+              const smoothedFill =
+                fillBufferRef.current.reduce((a, b) => a + b, 0) /
+                fillBufferRef.current.length;
+              const lowerBound = 55,
+                upperBound = 80;
 
-            if (smoothedFill < lowerBound) {
-              showMessage(
-                "distanceMessage",
-                "📏 Please move closer to the camera.",
-              );
-            } else if (smoothedFill > upperBound) {
-              showMessage(
-                "distanceMessage",
-                "📏 Please move slightly farther away.",
-              );
-            } else {
-              sizeOK = true;
-              showMessage("distanceMessage", "");
-            }
+              let sizeOK = false;
 
-            const faceInside = areLandmarksFullyInsideOval(landmarks);
-
-            if (sizeOK && faceInside) {
-              insideOvalFramesRef.current++;
-
-              if (insideOvalFramesRef.current >= 3) {
+              if (smoothedFill < lowerBound) {
                 showMessage(
-                  "statusMessage",
-                  "✅ Perfect! Stay still inside the dashed circle.",
+                  "distanceMessage",
+                  "📏 Please move closer to the camera."
                 );
-                setIsFaceDetected(true);
-
-                if (!isRecording) {
-                  startRecordingSession();
-                }
+              } else if (smoothedFill > upperBound) {
+                showMessage(
+                  "distanceMessage",
+                  "📏 Please move slightly farther away."
+                );
+              } else {
+                sizeOK = true;
+                showMessage("distanceMessage", "");
               }
-            } else {
-              insideOvalFramesRef.current = 0;
-              setIsFaceDetected(false);
+
+              // Check if face is within oval
+              const faceInside = areLandmarksFullyInsideOval(landmarks);
+
+              if (sizeOK && faceInside) {
+                insideOvalFramesRef.current++;
+
+                if (insideOvalFramesRef.current >= 3) {
+                  showMessage(
+                    "statusMessage",
+                    "✅ Perfect! Stay still inside the dashed circle."
+                  );
+                  setIsFaceDetected(true);
+
+                  if (!isRecording) {
+                    startRecordingSession();
+                  }
+                }
+              } else {
+                insideOvalFramesRef.current = 0;
+                setIsFaceDetected(false);
+              }
             }
           } else {
             setIsFaceDetected(false);
@@ -493,15 +466,13 @@ export function CameraSelfieStep({
     rafIdRef.current = requestAnimationFrame(loop);
   };
 
-  const areLandmarksFullyInsideOval = (
-    landmarks: faceapi.FaceLandmarks68,
-  ): boolean => {
+  const areLandmarksFullyInsideOval = (landmarks: Array<[number, number]>): boolean => {
     const { cx, cy, rOuter } = ovalRef.current;
     const detectionRadius = rOuter * 1.2;
 
-    return landmarks.positions.every((point) => {
-      const dx = point.x - cx;
-      const dy = point.y - cy;
+    return landmarks.every((point) => {
+      const dx = point[0] - cx;
+      const dy = point[1] - cy;
       return Math.sqrt(dx * dx + dy * dy) <= detectionRadius;
     });
   };
@@ -562,51 +533,8 @@ export function CameraSelfieStep({
     ctx.fillText(
       "Align your face within the white circles",
       cx,
-      cy + biggerRadius + 20,
+      cy + biggerRadius + 20
     );
-
-    // Blinking arc for head turn guidance
-    if (
-      blinkingDirectionRef.current &&
-      blinkVisibleRef.current &&
-      headTurnDirection
-    ) {
-      ctx.beginPath();
-      ctx.lineWidth = 12;
-      ctx.strokeStyle = "rgba(0, 191, 255, 1)";
-      ctx.shadowColor = "rgba(0, 191, 255, 0.7)";
-      ctx.shadowBlur = 20;
-
-      const radius = biggerRadius + 10;
-      let startAngle: number;
-      let endAngle: number;
-
-      switch (headTurnDirection) {
-        case "left":
-          startAngle = -Math.PI * 0.5;
-          endAngle = Math.PI * 0.5;
-          break;
-        case "right":
-          startAngle = Math.PI * 0.5;
-          endAngle = Math.PI * 1.5;
-          break;
-        case "down":
-          startAngle = 0;
-          endAngle = Math.PI;
-          break;
-        case "up":
-          startAngle = Math.PI;
-          endAngle = Math.PI * 2;
-          break;
-        default:
-          startAngle = 0;
-          endAngle = 0;
-      }
-
-      ctx.arc(cx, cy, radius, startAngle, endAngle);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
   };
 
   const generateSegmentDurations = () => {
@@ -620,33 +548,18 @@ export function CameraSelfieStep({
     if (!isFaceDetected) {
       showMessage(
         "statusMessage",
-        "🙋 Please align your face inside the circle first.",
+        "🙋 Please align your face inside the circle first."
       );
       return;
     }
 
-    try {
-      const detection = await faceapi
-        .detectSingleFace(
-          videoElementRef.current!,
-          new faceapi.TinyFaceDetectorOptions(),
-        )
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (detection?.descriptor) {
-        referenceFaceDescriptorRef.current = detection.descriptor;
-      }
-    } catch (err) {
-      console.error("Error capturing reference face:", err);
+    if (lastDetectionRef.current) {
+      referenceFaceDescriptorRef.current = lastDetectionRef.current;
     }
 
     setCurrentSegment(1);
     setIsRecording(true);
     completedSegmentsRef.current = [];
-    verificationDoneForSegmentRef.current = {};
-    headTurnAttemptsPerSegmentRef.current = {};
-    partialSegmentBlobsPerSegmentRef.current = {};
 
     startSegmentRecording(0);
   };
@@ -684,7 +597,7 @@ export function CameraSelfieStep({
 
     showMessage(
       "recordingMessage",
-      `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`,
+      `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`
     );
 
     mediaRecorder.ondataavailable = (e) => {
