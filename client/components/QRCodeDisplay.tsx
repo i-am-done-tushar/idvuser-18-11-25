@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ErrorOutline, Spinner } from './SVG_Files';
 import { generateQRCodeDataURL, QRCodeOptions } from '@/lib/qr-utils';
 
 interface QRCodeDisplayProps {
@@ -75,7 +76,7 @@ export function QRCodeDisplay({
   if (loading) {
     return (
       <div className={`flex justify-center items-center ${sizeClasses[size]} ${className}`}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0073EA]"></div>
+        <Spinner className="rounded-full h-8 w-8 text-[#0073EA]" />
       </div>
     );
   }
@@ -83,19 +84,7 @@ export function QRCodeDisplay({
   if (error) {
     return (
       <div className={`flex flex-col justify-center items-center ${sizeClasses[size]} ${className} bg-gray-100 rounded-lg`}>
-        <svg
-          className="w-6 h-6 text-gray-400 mb-1"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-          />
-        </svg>
+        <ErrorOutline className="w-6 h-6 text-gray-400 mb-1" />
         <span className="text-xs text-gray-500 text-center">QR Error</span>
       </div>
     );
