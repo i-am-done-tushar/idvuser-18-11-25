@@ -55,6 +55,8 @@ export default function DigilockerCallback() {
       sessionStorage.setItem("digilocker_callback_state", state);
       sessionStorage.setItem("digilocker_jti", jti || "");
       sessionStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
+      // Flag to skip terms and conditions on form load
+      sessionStorage.setItem("digilocker_skip_consent", "true");
 
       console.log("✅ DigiLocker data stored in sessionStorage");
   console.log(`🔀 Redirecting to: /form?code=${shortCodeFromState}`);

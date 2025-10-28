@@ -3,6 +3,7 @@ import { CameraDialog } from "./CameraDialog";
 import { UploadDialog } from "./UploadDialog";
 import { DocumentConfig } from "@shared/templates";
 import { getDocumentDefinitionId } from "@/lib/document-definitions";
+import { useToast } from "@/hooks/use-toast";
 import { QRCodeDisplay } from "./QRCodeDisplay";
 import { useSessionSync } from "@/hooks/useSessionSync";
 import { extractSessionFromURL } from "@/lib/qr-utils";
@@ -305,6 +306,8 @@ export function IdentityDocumentForm({
     });
   }, [uploadedDocuments, country, selectedDocument]); // Removed updateSession from dependencies since it's now memoized
 
+  const { toast } = useToast();
+
   useEffect(() => {
     // Check if we're returning from DigiLocker
     const authCode = sessionStorage.getItem("digilocker_auth_code");
@@ -381,8 +384,41 @@ export function IdentityDocumentForm({
         const data = await res.json().catch(() => ({}));
         console.log("✅ DigiLocker document fetched successfully:", data);
         
-        // TODO: use `data` to mark the document as uploaded, store files, etc.
-        // setUploadedDocuments([...]); setUploadedFiles([...]);
+        // Mark document as successfully uploaded
+        if (selectedDocument) {
+          setUploadedDocuments(prev => [...prev, selectedDocument]);
+          setUploadedFiles(prev => [
+            ...prev,
+            {
+              id: String(data.id || Date.now()),
+              name: `${selectedDocument}_digilocker`,
+              size: "DigiLocker Document",
+              type: "application/pdf"
+            }
+          ]);
+
+          // If using lifted state, add document details
+          if (isUsingLiftedState) {
+            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            if (documentDefinitionId) {
+              addDocumentDetail(
+                selectedDocument,
+                documentDefinitionId,
+                data.id
+              );
+            }
+          }
+
+          // Show success notification
+          toast({
+            title: "Document Retrieved Successfully",
+            description: "Your document has been successfully fetched from DigiLocker",
+            duration: 5000,
+          });
+          
+          // Trigger auto-save callback if provided
+          onDocumentUploaded?.();
+        }
 
       } catch (e) {
         console.error("❌ Error fetching DigiLocker document:", e);
@@ -394,6 +430,7 @@ export function IdentityDocumentForm({
         sessionStorage.removeItem("digilocker_callback_timestamp");
         sessionStorage.removeItem("digilocker_code_verifier");
         sessionStorage.removeItem("digilocker_state");
+        sessionStorage.removeItem("digilocker_skip_consent");
         console.log("🧹 DigiLocker session data cleaned up");
       }
     };

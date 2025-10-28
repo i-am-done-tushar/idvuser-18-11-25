@@ -64,8 +64,13 @@ export function IdentityVerificationPage({
   const [hasShownWelcomeBackToast, setHasShownWelcomeBackToast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
-  const [showConsentDialog, setShowConsentDialog] = useState(true);
-  const [hasConsented, setHasConsented] = useState(false);
+  // Check if we're coming from DigiLocker to skip consent
+  const [showConsentDialog, setShowConsentDialog] = useState(
+    !sessionStorage.getItem("digilocker_skip_consent")
+  );
+  const [hasConsented, setHasConsented] = useState(
+    !!sessionStorage.getItem("digilocker_skip_consent")
+  );
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
   // Track which sections are expanded (can have multiple expanded at once)
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({ 1: true });
