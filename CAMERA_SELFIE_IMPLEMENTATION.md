@@ -265,9 +265,18 @@ const MAX_HEAD_TURN_ATTEMPTS = 2; // Attempts for head verification
 const FACE_MISMATCH_THRESHOLD = 3; // Frames for mismatch detection
 ```
 
+## Why ML5.js?
+
+ML5.js was chosen over face-api.js because:
+1. **Better npm compatibility**: Works seamlessly with Vite/modern bundlers
+2. **CDN-based models**: No need to bundle model files, reduces bundle size
+3. **Ease of use**: Simpler API with built-in TensorFlow.js integration
+4. **Reliability**: Models are served from Google's infrastructure
+5. **Active maintenance**: Regular updates and bug fixes
+
 ## License
 
 This component uses:
 
-- face-api.js (MIT License)
+- ml5.js (MIT License)
 - TensorFlow.js (Apache 2.0 License)
