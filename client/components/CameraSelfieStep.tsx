@@ -32,7 +32,10 @@ const FACE_MISMATCH_THRESHOLD = 3;
 
 type VerificationDirection = "left" | "right" | "up" | "down";
 
-export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepProps) {
+export function CameraSelfieStep({
+  onComplete,
+  submissionId,
+}: CameraSelfieStepProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -209,7 +212,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
         }, duration);
       }
     },
-    [isMobile]
+    [isMobile],
   );
 
   const startCamera = async () => {
@@ -244,14 +247,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
           ) {
             showMessage(
               "cameraErrorMessage",
-              "⚠️ Low camera resolution. Face detection may not work properly."
+              "⚠️ Low camera resolution. Face detection may not work properly.",
             );
           }
 
           if (settings.frameRate && settings.frameRate < 15) {
             showMessage(
               "cameraErrorMessage",
-              "⚠️ Low frame rate. Detection quality may be affected."
+              "⚠️ Low frame rate. Detection quality may be affected.",
             );
           }
         }
@@ -282,7 +285,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
             }
 
             console.log(
-              `Overlay and brightness canvas set up with dimensions: ${w}x${h}`
+              `Overlay and brightness canvas set up with dimensions: ${w}x${h}`,
             );
           }
         };
@@ -309,13 +312,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     const ctx = canvas.getContext("2d");
     if (!ctx) return 0;
 
-    ctx.drawImage(
-      videoElementRef.current,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    ctx.drawImage(videoElementRef.current, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
 
@@ -333,20 +330,13 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   };
 
   const isVideoBlurred = (): boolean => {
-    if (!brightnessCanvasRef.current || !videoElementRef.current)
-      return false;
+    if (!brightnessCanvasRef.current || !videoElementRef.current) return false;
 
     const canvas = brightnessCanvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return false;
 
-    ctx.drawImage(
-      videoElementRef.current,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    ctx.drawImage(videoElementRef.current, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
 
@@ -375,13 +365,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     const ctx = canvas.getContext("2d");
     if (!ctx) return true;
 
-    ctx.drawImage(
-      videoElementRef.current,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    ctx.drawImage(videoElementRef.current, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
     let blackPixels = 0;
@@ -408,17 +392,17 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
       const detection = await faceapi
         .detectSingleFace(
           videoElementRef.current,
-          new faceapi.TinyFaceDetectorOptions()
+          new faceapi.TinyFaceDetectorOptions(),
         )
         .withFaceDescriptor();
 
       if (detection && detection.descriptor) {
         const distance = faceapi.euclideanDistance(
           referenceFaceDescriptorRef.current,
-          detection.descriptor
+          detection.descriptor,
         );
         console.log(
-          `[FaceCheck] distance=${distance.toFixed(3)}, counter=${faceMismatchCounterRef.current}`
+          `[FaceCheck] distance=${distance.toFixed(3)}, counter=${faceMismatchCounterRef.current}`,
         );
 
         if (distance > 0.6) {
@@ -459,7 +443,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
           }
           showMessage(
             "cameraErrorMessage",
-            "⚠️ Camera feed appears blank. Check your camera or refresh the page."
+            "⚠️ Camera feed appears blank. Check your camera or refresh the page.",
           );
         } else if (brightness < 60) {
           if (isRecording) {
@@ -467,16 +451,13 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
           }
           showMessage(
             "brightnessMessage",
-            "🌑 Too dark — please move to a brighter place."
+            "🌑 Too dark — please move to a brighter place.",
           );
         } else if (brightness > 180) {
           if (isRecording) {
             restartCurrentSegmentDueToFaceLoss();
           }
-          showMessage(
-            "brightnessMessage",
-            "☀️ Too bright — reduce lighting."
-          );
+          showMessage("brightnessMessage", "☀️ Too bright — reduce lighting.");
         } else {
           showMessage("brightnessMessage", "");
         }
@@ -487,7 +468,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
           }
           showMessage(
             "dashedCircleAlignMessage",
-            "🔍 Video is blurry. Clean your camera lens or adjust focus."
+            "🔍 Video is blurry. Clean your camera lens or adjust focus.",
           );
         }
       }
@@ -522,12 +503,12 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
             if (smoothedFill < lowerBound) {
               showMessage(
                 "distanceMessage",
-                "📏 Please move closer to the camera."
+                "📏 Please move closer to the camera.",
               );
             } else if (smoothedFill > upperBound) {
               showMessage(
                 "distanceMessage",
-                "📏 Please move slightly farther away from the camera."
+                "📏 Please move slightly farther away from the camera.",
               );
             } else {
               sizeOK = true;
@@ -543,7 +524,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
               if (insideOvalFramesRef.current >= 3) {
                 showMessage(
                   "statusMessage",
-                  "✅ Perfect! Stay still inside the dashed circle."
+                  "✅ Perfect! Stay still inside the dashed circle.",
                 );
                 setIsFaceDetected(true);
 
@@ -564,12 +545,12 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
               if (!sizeOK && !faceInside) {
                 showMessage(
                   "dashedCircleAlignMessage",
-                  "🧭 Make sure your full face is inside the dashed circle and adjust distance."
+                  "🧭 Make sure your full face is inside the dashed circle and adjust distance.",
                 );
               } else if (!faceInside) {
                 showMessage(
                   "dashedCircleAlignMessage",
-                  "🧭 Your entire face must be inside the dashed circle."
+                  "🧭 Your entire face must be inside the dashed circle.",
                 );
               } else {
                 showMessage("dashedCircleAlignMessage", "");
@@ -596,7 +577,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   };
 
   const areLandmarksFullyInsideOval = (
-    landmarks: faceapi.FaceLandmarks68
+    landmarks: faceapi.FaceLandmarks68,
   ): boolean => {
     const { cx, cy, rOuter } = ovalRef.current;
     const detectionRadius = rOuter * 1.2;
@@ -664,7 +645,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     ctx.fillText(
       "Align your face within the white circles",
       cx,
-      cy + biggerRadius + 20
+      cy + biggerRadius + 20,
     );
   };
 
@@ -679,7 +660,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     if (!isFaceDetected) {
       showMessage(
         "statusMessage",
-        "🙋 Please align your face inside the circle and adjust distance before starting."
+        "🙋 Please align your face inside the circle and adjust distance before starting.",
       );
       return;
     }
@@ -688,7 +669,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
       const detection = await faceapi
         .detectSingleFace(
           videoElementRef.current!,
-          new faceapi.TinyFaceDetectorOptions()
+          new faceapi.TinyFaceDetectorOptions(),
         )
         .withFaceLandmarks()
         .withFaceDescriptor();
@@ -698,14 +679,11 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
         console.log("✅ Reference face captured");
       } else {
         console.log(
-          "⚠️ Face not detected clearly; continuing without reference descriptor"
+          "⚠️ Face not detected clearly; continuing without reference descriptor",
         );
       }
     } catch (err) {
-      console.error(
-        "❌ FaceAPI error while capturing reference face:",
-        err
-      );
+      console.error("❌ FaceAPI error while capturing reference face:", err);
     }
 
     setCurrentSegment(1);
@@ -748,7 +726,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
     showMessage(
       "recordingMessage",
-      `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`
+      `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`,
     );
 
     mediaRecorder.ondataavailable = (e) => {
@@ -761,8 +739,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     };
 
     mediaRecorder.onstop = async () => {
-      const chunks =
-        recordedChunksPerSegmentRef.current[currentSegment] || [];
+      const chunks = recordedChunksPerSegmentRef.current[currentSegment] || [];
 
       if (chunks.length > 0) {
         const blob = new Blob(chunks, {
@@ -814,11 +791,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     restartCooldownRef.current = true;
     console.log("Restart cooldown activated.");
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
       stoppingForRestartRef.current = true;
       showMessage(
         "verificationMessage",
-        "⚠️ Recording reset due to face loss. Continuing from current progress..."
+        "⚠️ Recording reset due to face loss. Continuing from current progress...",
       );
       console.log("Recording reset due to face loss or quality issues.");
 
@@ -826,12 +806,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
       try {
         console.log(
-          `Stopping mediaRecorder. Current state: ${mediaRecorderRef.current.state}`
+          `Stopping mediaRecorder. Current state: ${mediaRecorderRef.current.state}`,
         );
         mediaRecorderRef.current.stop();
         console.log("MediaRecorder.stop() called successfully.");
       } catch (stopErr) {
-        console.error(`Error stopping mediaRecorder during restart: ${stopErr}`);
+        console.error(
+          `Error stopping mediaRecorder during restart: ${stopErr}`,
+        );
       }
     } else {
       console.log("MediaRecorder not recording or undefined, skipping stop.");
@@ -851,14 +833,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
         resumeTime = segmentSeconds - 1;
         lastAdjustedSegmentSecondsRecordedRef.current = resumeTime;
         console.log(
-          `Adjusted segmentSecondsRecorded by -1 for segment ${currentSegment}`
+          `Adjusted segmentSecondsRecorded by -1 for segment ${currentSegment}`,
         );
       } else {
         resumeTime = segmentSeconds;
       }
 
       console.log(
-        `Resuming recording from ${resumeTime}s for segment ${currentSegment}.`
+        `Resuming recording from ${resumeTime}s for segment ${currentSegment}.`,
       );
 
       if (
@@ -873,7 +855,10 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
   const finishRecording = () => {
     setIsRecording(false);
-    showMessage("recordingMessage", "✅ All segments & verifications complete. Thank you!");
+    showMessage(
+      "recordingMessage",
+      "✅ All segments & verifications complete. Thank you!",
+    );
     setShowSuccessScreen(true);
 
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
