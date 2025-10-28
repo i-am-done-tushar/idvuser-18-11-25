@@ -61,6 +61,7 @@ The `CameraSelfieStep` component has been significantly enhanced to match the fu
 ### ML5.js Face Detection
 
 The component uses ml5.js `facemesh` model which:
+
 - Detects up to 2 faces in the video
 - Provides 468 facial landmarks for precise face alignment
 - Automatically loads TensorFlow.js dependencies
@@ -268,6 +269,7 @@ const FACE_MISMATCH_THRESHOLD = 3; // Frames for mismatch detection
 ## Why ML5.js?
 
 ML5.js was chosen over face-api.js because:
+
 1. **Better npm compatibility**: Works seamlessly with Vite/modern bundlers
 2. **CDN-based models**: No need to bundle model files, reduces bundle size
 3. **Ease of use**: Simpler API with built-in TensorFlow.js integration
