@@ -48,28 +48,24 @@ The `CameraSelfieStep` component has been significantly enhanced to match the fu
 {
   "@tensorflow/tfjs": "^4.17.0",
   "@tensorflow/tfjs-backend-webgl": "^4.17.0",
-  "face-api.js": "^0.22.2"
+  "ml5": "^0.12.0"
 }
 ```
 
 ### Setup Steps
 
-1. Install dependencies: `pnpm install`
-2. Ensure `/public/assets/weights/` directory exists with face-api models
-3. The component will automatically load models on initialization
+1. Install dependencies: `pnpm install` (already included)
+2. The component will automatically load ml5 face detection models on initialization
+3. No additional model files needed - ml5.js loads models from CDN automatically
 
-### Face-API Models Required
+### ML5.js Face Detection
 
-The following models must be available in `/public/assets/weights/`:
-
-- `tiny_face_detector_model-weights_manifest.json`
-- `tiny_face_detector_model-weights.bin`
-- `face_landmark_68_model-weights_manifest.json`
-- `face_landmark_68_model-weights.bin`
-- `face_recognition_model-weights_manifest.json`
-- `face_recognition_model-weights.bin`
-- `face_expression_model-weights_manifest.json`
-- `face_expression_model-weights.bin`
+The component uses ml5.js `facemesh` model which:
+- Detects up to 2 faces in the video
+- Provides 468 facial landmarks for precise face alignment
+- Automatically loads TensorFlow.js dependencies
+- Works out-of-the-box without additional configuration
+- Models are loaded from Google CDN on first use
 
 ## Component Props
 
