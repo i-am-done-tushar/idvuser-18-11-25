@@ -17,6 +17,7 @@ export function PasswordSetupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPasswordStrength, setShowPasswordStrength] = useState(true);
 
   const passwordStrength = validatePassword(password);
   const isPasswordStrong = isPasswordValid(password);
