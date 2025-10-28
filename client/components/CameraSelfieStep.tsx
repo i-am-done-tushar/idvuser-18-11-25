@@ -19,13 +19,6 @@ interface PartialSegmentBlob {
   duration: number;
 }
 
-interface SegmentSubPart {
-  blob: Blob;
-  startTime: number;
-  endTime: number;
-  duration: number;
-}
-
 interface CameraSelfieStepProps {
   onComplete?: () => void;
   submissionId?: number | null;
@@ -59,22 +52,23 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   const [mobileStatusMessage, setMobileStatusMessage] = useState("");
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+  const [showHeadTurnPrompt, setShowHeadTurnPrompt] = useState(false);
+  const [headTurnDirection, setHeadTurnDirection] = useState<VerificationDirection | null>(null);
 
   // Camera & Stream
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const videoElementRef = useRef<HTMLVideoElement | null>(null);
-  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [currentSegment, setCurrentSegment] = useState(0);
   const [segmentDurations, setSegmentDurations] = useState<number[]>([]);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [segmentSecondsRecorded, setSegmentSecondsRecorded] = useState(0);
+  const [isVerifyingHeadTurn, setIsVerifyingHeadTurn] = useState(false);
 
-  // Face Detection & Verification
+  // Refs for internal state (not re-render triggers)
+  const streamRef = useRef<MediaStream | null>(null);
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const referenceFaceDescriptorRef = useRef<Float32Array | null>(null);
   const lastLandmarksRef = useRef<faceapi.FaceLandmarks68 | null>(null);
   const lastBoxRef = useRef<faceapi.Box | null>(null);
@@ -87,45 +81,33 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     h: 0,
   });
 
-  // Recording internals
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksPerSegmentRef = useRef<Record<number, Blob[]>>({});
   const completedSegmentsRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<number | null>(null);
   const rafIdRef = useRef<number | null>(null);
   const frameCountRef = useRef(0);
+  const insideOvalFramesRef = useRef(0);
+  const fillBufferRef = useRef<number[]>([]);
+  const currentBrightnessRef = useRef(100);
+  const faceMismatchCounterRef = useRef(0);
+  const lastYawRef = useRef<number | undefined>();
+  const lastPitchRef = useRef<number | undefined>();
 
-  // Head turn verification
-  const [showHeadTurnPrompt, setShowHeadTurnPrompt] = useState(false);
-  const [headTurnDirection, setHeadTurnDirection] = useState<VerificationDirection | null>(null);
-  const [isVerifyingHeadTurn, setIsVerifyingHeadTurn] = useState(false);
+  // Head turn verification refs
   const headTurnAttemptsRef = useRef(0);
   const headRecordedChunksRef = useRef<Blob[]>([]);
   const headMediaRecorderRef = useRef<MediaRecorder | null>(null);
-
-  // Verification state
   const verificationDoneForSegmentRef = useRef<Record<number, boolean>>({});
   const headTurnAttemptsPerSegmentRef = useRef<Record<number, number>>({});
-  const partialSegmentBlobsPerSegmentRef = useRef<
-    Record<number, PartialSegmentBlob[]>
-  >({});
+  const partialSegmentBlobsPerSegmentRef = useRef<Record<number, PartialSegmentBlob[]>>({});
   const firstVerificationDirectionRef = useRef<VerificationDirection | null>(null);
   const secondVerificationDirectionRef = useRef<VerificationDirection | null>(null);
+  const blinkingDirectionRef = useRef<VerificationDirection | null>(null);
+  const blinkVisibleRef = useRef(false);
+  const blinkIntervalIdRef = useRef<number | null>(null);
 
-  // Brightness & quality
-  const currentBrightnessRef = useRef(100);
-  const insideOvalFramesRef = useRef(0);
-  const fillBufferRef = useRef<number[]>([]);
-
-  // Face mismatch detection
-  const faceMismatchCounterRef = useRef(0);
-
-  const showMessage = useCallback(
-    (setter: (msg: string) => void, msg: string) => {
-      setter(msg);
-    },
-    []
-  );
+  const messageCooldownsRef = useRef<Record<string, boolean>>({});
 
   // Check mobile on resize
   useEffect(() => {
@@ -140,11 +122,9 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   useEffect(() => {
     const init = async () => {
       try {
-        // Setup TensorFlow
         await tf.setBackend("webgl");
         await tf.ready();
 
-        // Load face-api models
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
           faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
@@ -168,8 +148,82 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
       }
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (blinkIntervalIdRef.current) clearInterval(blinkIntervalIdRef.current);
     };
   }, []);
+
+  const showMessage = useCallback(
+    (key: string, msg: string, autoHide = false, duration = 2000) => {
+      if (!msg) return;
+
+      if (isMobile) {
+        setMobileStatusMessage(msg);
+      } else {
+        switch (key) {
+          case "statusMessage":
+            setStatusMessage(msg);
+            break;
+          case "dashedCircleAlignMessage":
+            setDashedCircleAlignMessage(msg);
+            break;
+          case "brightnessMessage":
+            setBrightnessMessage(msg);
+            break;
+          case "distanceMessage":
+            setDistanceMessage(msg);
+            break;
+          case "ovalAlignMessage":
+            setOvalAlignMessage(msg);
+            break;
+          case "recordingMessage":
+            setRecordingMessage(msg);
+            break;
+          case "verificationMessage":
+            setVerificationMessage(msg);
+            break;
+          case "headTurnAttemptStatus":
+            setHeadTurnAttemptStatus(msg);
+            break;
+        }
+      }
+
+      if (autoHide) {
+        setTimeout(() => {
+          if (isMobile) {
+            setMobileStatusMessage("");
+          } else {
+            switch (key) {
+              case "statusMessage":
+                setStatusMessage("");
+                break;
+              case "dashedCircleAlignMessage":
+                setDashedCircleAlignMessage("");
+                break;
+              case "brightnessMessage":
+                setBrightnessMessage("");
+                break;
+              case "distanceMessage":
+                setDistanceMessage("");
+                break;
+              case "ovalAlignMessage":
+                setOvalAlignMessage("");
+                break;
+              case "recordingMessage":
+                setRecordingMessage("");
+                break;
+              case "verificationMessage":
+                setVerificationMessage("");
+                break;
+              case "headTurnAttemptStatus":
+                setHeadTurnAttemptStatus("");
+                break;
+            }
+          }
+        }, duration);
+      }
+    },
+    [isMobile]
+  );
 
   const startCamera = async () => {
     try {
@@ -199,13 +253,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
             overlayRef.current.height = h;
             overlayCanvasRef.current = overlayRef.current;
 
+            const outerRadius = Math.min(w, h) * 0.35;
             ovalRef.current = {
               w: w * 0.5,
               h: h * 0.6,
               cx: w / 2,
               cy: h / 2,
-              rOuter: Math.min(w, h) * 0.35,
-              rInner: Math.min(w, h) * 0.35 * 0.7,
+              rOuter: outerRadius,
+              rInner: outerRadius * 0.7,
             };
 
             if (!brightnessCanvasRef.current) {
@@ -225,19 +280,98 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     } catch (err: any) {
       console.error("Camera initialization failed:", err);
       setCameraError(true);
-
-      if (err.name === "NotAllowedError") {
-        showMessage(
-          (msg) => setCameraError(true),
-          "❌ Camera permission denied."
-        );
-      } else if (err.name === "NotFoundError") {
-        showMessage(
-          (msg) => setCameraError(true),
-          "⚠️ No camera found on this device."
-        );
-      }
     }
+  };
+
+  const getFrameBrightness = (): number => {
+    if (!brightnessCanvasRef.current || !videoElementRef.current) return 0;
+
+    const canvas = brightnessCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
+
+    ctx.drawImage(videoElementRef.current, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+
+    let totalLuminance = 0;
+    const numPixels = pixels.length / 4;
+
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      totalLuminance += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    return totalLuminance / numPixels;
+  };
+
+  const isVideoBlurred = (): boolean => {
+    if (!brightnessCanvasRef.current || !videoElementRef.current) return false;
+
+    const canvas = brightnessCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+
+    ctx.drawImage(videoElementRef.current, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+
+    let sum = 0;
+    let sumSq = 0;
+
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+      sum += brightness;
+      sumSq += brightness * brightness;
+    }
+
+    const mean = sum / (pixels.length / 4);
+    const variance = sumSq / (pixels.length / 4) - mean * mean;
+
+    return variance < 50;
+  };
+
+  const checkDifferentFace = async (): Promise<boolean> => {
+    if (!referenceFaceDescriptorRef.current || !videoElementRef.current) {
+      return false;
+    }
+
+    try {
+      const detection = await faceapi
+        .detectSingleFace(
+          videoElementRef.current,
+          new faceapi.TinyFaceDetectorOptions()
+        )
+        .withFaceDescriptor();
+
+      if (detection && detection.descriptor) {
+        const distance = faceapi.euclideanDistance(
+          referenceFaceDescriptorRef.current,
+          detection.descriptor
+        );
+
+        if (distance > 0.6) {
+          faceMismatchCounterRef.current++;
+
+          if (faceMismatchCounterRef.current >= FACE_MISMATCH_THRESHOLD) {
+            faceMismatchCounterRef.current = 0;
+            return true;
+          }
+        } else {
+          faceMismatchCounterRef.current = 0;
+        }
+      }
+    } catch (err) {
+      console.error("Face check error:", err);
+      faceMismatchCounterRef.current = 0;
+    }
+
+    return false;
   };
 
   const startDetectionLoop = () => {
@@ -248,20 +382,40 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
       frameCountRef.current++;
 
-      // Detect faces periodically
+      // Update brightness periodically
+      if (frameCountRef.current % 6 === 0) {
+        const brightness = getFrameBrightness();
+        currentBrightnessRef.current = brightness;
+
+        if (brightness < 60) {
+          showMessage("brightnessMessage", "🌑 Too dark — please move to a brighter place.");
+        } else if (brightness > 180) {
+          showMessage("brightnessMessage", "☀️ Too bright — reduce lighting.");
+        } else {
+          showMessage("brightnessMessage", "");
+        }
+
+        if (isVideoBlurred()) {
+          showMessage(
+            "dashedCircleAlignMessage",
+            "🔍 Video is blurry. Clean your camera lens or adjust focus."
+          );
+        }
+      }
+
+      // Face detection
       if (frameCountRef.current % 1 === 0) {
         try {
-          const detection = await faceapi
+          const res = await faceapi
             .detectSingleFace(videoElementRef.current, options)
             .withFaceLandmarks();
 
-          if (detection) {
-            lastLandmarksRef.current = detection.landmarks;
-            lastBoxRef.current = detection.detection.box;
+          if (res) {
+            lastLandmarksRef.current = res.landmarks;
+            lastBoxRef.current = res.detection.box;
 
-            // Check face alignment
-            const box = detection.detection.box;
-            const landmarks = detection.landmarks;
+            const box = res.detection.box;
+            const landmarks = res.landmarks;
             const fillPct = (box.height / ovalRef.current.h) * 100;
 
             fillBufferRef.current.push(fillPct);
@@ -277,17 +431,17 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
             if (smoothedFill < lowerBound) {
               showMessage(
-                setDistanceMessage,
+                "distanceMessage",
                 "📏 Please move closer to the camera."
               );
             } else if (smoothedFill > upperBound) {
               showMessage(
-                setDistanceMessage,
+                "distanceMessage",
                 "📏 Please move slightly farther away."
               );
             } else {
               sizeOK = true;
-              showMessage(setDistanceMessage, "");
+              showMessage("distanceMessage", "");
             }
 
             const faceInside = areLandmarksFullyInsideOval(landmarks);
@@ -297,7 +451,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
               if (insideOvalFramesRef.current >= 3) {
                 showMessage(
-                  setStatusMessage,
+                  "statusMessage",
                   "✅ Perfect! Stay still inside the dashed circle."
                 );
                 setIsFaceDetected(true);
@@ -326,7 +480,9 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     rafIdRef.current = requestAnimationFrame(loop);
   };
 
-  const areLandmarksFullyInsideOval = (landmarks: faceapi.FaceLandmarks68) => {
+  const areLandmarksFullyInsideOval = (
+    landmarks: faceapi.FaceLandmarks68
+  ): boolean => {
     const { cx, cy, rOuter } = ovalRef.current;
     const detectionRadius = rOuter * 1.2;
 
@@ -390,7 +546,54 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     ctx.font = "18px Arial";
     ctx.fillStyle = "#ffffffff";
     ctx.textAlign = "center";
-    ctx.fillText("Align your face within the white circles", cx, cy + biggerRadius + 20);
+    ctx.fillText(
+      "Align your face within the white circles",
+      cx,
+      cy + biggerRadius + 20
+    );
+
+    // Blinking arc for head turn guidance
+    if (
+      blinkingDirectionRef.current &&
+      blinkVisibleRef.current &&
+      headTurnDirection
+    ) {
+      ctx.beginPath();
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = "rgba(0, 191, 255, 1)";
+      ctx.shadowColor = "rgba(0, 191, 255, 0.7)";
+      ctx.shadowBlur = 20;
+
+      const radius = biggerRadius + 10;
+      let startAngle: number;
+      let endAngle: number;
+
+      switch (headTurnDirection) {
+        case "left":
+          startAngle = -Math.PI * 0.5;
+          endAngle = Math.PI * 0.5;
+          break;
+        case "right":
+          startAngle = Math.PI * 0.5;
+          endAngle = Math.PI * 1.5;
+          break;
+        case "down":
+          startAngle = 0;
+          endAngle = Math.PI;
+          break;
+        case "up":
+          startAngle = Math.PI;
+          endAngle = Math.PI * 2;
+          break;
+        default:
+          startAngle = 0;
+          endAngle = 0;
+      }
+
+      ctx.arc(cx, cy, radius, startAngle, endAngle);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
   };
 
   const generateSegmentDurations = () => {
@@ -403,7 +606,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
   const startRecordingSession = async () => {
     if (!isFaceDetected) {
       showMessage(
-        setStatusMessage,
+        "statusMessage",
         "🙋 Please align your face inside the circle first."
       );
       return;
@@ -437,7 +640,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
   const startSegmentRecording = async (resumeSecondsRecorded = 0) => {
     if (!streamRef.current) {
-      showMessage(setStatusMessage, "⚠️ Camera not initialized.");
+      showMessage("statusMessage", "⚠️ Camera not initialized.");
       return;
     }
 
@@ -467,7 +670,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     setTimeRemaining(segmentTarget - resumeSecondsRecorded);
 
     showMessage(
-      setRecordingMessage,
+      "recordingMessage",
       `🎥 Recording segment ${currentSegment}... (${segmentTarget - resumeSecondsRecorded}s left)`
     );
 
@@ -481,8 +684,7 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
     };
 
     mediaRecorder.onstop = async () => {
-      const chunks =
-        recordedChunksPerSegmentRef.current[currentSegment] || [];
+      const chunks = recordedChunksPerSegmentRef.current[currentSegment] || [];
 
       if (chunks.length > 0) {
         const blob = new Blob(chunks, {
@@ -525,15 +727,11 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
   const finishRecording = () => {
     setIsRecording(false);
-    showMessage(
-      setRecordingMessage,
-      "✅ All segments complete. Thank you!"
-    );
+    showMessage("recordingMessage", "✅ All segments complete. Thank you!");
     setShowSuccessScreen(true);
 
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
 
-    // Download completed blobs
     downloadAllBlobs();
   };
 
@@ -547,7 +745,6 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
       URL.revokeObjectURL(url);
     });
 
-    // Call onComplete
     onComplete?.();
   };
 
@@ -597,11 +794,21 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
                   uploaded. Thank you for completing the verification process.
                 </div>
               </div>
+            ) : cameraError ? (
+              <div className="flex flex-col items-center gap-4 p-8 rounded-lg border border-red-500 bg-red-50">
+                <div className="text-xl font-bold text-red-700">
+                  ❌ Camera Error
+                </div>
+                <div className="text-center text-red-600">
+                  Unable to access camera. Please check your device settings or
+                  try another device.
+                </div>
+              </div>
             ) : (
               <div className="flex w-full flex-col gap-4">
-                {/* Video Feed */}
+                {/* Video Feed Container */}
                 <div className="flex w-full justify-center">
-                  <div className="flex w-full max-w-[440px] min-h-[380px] flex-col items-center gap-2 rounded-lg border-[1.5px] border-dashed border-step-inactive-border bg-background overflow-hidden">
+                  <div className="relative flex w-full max-w-[440px] min-h-[380px] flex-col items-center gap-2 rounded-lg border-[1.5px] border-dashed border-step-inactive-border bg-background overflow-hidden">
                     <video
                       ref={videoRef}
                       autoPlay
@@ -610,47 +817,62 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
                     />
                     <canvas
                       ref={overlayRef}
-                      className="absolute w-full max-w-[440px] h-[380px]"
+                      className="absolute top-0 left-0 w-full h-full"
                     />
                   </div>
                 </div>
 
                 {/* Status Messages */}
-                <div className="w-full max-w-[440px] mx-auto">
+                <div className="w-full max-w-[440px] mx-auto space-y-2">
                   {statusMessage && (
-                    <div className="text-sm p-2 rounded bg-blue-50 text-blue-700">
+                    <div className="text-sm p-2 rounded bg-blue-50 text-blue-700 border border-blue-200">
                       {statusMessage}
                     </div>
                   )}
                   {recordingMessage && (
-                    <div className="text-sm p-2 rounded bg-green-50 text-green-700">
+                    <div className="text-sm p-2 rounded bg-green-50 text-green-700 border border-green-200">
                       {recordingMessage}
                     </div>
                   )}
                   {dashedCircleAlignMessage && (
-                    <div className="text-sm p-2 rounded bg-yellow-50 text-yellow-700">
+                    <div className="text-sm p-2 rounded bg-yellow-50 text-yellow-700 border border-yellow-200">
                       {dashedCircleAlignMessage}
                     </div>
                   )}
                   {brightnessMessage && (
-                    <div className="text-sm p-2 rounded bg-orange-50 text-orange-700">
+                    <div className="text-sm p-2 rounded bg-orange-50 text-orange-700 border border-orange-200">
                       {brightnessMessage}
                     </div>
                   )}
                   {distanceMessage && (
-                    <div className="text-sm p-2 rounded bg-purple-50 text-purple-700">
+                    <div className="text-sm p-2 rounded bg-purple-50 text-purple-700 border border-purple-200">
                       {distanceMessage}
                     </div>
                   )}
                   {verificationMessage && (
-                    <div className="text-sm p-2 rounded bg-red-50 text-red-700">
+                    <div className="text-sm p-2 rounded bg-red-50 text-red-700 border border-red-200">
                       {verificationMessage}
+                    </div>
+                  )}
+                  {ovalAlignMessage && (
+                    <div className="text-sm p-2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {ovalAlignMessage}
+                    </div>
+                  )}
+                  {headTurnAttemptStatus && (
+                    <div className="text-sm p-2 rounded bg-cyan-50 text-cyan-700 border border-cyan-200">
+                      {headTurnAttemptStatus}
+                    </div>
+                  )}
+                  {mobileStatusMessage && (
+                    <div className="text-sm p-2 rounded bg-slate-50 text-slate-700 border border-slate-200">
+                      {mobileStatusMessage}
                     </div>
                   )}
                 </div>
 
                 {/* Recording Progress */}
-                {isRecording && (
+                {isRecording && currentSegment > 0 && (
                   <div className="w-full max-w-[440px] mx-auto">
                     <div className="flex justify-between text-xs text-gray-600 mb-1">
                       <span>
@@ -660,11 +882,11 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className="bg-green-500 h-2 rounded-full transition-all"
+                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
                         style={{
                           width: `${
                             ((segmentSecondsRecorded /
-                              segmentDurations[currentSegment - 1]) *
+                              (segmentDurations[currentSegment - 1] || 1)) *
                               100) %
                             100
                           }%`,
