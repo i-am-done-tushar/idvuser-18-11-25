@@ -247,9 +247,10 @@ The following features from the Angular component could be implemented:
 
 ```
 CameraSelfieStep
-├── face-api.js
-│   └── @tensorflow/tfjs
-│       └── @tensorflow/tfjs-backend-webgl
+├── ml5.js (face detection)
+│   ├── @tensorflow/tfjs
+│   │   └── @tensorflow/tfjs-backend-webgl
+│   └── TensorFlow models (loaded from CDN)
 ├── React hooks
 │   └── useRef, useState, useEffect, useCallback
 └── useToast (from @/hooks/use-toast)
