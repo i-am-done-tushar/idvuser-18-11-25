@@ -361,8 +361,8 @@ export function Dashboard() {
               </h1>
               <p className="text-[#41424D] font-figtree text-[13px] font-normal leading-[15px] mt-1">
                 Lorem Ipsum is simply dummy text of the printing and typesetting
-                industry. Lorem Ipsum has been the industry's standard dummy text
-                ever since the 1500s.
+                industry. Lorem Ipsum has been the industry's standard dummy
+                text ever since the 1500s.
               </p>
             </div>
           </div>
