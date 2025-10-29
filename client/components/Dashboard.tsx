@@ -1,316 +1,527 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { DashboardSidebar } from "./DashboardSidebar";
-import { DashboardCard } from "./DashboardCard";
-import { OngoingVerificationSection } from "./OngoingVerificationSection";
-import { ExpiredVerificationSection } from "./ExpiredVerificationSection";
-import { VerifiedCredentialsSection } from "./VerifiedCredentialsSection";
-import { ContactAdminSection } from "./ContactAdminSection";
+
+type VerificationStatus = "in_progress" | "not_started" | "expired" | "verified";
+
+interface VerificationCard {
+  id: string;
+  title: string;
+  status: VerificationStatus;
+  documentType: string;
+  progress?: number;
+  expiryDate?: string;
+  expiredDate?: string;
+  completionDate?: string;
+}
+
+const ongoingVerifications: VerificationCard[] = [
+  {
+    id: "1",
+    title: "Employment Verification",
+    status: "in_progress",
+    documentType: "Employee ID Card",
+    progress: 30,
+    expiryDate: "11/12/25",
+  },
+  {
+    id: "2",
+    title: "Employment Verification",
+    status: "not_started",
+    documentType: "Employee ID Card",
+    progress: 0,
+    expiryDate: "11/12/25",
+  },
+  {
+    id: "3",
+    title: "Employment Verification",
+    status: "not_started",
+    documentType: "Employee ID Card",
+    progress: 0,
+    expiryDate: "N/A",
+  },
+];
+
+const expiredVerifications: VerificationCard[] = [
+  {
+    id: "4",
+    title: "Passport Verification",
+    status: "expired",
+    documentType: "Passport",
+    expiredDate: "Oct 10, 2025",
+  },
+  {
+    id: "5",
+    title: "Previous Employment",
+    status: "expired",
+    documentType: "Employment Letter",
+    expiredDate: "Oct 10, 2025",
+  },
+  {
+    id: "6",
+    title: "Arcon Submission",
+    status: "expired",
+    documentType: "Passport",
+    expiredDate: "Oct 10, 2025",
+  },
+];
+
+const verifiedCredentials: VerificationCard[] = [
+  {
+    id: "7",
+    title: "Education Verification",
+    status: "verified",
+    documentType: "Degree Certificate",
+    expiryDate: "Oct 1, 2025",
+    completionDate: "Oct 1, 2025",
+  },
+  {
+    id: "8",
+    title: "Education Verification",
+    status: "verified",
+    documentType: "Degree Certificate",
+    expiryDate: "Oct 1, 2025",
+    completionDate: "Oct 1, 2025",
+  },
+  {
+    id: "9",
+    title: "Education Verification",
+    status: "verified",
+    documentType: "Degree Certificate",
+    expiryDate: "Oct 1, 2025",
+    completionDate: "Oct 1, 2025",
+  },
+];
+
+const StatusBadge = ({ status }: { status: VerificationStatus }) => {
+  const statusConfig = {
+    in_progress: {
+      bg: "#F3E1B0",
+      dotBg: "#C98F20",
+      textColor: "#402C1B",
+      label: "In Progress",
+    },
+    not_started: {
+      bg: "#E9EDF3",
+      dotBg: "#616273",
+      textColor: "#616273",
+      label: "Not Yet Started",
+    },
+    expired: {
+      bg: "#ECB7BF",
+      dotBg: "#D83A52",
+      textColor: "#49290E",
+      label: "Expired",
+    },
+    verified: {
+      bg: "#DBECDD",
+      dotBg: "#5E9872",
+      textColor: "#1C3829",
+      label: "Verified",
+    },
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <div
+      className="flex h-5 px-2 justify-center items-center gap-1 rounded-[20px]"
+      style={{ backgroundColor: config.bg }}
+    >
+      <div
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: config.dotBg }}
+      />
+      <span
+        className="font-roboto text-[13px] font-normal leading-5"
+        style={{ color: config.textColor }}
+      >
+        {config.label}
+      </span>
+    </div>
+  );
+};
+
+const ProgressBar = ({ progress }: { progress: number }) => {
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      <div className="flex justify-between items-start w-full">
+        <span className="text-[#172B4D] font-roboto text-xs font-medium leading-3">
+          Progress
+        </span>
+        <span className="text-[#172B4D] font-roboto text-xs font-medium leading-3">
+          {progress}% {progress > 0 ? "Complete" : ""}
+        </span>
+      </div>
+      <div className="flex items-start gap-2 w-full rounded-xl bg-[#E9EDF3] h-2 overflow-hidden">
+        {progress > 0 && (
+          <div
+            className="h-2 rounded-xl bg-[#0073EA]"
+            style={{ width: `${progress}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+const VerificationCardComponent = ({ card }: { card: VerificationCard }) => {
+  return (
+    <div className="flex p-4 flex-col items-start gap-2 flex-1 rounded bg-white shadow-[0_3px_8px_0_rgba(0,0,0,0.20)] min-w-0">
+      <div className="flex justify-between items-center w-full gap-2">
+        <div className="flex items-start gap-0.5 min-w-0 flex-1">
+          <h3 className="text-[#172B4D] text-center font-roboto text-xl font-bold leading-[30px] truncate">
+            {card.title}
+          </h3>
+        </div>
+        <StatusBadge status={card.status} />
+      </div>
+
+      <div className="flex items-center gap-0.5">
+        <svg
+          className="w-4 h-4 flex-shrink-0"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M9.33073 1.51562V4.26932C9.33073 4.64268 9.33073 4.82937 9.4034 4.97198C9.46733 5.09742 9.56926 5.1994 9.69473 5.26332C9.83733 5.33598 10.024 5.33598 10.3974 5.33598H13.1511M9.33073 11.3359H5.33073M10.6641 8.66927H5.33073M13.3307 6.66142V11.4693C13.3307 12.5894 13.3307 13.1494 13.1127 13.5773C12.921 13.9536 12.6151 14.2595 12.2387 14.4513C11.8109 14.6693 11.2509 14.6693 10.1307 14.6693H5.86406C4.74396 14.6693 4.1839 14.6693 3.75608 14.4513C3.37976 14.2595 3.0738 13.9536 2.88205 13.5773C2.66406 13.1494 2.66406 12.5894 2.66406 11.4693V4.53594C2.66406 3.41583 2.66406 2.85578 2.88205 2.42796C3.0738 2.05163 3.37976 1.74567 3.75608 1.55392C4.1839 1.33594 4.74396 1.33594 5.86406 1.33594H8.00526C8.4944 1.33594 8.739 1.33594 8.9692 1.3912C9.17326 1.44019 9.36833 1.521 9.54733 1.63066C9.74913 1.75434 9.92206 1.92729 10.268 2.2732L12.3935 4.39868C12.7394 4.74458 12.9123 4.91754 13.036 5.11937C13.1457 5.29831 13.2265 5.4934 13.2755 5.69747C13.3307 5.92765 13.3307 6.17224 13.3307 6.66142Z"
+            stroke="#676879"
+            strokeWidth="1.33333"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
+          {card.documentType}
+        </span>
+      </div>
+
+      {card.progress !== undefined && (
+        <div className="flex flex-col items-start gap-1 w-full">
+          <ProgressBar progress={card.progress} />
+        </div>
+      )}
+
+      {card.expiryDate && (
+        <div className="flex items-center gap-0.5">
+          <svg
+            className="w-4 h-4 flex-shrink-0"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M14 6.66146H2M10.6667 1.32812V3.99479M5.33333 1.32812V3.99479M5.2 14.6615H10.8C11.9201 14.6615 12.4801 14.6615 12.908 14.4435C13.2843 14.2517 13.5903 13.9458 13.782 13.5695C14 13.1416 14 12.5816 14 11.4615V5.86146C14 4.74135 14 4.1813 13.782 3.75348C13.5903 3.37715 13.2843 3.07119 12.908 2.87944C12.4801 2.66146 11.9201 2.66146 10.8 2.66146H5.2C4.07989 2.66146 3.51984 2.66146 3.09202 2.87944C2.71569 3.07119 2.40973 3.37715 2.21799 3.75348C2 4.1813 2 4.74135 2 5.86146V11.4615C2 12.5816 2 13.1416 2.21799 13.5695C2.40973 13.9458 2.71569 14.2517 3.09202 14.4435C3.51984 14.6615 4.07989 14.6615 5.2 14.6615Z"
+              stroke="#676879"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
+            {card.expiredDate
+              ? `Expired on ${card.expiredDate}`
+              : card.expiryDate === "N/A"
+                ? "Expires on: N/A"
+                : `Expires on${card.progress !== undefined ? "" : ":"} ${card.expiryDate}`}
+          </span>
+        </div>
+      )}
+
+      {card.status === "verified" && card.completionDate && (
+        <div className="flex justify-between items-start w-full gap-2">
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
+              Expired On
+            </span>
+            <div className="flex items-center gap-0.5">
+              <svg
+                className="w-4 h-4 flex-shrink-0"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M14 6.66146H2M10.6667 1.32812V3.99479M5.33333 1.32812V3.99479M5.2 14.6615H10.8C11.9201 14.6615 12.4801 14.6615 12.908 14.4435C13.2843 14.2517 13.5903 13.9458 13.782 13.5695C14 13.1416 14 12.5816 14 11.4615V5.86146C14 4.74135 14 4.1813 13.782 3.75348C13.5903 3.37715 13.2843 3.07119 12.908 2.87944C12.4801 2.66146 11.9201 2.66146 10.8 2.66146H5.2C4.07989 2.66146 3.51984 2.66146 3.09202 2.87944C2.71569 3.07119 2.40973 3.37715 2.21799 3.75348C2 4.1813 2 4.74135 2 5.86146V11.4615C2 12.5816 2 13.1416 2.21799 13.5695C2.40973 13.9458 2.71569 14.2517 3.09202 14.4435C3.51984 14.6615 4.07989 14.6615 5.2 14.6615Z"
+                  stroke="#676879"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
+                {card.expiryDate}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
+              Completion On
+            </span>
+            <div className="flex items-center gap-0.5">
+              <svg
+                className="w-4 h-4 flex-shrink-0"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M14 6.66146H2M10.6667 1.32812V3.99479M5.33333 1.32812V3.99479M5.2 14.6615H10.8C11.9201 14.6615 12.4801 14.6615 12.908 14.4435C13.2843 14.2517 13.5903 13.9458 13.782 13.5695C14 13.1416 14 12.5816 14 11.4615V5.86146C14 4.74135 14 4.1813 13.782 3.75348C13.5903 3.37715 13.2843 3.07119 12.908 2.87944C12.4801 2.66146 11.9201 2.66146 10.8 2.66146H5.2C4.07989 2.66146 3.51984 2.66146 3.09202 2.87944C2.71569 3.07119 2.40973 3.37715 2.21799 3.75348C2 4.1813 2 4.74135 2 5.86146V11.4615C2 12.5816 2 13.1416 2.21799 13.5695C2.40973 13.9458 2.71569 14.2517 3.09202 14.4435C3.51984 14.6615 4.07989 14.6615 5.2 14.6615Z"
+                  stroke="#676879"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
+                {card.completionDate}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const VerificationSection = ({
+  title,
+  cards,
+}: {
+  title: string;
+  cards: VerificationCard[];
+}) => {
+  return (
+    <div className="flex flex-col items-start gap-2 w-full">
+      <div className="flex h-[26px] px-4 pb-1 flex-col items-start gap-1 w-full">
+        <div className="flex justify-between items-center w-full">
+          <h2 className="text-[#172B4D] font-roboto text-base font-bold leading-[26px]">
+            {title}
+          </h2>
+          <span className="text-[#0073EA] font-roboto text-base font-normal leading-[26px] cursor-pointer hover:underline">
+            View All
+          </span>
+        </div>
+      </div>
+      <div className="flex px-4 pb-4 items-start gap-6 w-full overflow-x-auto">
+        <div className="flex items-start gap-6 min-w-full">
+          {cards.map((card) => (
+            <div key={card.id} className="flex-1 min-w-[280px] max-w-[400px]">
+              <VerificationCardComponent card={card} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export function Dashboard() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState("verified");
   const navigate = useNavigate();
-
-  // Current dashboard user - use a single name so all verification cards show the same user
-  const currentUserName = "Sahil Angad";
-
-  const handleNavigation = (section: string) => {
-    setActiveSection(section);
-  };
+  const [activeNav, setActiveNav] = useState("home");
 
   const navItems = [
     {
-      id: "main",
-      label: "Main Dashboard",
+      id: "home",
+      label: "Home",
       icon: (
-        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
-          <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zM13 3v6h8V3h-8zm0 10v8h8v-8h-8z" />
+        <svg
+          className="w-5 h-5"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M10.8186 2.30492C10.5258 2.07721 10.3794 1.96335 10.2178 1.91959C10.0752 1.88097 9.92484 1.88097 9.78221 1.91959C9.62057 1.96335 9.47418 2.07721 9.18141 2.30492L3.52949 6.70086C3.15168 6.99471 2.96278 7.14163 2.82669 7.32563C2.70614 7.48862 2.61633 7.67224 2.56169 7.86746C2.5 8.08785 2.5 8.32717 2.5 8.8058V14.8349C2.5 15.7683 2.5 16.235 2.68166 16.5916C2.84144 16.9052 3.09641 17.1601 3.41002 17.3199C3.76654 17.5016 4.23325 17.5016 5.16667 17.5016H6.83333C7.06669 17.5016 7.18337 17.5016 7.2725 17.4562C7.3509 17.4162 7.41464 17.3525 7.45459 17.2741C7.5 17.1849 7.5 17.0683 7.5 16.8349V11.3349C7.5 10.8682 7.5 10.6348 7.59083 10.4566C7.67072 10.2998 7.79821 10.1723 7.95501 10.0924C8.13327 10.0016 8.36662 10.0016 8.83333 10.0016H11.1667C11.6334 10.0016 11.8667 10.0016 12.045 10.0924C12.2018 10.1723 12.3293 10.2998 12.4092 10.4566C12.5 10.6348 12.5 10.8682 12.5 11.3349V16.8349C12.5 17.0683 12.5 17.1849 12.5454 17.2741C12.5854 17.3525 12.6491 17.4162 12.7275 17.4562C12.8166 17.5016 12.9333 17.5016 13.1667 17.5016H14.8333C15.7668 17.5016 16.2335 17.5016 16.59 17.3199C16.9036 17.1601 17.1586 16.9052 17.3183 16.5916C17.5 16.235 17.5 15.7683 17.5 14.8349V8.8058C17.5 8.32717 17.5 8.08785 17.4383 7.86746C17.3837 7.67224 17.2939 7.48862 17.1733 7.32563C17.0372 7.14163 16.8483 6.99471 16.4705 6.70086L10.8186 2.30492Z"
+            stroke="#676879"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       ),
-      onClick: () => handleNavigation("main"),
-      isActive: activeSection === "main",
     },
     {
       id: "ongoing",
       label: "Ongoing Verification",
       icon: (
-        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+        <svg
+          className="w-5 h-5"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M11.6615 1.89648V5.3386C11.6615 5.80531 11.6615 6.03867 11.7523 6.21693C11.8322 6.37373 11.9596 6.50121 12.1165 6.58111C12.2947 6.67193 12.528 6.67193 12.9948 6.67193H16.4369M7.49479 13.3385L9.16146 15.0052L12.9115 11.2552M11.6615 1.67188H7.32813C5.92799 1.67188 5.22793 1.67188 4.69315 1.94436C4.22274 2.18404 3.84029 2.56649 3.60061 3.0369C3.32813 3.57168 3.32812 4.27174 3.32812 5.67188V14.3385C3.32812 15.7387 3.32813 16.4387 3.60061 16.9735C3.84029 17.444 4.22274 17.8264 4.69315 18.066C5.22793 18.3385 5.92799 18.3385 7.32813 18.3385H12.6615C14.0616 18.3385 14.7616 18.3385 15.2965 18.066C15.7669 17.8264 16.1493 17.444 16.389 16.9735C16.6615 16.4387 16.6615 15.7387 16.6615 14.3385V6.67188L11.6615 1.67188Z"
+            stroke="#676879"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       ),
-      onClick: () => handleNavigation("ongoing"),
-      isActive: activeSection === "ongoing",
     },
     {
       id: "expired",
       label: "Expired Verification",
       icon: (
-        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+        <svg
+          className="w-5 h-5"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M11.6615 1.89648V5.3386C11.6615 5.80531 11.6615 6.03867 11.7523 6.21693C11.8322 6.37373 11.9596 6.50121 12.1165 6.58111C12.2947 6.67193 12.528 6.67193 12.9948 6.67193H16.4369M7.91146 10.0052L12.0781 14.1719M12.0781 10.0052L7.91146 14.1719M11.6615 1.67188H7.32813C5.92799 1.67188 5.22793 1.67188 4.69315 1.94436C4.22274 2.18404 3.84029 2.56649 3.60061 3.0369C3.32813 3.57168 3.32812 4.27174 3.32812 5.67188V14.3385C3.32812 15.7387 3.32813 16.4387 3.60061 16.9735C3.84029 17.444 4.22274 17.8264 4.69315 18.066C5.22793 18.3385 5.92799 18.3385 7.32813 18.3385H12.6615C14.0616 18.3385 14.7616 18.3385 15.2965 18.066C15.7669 17.8264 16.1493 17.444 16.389 16.9735C16.6615 16.4387 16.6615 15.7387 16.6615 14.3385V6.67188L11.6615 1.67188Z"
+            stroke="#676879"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       ),
-      onClick: () => handleNavigation("expired"),
-      isActive: activeSection === "expired",
     },
     {
       id: "verified",
       label: "Verified Credentials",
       icon: (
-        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
-          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+        <svg
+          className="w-5 h-5"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g clipPath="url(#clip0_9130_10239)">
+            <path
+              d="M6.2474 9.9974L8.7474 12.4974L13.7474 7.4974M18.3307 9.9974C18.3307 14.5997 14.5997 18.3307 9.9974 18.3307C5.39502 18.3307 1.66406 14.5997 1.66406 9.9974C1.66406 5.39502 5.39502 1.66406 9.9974 1.66406C14.5997 1.66406 18.3307 5.39502 18.3307 9.9974Z"
+              stroke="#676879"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </g>
+          <defs>
+            <clipPath id="clip0_9130_10239">
+              <rect width="20" height="20" fill="white" />
+            </clipPath>
+          </defs>
         </svg>
       ),
-      onClick: () => handleNavigation("verified"),
-      isActive: activeSection === "verified",
     },
     {
       id: "contact",
       label: "Contact Admin",
       icon: (
-        <svg fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5">
-          <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12h-8v-2h8v2zm0-3h-8V9h8v2zm0-3h-8V6h8v2z" />
+        <svg
+          className="w-5 h-5"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M2.5 6.5C2.5 5.09987 2.5 4.3998 2.77248 3.86503C3.01217 3.39462 3.39462 3.01217 3.86503 2.77248C4.3998 2.5 5.09987 2.5 6.5 2.5H13.5C14.9002 2.5 15.6002 2.5 16.135 2.77248C16.6054 3.01217 16.9878 3.39462 17.2275 3.86503C17.5 4.3998 17.5 5.09987 17.5 6.5V11C17.5 12.4002 17.5 13.1002 17.2275 13.635C16.9878 14.1054 16.6054 14.4878 16.135 14.7275C15.6002 15 14.9002 15 13.5 15H8.06979C7.54975 15 7.28973 15 7.04101 15.0511C6.82036 15.0963 6.60683 15.1713 6.40624 15.2738C6.18014 15.3893 5.9771 15.5517 5.57101 15.8765L3.58313 17.4668C3.23639 17.7442 3.06303 17.8829 2.91712 17.8831C2.79023 17.8832 2.67018 17.8255 2.59103 17.7263C2.5 17.6123 2.5 17.3903 2.5 16.9463V6.5Z"
+            stroke="#676879"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       ),
-      onClick: () => handleNavigation("contact"),
-      isActive: activeSection === "contact",
     },
   ];
-
-  const dashboardCards = [
-    {
-      id: "ongoing",
-      title: "Ongoing Verification",
-      description: "Verifications currently in progress",
-      count: 2,
-      color: "blue" as const,
-    },
-    {
-      id: "expired",
-      title: "Expired Verification",
-      description: "Verifications that have expired",
-      count: 1,
-      color: "red" as const,
-    },
-    {
-      id: "verified",
-      title: "Verified Credentials",
-      description: "Successfully verified credentials",
-      count: 5,
-      color: "green" as const,
-    },
-    {
-      id: "contact",
-      title: "Contact Admin",
-      description: "Need help? Reach out to support",
-      color: "orange" as const,
-    },
-  ];
-
-  const getPageTitle = () => {
-    const titles: Record<string, string> = {
-      main: "Dashboard Home",
-      ongoing: "Ongoing Verifications",
-      expired: "Expired Verifications",
-      verified: "Verified Credentials",
-      contact: "Contact Administrator",
-    };
-    return titles[activeSection] || "Dashboard";
-  };
-
-  const getPageDescription = () => {
-    const descriptions: Record<string, string> = {
-      ongoing:
-        "View and manage all verifications currently in progress. Your data is encrypted and secure.",
-      expired:
-        "Review verifications that have expired. Re-submit if needed to complete your verification.",
-      verified:
-        "View and manage all successful verifications. Your data is encrypted and accessible only to authorized parties.",
-      contact:
-        "Have questions or need assistance? Get in touch with our support team.",
-    };
-    return descriptions[activeSection] || "";
-  };
 
   return (
-    <div className="w-full h-screen bg-page-background flex flex-row">
-      {/* Desktop Sidebar - Left Side, Full Height */}
-      {/* Desktop Sidebar - Left Side, Full Height */}
-      <div className="hidden lg:flex lg:w-64 bg-white border-r border-border flex-shrink-0 h-screen flex-col z-10 lg:pt-14">
-        <nav className="flex-1 px-4 py-6 flex flex-col gap-2 overflow-auto">
+    <div className="flex flex-col w-full h-screen bg-white">
+      {/* Header */}
+      <div className="flex w-full h-11 px-3 lg:px-4 justify-between items-center flex-shrink-0 border-b border-[#DEDEDD] bg-white">
+        <img
+          src="https://api.builder.io/api/v1/image/assets/TEMP/4566b1e4f2b69299156b1f1c61472e06e0ad9666?width=180"
+          alt="Logo"
+          className="w-[90px] h-7 flex-shrink-0 object-contain"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/profile")}
+            className="flex w-8 h-8 p-2 justify-center items-center gap-2 rounded-[50px] bg-[#F65F7C]"
+          >
+            <span className="text-white font-roboto text-xs font-medium leading-[10px]">
+              OS
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div className="flex items-start flex-1 w-full bg-white overflow-hidden">
+        {/* Sidebar */}
+        <div className="hidden md:flex w-[180px] py-2 flex-col items-start flex-shrink-0 border-r border-[#D0D4E4] bg-white h-full overflow-y-auto">
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => item.onClick()}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-all text-left ${
-                item.isActive
-                  ? "bg-[#0073EA]/10 text-[#0073EA] border border-[#0073EA]/20"
-                  : "text-text-primary hover:bg-page-background"
-              }`}
+              onClick={() => setActiveNav(item.id)}
+              className="flex px-4 py-2 items-center gap-1 w-full bg-white hover:bg-[#F6F7FB] transition-colors"
             >
-              <span className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-                {item.icon}
-              </span>
-              <span className="font-roboto text-sm font-medium leading-normal">
+              {item.icon}
+              <span className="text-[#505258] text-center font-roboto text-[11px] font-bold leading-5">
                 {item.label}
               </span>
             </button>
           ))}
-        </nav>
-      </div>
-
-      {/* Right Section - Header + Content */}
-      <div className="flex-1 flex flex-col overflow-hidden lg:pt-14">
-        {/* Header */}
-        <div className="lg:fixed lg:top-0 lg:left-0 lg:right-0 lg:z-50 relative z-50 flex w-full h-14 items-center justify-between px-4 lg:px-8 border-b border-border bg-white gap-4 flex-shrink-0">
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-text-primary hover:text-text-muted transition-colors"
-            aria-label="Open menu"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
-
-          {/* Logo */}
-          <div className="flex items-center lg:hidden">
-            <svg
-              width="64"
-              height="16"
-              viewBox="0 0 64 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-3.5"
-            >
-              <path
-                d="M19.6451 6.27505C20.4605 5.29486 21.4477 4.80469 22.6065 4.80469C23.2074 4.80469 23.76 4.97008 24.2643 5.30072C24.7686 5.63143 25.1548 6.05658 25.4231 6.57622L25.5679 4.96414H27.6281V14.7073H25.5679L25.4231 13.0776C25.1548 13.5972 24.7686 14.0224 24.2643 14.353C23.76 14.6837 23.2074 14.8491 22.6065 14.8491C21.4477 14.8491 20.4605 14.359 19.6451 13.3787C18.8296 12.3867 18.4219 11.1998 18.4219 9.81804C18.4219 8.43624 18.8296 7.25524 19.6451 6.27505ZM21.3833 11.625C21.8339 12.1327 22.3812 12.3867 23.025 12.3867C23.6795 12.3867 24.2321 12.1387 24.6827 11.6426C25.1334 11.1348 25.3587 10.5266 25.3587 9.81804C25.3587 9.10947 25.1334 8.50713 24.6827 8.0111C24.2321 7.50326 23.6795 7.24938 23.025 7.24938C22.3812 7.24938 21.8339 7.50326 21.3833 8.0111C20.9327 8.50713 20.7073 9.10947 20.7073 9.81804C20.7073 10.5266 20.9327 11.1289 21.3833 11.625ZM29.5129 4.96414H31.573L31.734 6.36361C32.2598 5.38342 33.1343 4.89332 34.3575 4.89332C34.6686 4.89332 34.9369 4.91693 35.1622 4.96414L34.6954 7.35568C34.5667 7.33207 34.4755 7.3202 34.4219 7.3202C33.6707 7.3202 33.0431 7.57415 32.5387 8.08199C32.0344 8.57795 31.7823 9.42237 31.7823 10.6152V14.7073H29.5129V4.96414ZM37.3457 6.29279C38.2255 5.31253 39.2932 4.82243 40.5485 4.82243C41.2996 4.82243 42.0025 5.01729 42.657 5.40702C43.3115 5.78495 43.8534 6.29866 44.2825 6.94821L42.4156 8.31227C41.9542 7.67452 41.3319 7.35568 40.5485 7.35568C39.9262 7.35568 39.3951 7.59776 38.9551 8.08199C38.5153 8.56615 38.2953 9.15074 38.2953 9.83578"
-                fill="#323238"
-              />
-              <path
-                d="M26.425 21.7199C27.0492 22.8369 26.2417 24.213 24.9622 24.213H3.93975C2.65324 24.213 1.84661 22.8233 2.48474 21.7062L13.1115 3.10326C13.7582 1.97113 15.3932 1.97882 16.0293 3.11699L26.425 21.7199Z"
-                stroke="#D83A52"
-                strokeWidth="2.42826"
-              />
-            </svg>
-          </div>
-
-          {/* Profile Button */}
-          <div className="flex items-center gap-1 ml-auto">
-            <button
-              onClick={() => navigate("/profile")}
-              className="flex items-center gap-2 focus:outline-none"
-            >
-              <div className="flex w-8 h-8 justify-center items-center rounded-full bg-[#F65F7C]">
-                <span className="text-white font-roboto text-xs font-medium">
-                  OS
-                </span>
-              </div>
-              <span className="hidden md:inline text-text-primary font-roboto text-sm">
-                Profile
-              </span>
-            </button>
-          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="w-full px-4 lg:px-8 py-6 gap-6 flex flex-col">
-            {activeSection === "ongoing" ? (
-              <OngoingVerificationSection userName={currentUserName} />
-            ) : activeSection === "expired" ? (
-              <ExpiredVerificationSection userName={currentUserName} />
-            ) : activeSection === "verified" ? (
-              <VerifiedCredentialsSection userName={currentUserName} />
-            ) : activeSection === "contact" ? (
-              <ContactAdminSection />
-            ) : (
-              <>
-                {/* Page Title and Description */}
-                <div className="flex flex-col gap-2">
-                  <h1 className="text-text-primary font-roboto text-[22px] font-bold leading-[30px]">
-                    {getPageTitle()}
-                  </h1>
-                  <p className="text-text-muted font-roboto text-[13px] font-normal leading-[15px]">
-                    {getPageDescription()}
-                  </p>
-                </div>
-
-                {/* Dashboard Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {dashboardCards.map((card) => (
-                    <DashboardCard
-                      key={card.id}
-                      title={card.title}
-                      description={card.description}
-                      count={card.count}
-                      color={card.color}
-                      icon={
-                        card.id === "ongoing" ? (
-                          <svg
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                            className="w-6 h-6 text-[#0073EA]"
-                          >
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                          </svg>
-                        ) : card.id === "expired" ? (
-                          <svg
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                            className="w-6 h-6 text-[#D83A52]"
-                          >
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-                          </svg>
-                        ) : card.id === "verified" ? (
-                          <svg
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                            className="w-6 h-6 text-[#258750]"
-                          >
-                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
-                          </svg>
-                        ) : (
-                          <svg
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                            className="w-6 h-6 text-[#FF9800]"
-                          >
-                            <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12h-8v-2h8v2zm0-3h-8V9h8v2zm0-3h-8V6h8v2z" />
-                          </svg>
-                        )
-                      }
-                      onClick={
-                        card.id !== "contact"
-                          ? () => handleNavigation(card.id)
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+        {/* Main Content Area */}
+        <div className="flex flex-1 h-full flex-col items-start gap-2 bg-[#F6F7FB] overflow-y-auto">
+          {/* Welcome Section */}
+          <div className="flex px-4 py-3 flex-col justify-center items-start gap-1 w-full">
+            <div className="flex flex-col gap-0 w-full">
+              <h1 className="text-[#252529] font-roboto text-xl font-semibold leading-[30px]">
+                Welcome, <span className="font-bold">Opinder Singh</span>
+              </h1>
+              <p className="text-[#41424D] font-figtree text-[13px] font-normal leading-[15px] mt-1">
+                Lorem Ipsum is simply dummy text of the printing and typesetting
+                industry. Lorem Ipsum has been the industry's standard dummy text
+                ever since the 1500s.
+              </p>
+            </div>
           </div>
+
+          {/* Ongoing Verification Section */}
+          <VerificationSection
+            title="Ongoing Verification"
+            cards={ongoingVerifications}
+          />
+
+          {/* Expired Verification Section */}
+          <VerificationSection
+            title="Expired Verification"
+            cards={expiredVerifications}
+          />
+
+          {/* Verified Credentials Section */}
+          <VerificationSection
+            title="Verified Credentials"
+            cards={verifiedCredentials}
+          />
         </div>
       </div>
-
-      {/* Mobile Sidebar */}
-      <DashboardSidebar
-        items={navItems}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
     </div>
   );
 }
