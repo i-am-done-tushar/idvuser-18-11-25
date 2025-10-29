@@ -394,6 +394,7 @@ export function CameraSelfieStep({
           videoElementRef.current,
           new faceapi.TinyFaceDetectorOptions(),
         )
+        .withFaceLandmarks()
         .withFaceDescriptor();
 
       if (detection && detection.descriptor) {
@@ -672,7 +673,8 @@ export function CameraSelfieStep({
           new faceapi.TinyFaceDetectorOptions(),
         )
         .withFaceLandmarks()
-        .withFaceDescriptor();
+        .withFaceDescriptor()
+        .withFaceExpressions();
 
       if (detection && detection.descriptor) {
         referenceFaceDescriptorRef.current = detection.descriptor;
