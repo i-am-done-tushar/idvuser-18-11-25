@@ -16,8 +16,8 @@ export default function Index() {
 
   const DEMO_SHORTCODE = "AYemIxGWTQ1zjei90uyCquVea75MNcfcll7tYW6wp3WSPDKOSBLDMWEEoOmyM2ljt0vzkm75pVrSekH9uXS_TVRFNoIQ8BCJhPKRPdPLzywDu-13MBt3OF0smun8rIRjlIX43ORXimsrxPQ4ixGX8grfU0cqyNequuyYQKTqz3oGrY75eZTYvqxWk35tPnn4slRlRCKM2nJLv31L6YcBZo-SKdGrxSZokDzWQEVnd4mDSVwo7zUSpn-1r8ei4uFRcPTZDVvo8ODiAtdMf9D0a6IULBiXs14";
 
-  // const API_BASE = "https://idvapi-test.arconnet.com:1019";
-  const API_BASE = "https://idvapi-test.arconnet.com:1019";
+  // const API_BASE = "http://10.10.2.133:8080";
+  const API_BASE = "http://10.10.2.133:8080";
 
     // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 

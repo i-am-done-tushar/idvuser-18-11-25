@@ -23,7 +23,7 @@ interface CapturedImage {
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
   import.meta.env.VITE_API_URL ||
-  "https://idvapi-test.arconnet.com:1019";
+  "http://10.10.2.133:8080";
 
 export function CameraDialog({
   isOpen,
