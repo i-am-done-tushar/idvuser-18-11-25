@@ -22,10 +22,8 @@ import {
 import { truncate } from "fs";
 
 // ---- single source of truth for API base ----
-// const API_BASE = "http://10.10.2.133:8080";
-const API_BASE = "http://10.10.2.133:8080";
-
-  // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+// read API base from Vite env; do not hardcode
+const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 // 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
 const BYPASS_OTP_FOR_DEVELOPMENT = true;
