@@ -9,10 +9,12 @@ import { useSessionSync } from "@/hooks/useSessionSync";
 import { extractSessionFromURL } from "@/lib/qr-utils";
 import { CloseIcon, Spinner } from "./SVG_Files";
 
-// const API_BASE = "http://10.10.2.133:8080";
-const API_BASE = "http://10.10.2.133:8080";
+// read API base from env; avoid hardcoding
+const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
-  // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+// base for IdentityVerification service (uses port 8086 in some environments)
+const IDV_VERIFICATION_BASE =
+  import.meta.env.VITE_IDV_VERIFICATION_BASE || import.meta.env.VITE_IDV_API_BASE || import.meta.env.VITE_API_BASE || "";
 
 interface UploadedFile {
   id: string;
@@ -102,11 +104,11 @@ export function IdentityDocumentForm({
     try {
       setIsDigilockerLoading(true);
 
-      const res = await fetch(
-        `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(getBackString)}`,
-        // `http://localhost:62435/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(getBackString)}`,
-        { method: "GET", headers: { accept: "*/*" } }
-      );
+      const authUrl = `${IDV_VERIFICATION_BASE}/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
+        getBackString,
+      )}`;
+
+      const res = await fetch(authUrl, { method: "GET", headers: { accept: "*/*" } });
 
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -400,8 +402,7 @@ const email = "siddhi.tawde@arconnet.com";
 const templateName = "Test Template";
 
 
-      const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
-      // const url = new URL(`http://localhost:62435/api/IdentityVerification/fetch-document`);
+  const url = new URL(`${IDV_VERIFICATION_BASE}/api/IdentityVerification/fetch-document`);
 
       url.searchParams.set("AuthCode", authCode);
       url.searchParams.set("CodeVerifier", codeVerifier);

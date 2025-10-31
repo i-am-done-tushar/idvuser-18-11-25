@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { IdentityVerificationPage } from "@/components/IdentityVerificationPage";
 import { ShortCodeResolveResponse } from "@shared/api";
+import Dev_shortcode from "./Development_shortcode";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -16,10 +17,8 @@ export default function Index() {
 
   const DEMO_SHORTCODE = "AYemIxGWTQ1zjei90uyCquVea75MNcfcll7tYW6wp3WSPDKOSBLDMWEEoOmyM2ljt0vzkm75pVrSekH9uXS_TVRFNoIQ8BCJhPKRPdPLzywDu-13MBt3OF0smun8rIRjlIX43ORXimsrxPQ4ixGX8grfU0cqyNequuyYQKTqz3oGrY75eZTYvqxWk35tPnn4slRlRCKM2nJLv31L6YcBZo-SKdGrxSZokDzWQEVnd4mDSVwo7zUSpn-1r8ei4uFRcPTZDVvo8ODiAtdMf9D0a6IULBiXs14";
 
-  // const API_BASE = "http://10.10.2.133:8080";
-  const API_BASE = "http://10.10.2.133:8080";
-
-    // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+  // read API base from env; avoid hardcoding
+  const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
   // Check for DigiLocker callback at root URL
   useEffect(() => {
@@ -110,7 +109,9 @@ export default function Index() {
   // If no shortcode in URL, show the shortcode input page
   if (!shortCode) {
     return (
+      
       <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <Dev_shortcode />
         <div className="max-w-md w-full space-y-8">
           <div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
