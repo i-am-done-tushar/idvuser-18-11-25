@@ -1,13 +1,15 @@
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useRef } from "react";
+import { useForm, useController} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import personalInfoSchema, { PersonalInfoSchema } from "@/validations/personalInfoSchema";
+import { makePersonalInfoSchema, PersonalInfoSchema } from "@/validations/personalInfoSchema";
+// import personalInfoSchema, { PersonalInfoSchema } from "@/validations/personalInfoSchema";
 import { FormData } from "@shared/templates";
 import { COUNTRY_PHONE_RULES, digitsOnly } from "@/lib/validation";
 
 interface PersonalInformationFormProps {
   formData: FormData;
-  setFormData: (data: FormData) => void;
+  // setFormData: (data: FormData) => void;
+  setFormData: React.Dispatch<React.SetStateAction<FormData>>; 
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   onSendEmailOTP: () => void;
@@ -39,17 +41,19 @@ interface PersonalInformationFormProps {
   };
 }
 
-export function PersonalInformationForm({
-  formData,
-  setFormData,
-  isEmailVerified,
-  isPhoneVerified,
-  onSendEmailOTP,
-  onSendPhoneOTP,
-  fieldConfig = {},
-}: PersonalInformationFormProps) {
-  // ---- required toggles (for star marks only; validation is handled by schema you control) ----
+export function PersonalInformationForm(props: PersonalInformationFormProps) {
+  const {
+    formData,
+    setFormData,
+    isEmailVerified,
+    isPhoneVerified,
+    onSendEmailOTP,
+    onSendPhoneOTP,
+    fieldConfig = {},
+  } = props;
+
   const rt = fieldConfig?.requiredToggles ?? {};
+
   const isRequired = (field: string) => {
     const map: Record<string, boolean> = {
       dateOfBirth: !!rt.dob,
@@ -95,6 +99,26 @@ export function PersonalInformationForm({
     return fieldConfig[key as keyof typeof fieldConfig] === true;
   };
 
+  // Stable defaults on mount
+  const initialDefaults = useMemo(() => formData as PersonalInfoSchema, []); // mount-only
+  // ⬇️ NEW: Build schema from toggles
+  const schema = useMemo(() => makePersonalInfoSchema(rt), [rt]);
+
+    const REQUIRED_KEYS = useMemo(() => {
+    const keys: (keyof PersonalInfoSchema)[] = ["firstName", "lastName", "email"];
+    if (rt.dob) keys.push("dateOfBirth");
+    if (rt.middleName) keys.push("middleName");
+    if (rt.gender) keys.push("gender");
+    if (rt.currentAddress) keys.push("address");
+    if (rt.currentCity) keys.push("city");
+    if (rt.currentPostal) keys.push("postalCode");
+    if (rt.permanentAddress) keys.push("permanentAddress");
+    if (rt.permanentCity) keys.push("permanentCity");
+    if (rt.permanentPostal) keys.push("permanentPostalCode");
+    if (rt.phoneNumber) keys.push("countryCode", "phoneNumber");
+    return keys;
+  }, [rt]);
+
   // ---- RHF + Zod ----
   const {
     register,
@@ -102,17 +126,52 @@ export function PersonalInformationForm({
     setValue,
     watch,
     getValues,
-    formState: { errors },
+    formState: { errors},
+    reset,
+    clearErrors,
+    trigger,
+    control, 
   } = useForm<PersonalInfoSchema>({
-    resolver: zodResolver(personalInfoSchema),
+    resolver: zodResolver(schema),
     mode: "onBlur",
-    defaultValues: formData as unknown as PersonalInfoSchema,
+    reValidateMode: "onChange",
+    shouldUnregister: false,
+    defaultValues: initialDefaults,
   });
 
-  // keep parent state synced
+  const { field: dob } = useController({
+    name: "dateOfBirth",
+    control,
+  });
+
+
+  // ----- Guard to avoid feedback loop -----
+  const hydratingRef = useRef(false);
+  const debounceTimerRef = useRef<number | null>(null);
+
+  // Hydrate form and validate only required fields
   useEffect(() => {
-    const sub = watch((values) => setFormData(values as unknown as FormData));
-    return () => sub.unsubscribe();
+    hydratingRef.current = true;
+    reset(formData as PersonalInfoSchema, { keepDefaultValues: false });
+    clearErrors();
+    void trigger(REQUIRED_KEYS); // ⬅️ only required fields gate the next section
+    const t = window.setTimeout(() => { hydratingRef.current = false; }, 0);
+    return () => window.clearTimeout(t);
+  }, [formData, reset, clearErrors, trigger, REQUIRED_KEYS]);
+
+  // Child → parent with debounce
+  useEffect(() => {
+    const sub = watch((values: Partial<PersonalInfoSchema>) => {
+      if (hydratingRef.current) return;
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = window.setTimeout(() => {
+        setFormData(prev => ({ ...prev, ...(values as Partial<FormData>) }));
+      }, 200) as unknown as number;
+    });
+    return () => {
+      sub.unsubscribe();
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+    };
   }, [watch, setFormData]);
 
   // DOB adapters
@@ -155,7 +214,7 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Name"
-                      value={formData.firstName}
+                      // value={formData.firstName}
                       {...register("firstName", {
                         onChange: (e) =>
                           setValue("firstName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
@@ -191,7 +250,7 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Your Full Name"
-                      value={formData.lastName}
+                      // value={formData.lastName}
                       {...register("lastName", {
                         onChange: (e) =>
                           setValue("lastName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
@@ -229,7 +288,7 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Name"
-                      value={formData.middleName}
+                      // value={formData.middleName}
                       {...register("middleName")}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                     />
@@ -253,13 +312,13 @@ export function PersonalInformationForm({
                     <input
                       type="date"
                       placeholder="DD/MM/YYYY"
-                      value={formatDOBToInput(watch("dateOfBirth"))}
-                      onChange={(e) =>
-                        setValue("dateOfBirth", parseInputDateToDOB(e.target.value), {
-                          shouldValidate: true,
-                          shouldTouch: true,
-                        })
-                      }
+                      value={formatDOBToInput(dob.value)}                 // ⬅️ render DD/MM/YYYY as YYYY-MM-DD
+                      onChange={(e) => dob.onChange(                     // ⬅️ store back as DD/MM/YYYY
+                        parseInputDateToDOB(e.target.value)
+                      )}
+                      onBlur={dob.onBlur}
+                      name={dob.name}
+                      ref={dob.ref}
                       aria-invalid={!!errors.dateOfBirth}
                       aria-describedby={errors.dateOfBirth ? "err-dateOfBirth" : undefined}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
@@ -295,7 +354,7 @@ export function PersonalInformationForm({
                         <input
                           type="email"
                           placeholder="Enter Your Email Address"
-                          value={formData.email}
+                          // value={formData.email}
                           {...register("email", {
                             onChange: (e) =>
                               setValue("email", e.target.value.trim(), { shouldValidate: true }),
@@ -360,7 +419,7 @@ export function PersonalInformationForm({
                         <input
                           type="tel"
                           placeholder="Enter Your Mobile Number"
-                          value={formData.phoneNumber}
+                          // value={formData.phoneNumber}
                           {...register("phoneNumber", {
                             onChange: (e) =>
                               setValue("phoneNumber", digitsOnly(e.target.value), { shouldValidate: true }),
@@ -490,7 +549,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 123 MG Road, Shastri Nagar, Near City Park"
-                          value={formData.address}
+                          // value={formData.address}
                           {...register("address")}
                           aria-invalid={!!errors.address}
                           aria-describedby={errors.address ? "err-address" : undefined}
@@ -521,7 +580,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g Mumbai"
-                          value={formData.city}
+                          // value={formData.city}
                           {...register("city")}
                           aria-invalid={!!errors.city}
                           aria-describedby={errors.city ? "err-city" : undefined}
@@ -549,7 +608,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 432001"
-                          value={formData.postalCode}
+                          // value={formData.postalCode}
                           {...register("postalCode")}
                           aria-invalid={!!errors.postalCode}
                           aria-describedby={errors.postalCode ? "err-postalCode" : undefined}
@@ -595,7 +654,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 456 Park Street, Gandhi Nagar, Near Mall"
-                          value={formData.permanentAddress}
+                          // value={formData.permanentAddress}
                           {...register("permanentAddress")}
                           aria-invalid={!!errors.permanentAddress}
                           aria-describedby={errors.permanentAddress ? "err-permanentAddress" : undefined}
@@ -625,7 +684,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g Delhi"
-                          value={formData.permanentCity}
+                          // value={formData.permanentCity}
                           {...register("permanentCity")}
                           aria-invalid={!!errors.permanentCity}
                           aria-describedby={errors.permanentCity ? "err-permanentCity" : undefined}
@@ -653,7 +712,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 110001"
-                          value={formData.permanentPostalCode}
+                          // value={formData.permanentPostalCode}
                           {...register("permanentPostalCode")}
                           aria-invalid={!!errors.permanentPostalCode}
                           aria-describedby={errors.permanentPostalCode ? "err-permanentPostalCode" : undefined}
