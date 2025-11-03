@@ -104,7 +104,7 @@ export function IdentityDocumentForm({
     try {
       setIsDigilockerLoading(true);
 
-      const authUrl = `${IDV_VERIFICATION_BASE}/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
+      const authUrl = `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
         getBackString,
       )}`;
 
@@ -402,7 +402,7 @@ const email = "siddhi.tawde@arconnet.com";
 const templateName = "Test Template";
 
 
-  const url = new URL(`${IDV_VERIFICATION_BASE}/api/IdentityVerification/fetch-document`);
+  const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
 
       url.searchParams.set("AuthCode", authCode);
       url.searchParams.set("CodeVerifier", codeVerifier);
@@ -1238,7 +1238,8 @@ if (data.success === true) {
                       )}
                       {isUploaded && (
                         <span className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded bg-[#EEF2FF] text-[#4F46E5] border border-[#E0E7FF]">
-                          DigiLocker
+                          {/* DigiLocker */}
+                          Uploaded
                         </span>
                       )}
                     </button>
