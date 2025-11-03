@@ -178,7 +178,7 @@ export function IdentityVerificationPage({
     try {
       // First, check if a UserTemplateSubmission already exists
       const checkResponse = await fetch(
-        `${API_BASE}/api/UserTemplateSubmissions?TemplateVersionId=${templateVersion.versionId}&UserId=${userId}`,
+        `https://idvapi-test.arconnet.com:1019/api/UserTemplateSubmissions?TemplateVersionId=${templateVersion.versionId}&UserId=${userId}`,
         {
           method: "GET",
           headers: {
@@ -202,7 +202,7 @@ export function IdentityVerificationPage({
       // If no existing submission found, create a new one
       console.log("No existing submission found, creating new UserTemplateSubmission...");
       const submissionResponse = await fetch(
-        `${API_BASE}/api/UserTemplateSubmissions`,
+        `https://idvapi-test.arconnet.com:1019/api/UserTemplateSubmissions`,
         {
           method: "POST",
           headers: {

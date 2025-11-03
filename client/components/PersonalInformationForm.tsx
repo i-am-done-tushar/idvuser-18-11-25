@@ -155,6 +155,7 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Name"
+                      value={formData.firstName}
                       {...register("firstName", {
                         onChange: (e) =>
                           setValue("firstName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
@@ -190,6 +191,7 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Your Full Name"
+                      value={formData.lastName}
                       {...register("lastName", {
                         onChange: (e) =>
                           setValue("lastName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
@@ -227,6 +229,7 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Name"
+                      value={formData.middleName}
                       {...register("middleName")}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                     />
@@ -292,6 +295,7 @@ export function PersonalInformationForm({
                         <input
                           type="email"
                           placeholder="Enter Your Email Address"
+                          value={formData.email}
                           {...register("email", {
                             onChange: (e) =>
                               setValue("email", e.target.value.trim(), { shouldValidate: true }),
@@ -356,6 +360,7 @@ export function PersonalInformationForm({
                         <input
                           type="tel"
                           placeholder="Enter Your Mobile Number"
+                          value={formData.phoneNumber}
                           {...register("phoneNumber", {
                             onChange: (e) =>
                               setValue("phoneNumber", digitsOnly(e.target.value), { shouldValidate: true }),
@@ -414,6 +419,50 @@ export function PersonalInformationForm({
             </div>
           </div>
 
+          {/* ===== Gender (place before addresses) ===== */}
+          {shouldShowField("gender") && (
+            <div className="flex w-full items-start gap-4 lg:gap-6 mt-6">
+              <div className="flex w-full lg:w-[458px] h-auto lg:h-14 items-start gap-4 lg:gap-6 flex-shrink-0">
+                <div className="flex w-full h-auto lg:h-14 flex-col items-start flex-1">
+                  <div className="flex pb-2 items-start gap-2 self-stretch">
+                    <span className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
+                      Gender <RequiredMark show={isRequired("gender")} />
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                    {["Male", "Female", "Non-Binary", "Prefer Not To Say"].map((option) => (
+                      <label
+                        key={option}
+                        className="flex h-[38px] py-2 pr-2 items-center gap-2 rounded-full cursor-pointer"
+                      >
+                        <span className="w-4 h-4 rounded-full border-[0.667px] border-step-inactive-border bg-background relative inline-flex items-center justify-center">
+                          <input
+                            type="radio"
+                            value={option}
+                            {...register("gender")}
+                            checked={watch("gender") === option}
+                            onChange={() =>
+                              setValue("gender", option, { shouldValidate: true, shouldTouch: true })
+                            }
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            aria-label={option}
+                          />
+                          {watch("gender") === option && (
+                            <span className="absolute inset-1 rounded-full bg-primary" />
+                          )}
+                        </span>
+                        <span className="text-text-muted font-roboto text-[13px] font-normal leading-[22px]">
+                          {option}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ===== Current Address ===== */}
           {shouldShowField("currentAddress") && (
             <div className="flex flex-col items-start gap-4 self-stretch w-full mt-6">
@@ -441,6 +490,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 123 MG Road, Shastri Nagar, Near City Park"
+                          value={formData.address}
                           {...register("address")}
                           aria-invalid={!!errors.address}
                           aria-describedby={errors.address ? "err-address" : undefined}
@@ -471,6 +521,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g Mumbai"
+                          value={formData.city}
                           {...register("city")}
                           aria-invalid={!!errors.city}
                           aria-describedby={errors.city ? "err-city" : undefined}
@@ -498,6 +549,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 432001"
+                          value={formData.postalCode}
                           {...register("postalCode")}
                           aria-invalid={!!errors.postalCode}
                           aria-describedby={errors.postalCode ? "err-postalCode" : undefined}
@@ -543,6 +595,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 456 Park Street, Gandhi Nagar, Near Mall"
+                          value={formData.permanentAddress}
                           {...register("permanentAddress")}
                           aria-invalid={!!errors.permanentAddress}
                           aria-describedby={errors.permanentAddress ? "err-permanentAddress" : undefined}
@@ -572,6 +625,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g Delhi"
+                          value={formData.permanentCity}
                           {...register("permanentCity")}
                           aria-invalid={!!errors.permanentCity}
                           aria-describedby={errors.permanentCity ? "err-permanentCity" : undefined}
@@ -599,6 +653,7 @@ export function PersonalInformationForm({
                         <input
                           type="text"
                           placeholder="e.g 110001"
+                          value={formData.permanentPostalCode}
                           {...register("permanentPostalCode")}
                           aria-invalid={!!errors.permanentPostalCode}
                           aria-describedby={errors.permanentPostalCode ? "err-permanentPostalCode" : undefined}
