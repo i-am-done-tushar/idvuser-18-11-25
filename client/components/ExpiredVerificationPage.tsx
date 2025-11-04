@@ -1,89 +1,56 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { OngoingVerificationCard } from "./OngoingVerificationCard";
+import { ExpiredVerificationCard } from "./ExpiredVerificationCard";
 
-interface VerificationItem {
+interface ExpiredVerificationItem {
   id: string;
   title: string;
   documentType: string;
-  progress: number;
-  expiryDate: string;
-  status: "in-progress" | "not-started";
+  expiredDate: string;
+  issuedOn: string;
 }
 
-const notStartedVerifications: VerificationItem[] = [
+const expiredVerifications: ExpiredVerificationItem[] = [
   {
     id: "1",
-    title: "Employment Verification",
+    title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    progress: 0,
-    expiryDate: "Oct 10, 2025",
-    status: "not-started",
+    expiredDate: "Oct 10, 2025",
+    issuedOn: "June 05, 2025",
   },
   {
     id: "2",
-    title: "Employment Verification",
+    title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    progress: 0,
-    expiryDate: "Oct 10, 2025",
-    status: "not-started",
+    expiredDate: "Oct 10, 2025",
+    issuedOn: "June 05, 2025",
   },
-];
-
-const inProgressVerifications: VerificationItem[] = [
   {
     id: "3",
-    title: "Employment Verification",
+    title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    progress: 15,
-    expiryDate: "Oct 10, 2025",
-    status: "in-progress",
+    expiredDate: "Oct 10, 2025",
+    issuedOn: "June 05, 2025",
   },
   {
     id: "4",
-    title: "Employment Verification",
+    title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    progress: 15,
-    expiryDate: "Oct 9, 2025",
-    status: "in-progress",
+    expiredDate: "Oct 10, 2025",
+    issuedOn: "June 05, 2025",
   },
   {
     id: "5",
-    title: "Employment Verification",
+    title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    progress: 15,
-    expiryDate: "Oct 2, 2025",
-    status: "in-progress",
-  },
-  {
-    id: "6",
-    title: "Employment Verification",
-    documentType: "Employee ID Card",
-    progress: 15,
-    expiryDate: "Sept 28, 2025",
-    status: "in-progress",
-  },
-  {
-    id: "7",
-    title: "Employment Verification",
-    documentType: "Employee ID Card",
-    progress: 15,
-    expiryDate: "Sept 20, 2025",
-    status: "in-progress",
-  },
-  {
-    id: "8",
-    title: "Employment Verification",
-    documentType: "Employee ID Card",
-    progress: 15,
-    expiryDate: "Sept 10, 2025",
-    status: "in-progress",
+    expiredDate: "Oct 10, 2025",
+    issuedOn: "June 05, 2025",
   },
 ];
 
-export function OngoingVerificationPage() {
+export function ExpiredVerificationPage() {
   const navigate = useNavigate();
-  const [activeNav, setActiveNav] = useState("home");
+  const [activeNav, setActiveNav] = useState("expired");
 
   const navItems = [
     {
@@ -143,7 +110,7 @@ export function OngoingVerificationPage() {
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <g clipPath="url(#clip0_11001_25789)">
+          <g clipPath="url(#clip0_11001_26397)">
             <path
               d="M12.5052 7.50521L7.50521 12.5052M7.50521 7.50521L12.5052 12.5052M18.3385 10.0052C18.3385 14.6075 14.6075 18.3385 10.0052 18.3385C5.40283 18.3385 1.67188 14.6075 1.67188 10.0052C1.67188 5.40283 5.40283 1.67188 10.0052 1.67188C14.6075 1.67188 18.3385 5.40283 18.3385 10.0052Z"
               stroke={isActive ? "#0073EA" : "#676879"}
@@ -153,7 +120,7 @@ export function OngoingVerificationPage() {
             />
           </g>
           <defs>
-            <clipPath id="clip0_11001_25789">
+            <clipPath id="clip0_11001_26397">
               <rect width="20" height="20" fill="white" />
             </clipPath>
           </defs>
@@ -279,55 +246,24 @@ export function OngoingVerificationPage() {
             <div className="flex px-4 py-2 items-center gap-2 flex-1 self-stretch">
               <div className="flex items-start gap-2">
                 <h1 className="text-[#172B4D] font-roboto text-xl font-bold leading-[30px]">
-                  Ongoing Verifications
+                  Expired Verification
                 </h1>
               </div>
             </div>
           </div>
 
           <div className="flex px-4 flex-col items-start gap-2.5 flex-1 self-stretch">
-            <div className="flex flex-col items-start gap-2.5 self-stretch">
-              <h2 className="text-[#172B4D] font-roboto text-base font-bold leading-[26px]">
-                Not yet started
-              </h2>
-              <div className="flex items-start gap-5 self-stretch flex-wrap">
-                {notStartedVerifications.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex-1 min-w-[320px] max-w-[400px]"
-                  >
-                    <OngoingVerificationCard
-                      title={item.title}
-                      documentType={item.documentType}
-                      progress={item.progress}
-                      expiryDate={item.expiryDate}
-                      status={item.status}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col items-start gap-2.5 self-stretch">
-              <h2 className="text-[#172B4D] font-roboto text-base font-bold leading-[26px]">
-                In Progress
-              </h2>
-              <div className="flex items-start gap-5 self-stretch flex-wrap">
-                {inProgressVerifications.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex-1 min-w-[320px] max-w-[400px]"
-                  >
-                    <OngoingVerificationCard
-                      title={item.title}
-                      documentType={item.documentType}
-                      progress={item.progress}
-                      expiryDate={item.expiryDate}
-                      status={item.status}
-                    />
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-start gap-5 self-stretch flex-wrap">
+              {expiredVerifications.map((item) => (
+                <div key={item.id} className="flex-1 min-w-[320px] max-w-[400px]">
+                  <ExpiredVerificationCard
+                    title={item.title}
+                    documentType={item.documentType}
+                    expiredDate={item.expiredDate}
+                    issuedOn={item.issuedOn}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -16,6 +16,7 @@ import { Dashboard } from "./components/Dashboard";
 import Profile from "./pages/Profile";
 import { PasswordSetupPage } from "./components/PasswordSetupPage";
 import { OngoingVerificationPage } from "./components/OngoingVerificationPage";
+import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
 
 //1st change
 

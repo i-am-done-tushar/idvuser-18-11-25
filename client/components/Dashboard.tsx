@@ -274,6 +274,7 @@ export function Dashboard() {
           </defs>
         </svg>
       ),
+      onClick: () => navigate("/expired-verification"),
     },
     {
       id: "verified",
