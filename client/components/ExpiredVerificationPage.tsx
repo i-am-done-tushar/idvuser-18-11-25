@@ -253,11 +253,11 @@ export function ExpiredVerificationPage() {
           </div>
 
           <div className="flex px-4 flex-col items-start gap-2.5 flex-1 self-stretch">
-            <div className="flex items-start gap-5 self-stretch flex-wrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 self-stretch">
               {expiredVerifications.map((item) => (
                 <div
                   key={item.id}
-                  className="flex-1 min-w-[320px] max-w-[400px]"
+                  className="w-full"
                 >
                   <ExpiredVerificationCard
                     title={item.title}
