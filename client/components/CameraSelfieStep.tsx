@@ -513,6 +513,7 @@ const startCamera = useCallback(async () => {
     // 4. **Ensure camera status is updated ONLY after play starts**
     // This avoids the issue where video exists but isn't streaming!
     videoEl.onplaying = () => {
+      streamRef.current = stream;
       setIsCameraOn(true);
       logService.log("info", "Camera is playing and detection is allowed.");
     };
@@ -604,8 +605,6 @@ const startCamera = useCallback(async () => {
     console.log("Before detection loop: isCameraOn=", isCameraOn, "video", videoElementRef.current, "stream", streamRef.current);
     logService.log("debug", `Detection precheck: isCameraOn=${isCameraOn} videoRef=${!!videoElementRef.current}`);
 
-
-    _generateSegmentDurations();
 
   } catch (err: any) {
     const errorMsg = `Camera initialization failed: ${err.message || err}`;
@@ -1121,13 +1120,13 @@ const _detectSingleFaceWithLandmarks = useCallback(
             setIsFaceDetected(true);
             await _checkDifferentFace();
 
-            
+            console.log("🎬 Trigger check", { flag: recordingFlagRef.current, isCameraOn, stream: !!streamRef.current });
 
             if (recordingFlagRef.current === 0) {
               await startRecording_FaceReference();
               logService.log("info", "ðŸŽ¥ Starting recording...");
               
-              recordingFlagRef.current = 1;
+              // recordingFlagRef.current = 1;
               try {
                 await _startSegmentRecording(); // identical name & behavior
               } catch (err) {
@@ -1189,7 +1188,7 @@ useEffect(() => {
     // Wait until videoRef is set by React
     function waitForVideoRef(): Promise<HTMLVideoElement> {
       return new Promise((resolve, reject) => {
-        const maxWaitMs = 5000;
+        const maxWaitMs = 20000;
         const pollIntervalMs = 100;
         let waited = 0;
 
@@ -1214,6 +1213,7 @@ useEffect(() => {
       showMessage('cameraErrorMessage', 'Video element not found. Please refresh.');
     }
     await startCamera();
+    _generateSegmentDurations();
   }
   loadModelsAndStart();
 }, []);
@@ -1235,6 +1235,24 @@ useEffect(() => {
     logService.log("info", "Detection loop started because camera is ON.");
   }
 }, [isCameraOn]);
+
+useEffect(() => {
+  const id = window.setInterval(() => {
+    const stuck =
+      recordingFlagRef.current === 1 &&
+      (!isRecordingRef.current ||
+        !mediaRecorderRef.current ||
+        mediaRecorderRef.current.state === "inactive");
+
+    if (stuck) {
+      console.warn("🛠 Resetting stuck recording flag");
+      recordingFlagRef.current = 0;
+    }
+  }, 1500);
+
+  return () => window.clearInterval(id);
+}, []);
+
 
 
 
@@ -1358,6 +1376,7 @@ const startRecording_FaceReference = useCallback(async () => {
   } catch (err) {
     logService.log("error", `❌ Error capturing reference face: ${err}`);
     showMessage("statusMessage", "⚠️ Error detecting face (will continue).");
+    recordingFlagRef.current = 0;
   }
 
   currentSegmentRef.current = 1;
@@ -1366,7 +1385,13 @@ const startRecording_FaceReference = useCallback(async () => {
 
   /* Angular: _startSegmentRecording */
   const _startSegmentRecording = useCallback(
+
     async (resumeSecondsRecorded = 0) => {
+      console.log("🟢 _startSegmentRecording() called", { 
+        stream: !!streamRef.current,
+        tracks: streamRef.current?.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState })),
+      });
+
       try {
         // eslint-disable-next-line no-console
         console.log("_startSegmentRecording called ---", {
@@ -1384,6 +1409,7 @@ const startRecording_FaceReference = useCallback(async () => {
           );
           // eslint-disable-next-line no-console
           console.error("Camera stream not initialized. Aborting segment recording.");
+          recordingFlagRef.current = 0;
           return;
         }
 
@@ -1404,6 +1430,7 @@ const startRecording_FaceReference = useCallback(async () => {
           else {
             logService.log("info", "No supported MIME type found for MediaRecorder on this browser.");
             showMessage("statusMessage", "âš ï¸ MediaRecorder MIME type not supported.");
+            recordingFlagRef.current = 0;
             return;
           }
         } else {
@@ -1433,7 +1460,7 @@ const startRecording_FaceReference = useCallback(async () => {
           segmentSecondsRecordedRef.current = 0;
           extraSecondsRecordedRef.current = 0;
           isSegmentValidRef.current = true;
-          isRecordingRef.current = true;
+          // isRecordingRef.current = true;
           headTurnAttemptsRef.current = 0;
           currentSessionStartTimeRef.current = 0;
 
@@ -1449,12 +1476,40 @@ const startRecording_FaceReference = useCallback(async () => {
 
         headSegmentSecondsRecordedRef.current = 0;
 
+        console.log("🟢 _startSegmentRecording() invoked", {
+          streamExists: !!streamRef.current,
+          trackStates: streamRef.current?.getTracks().map(t => ({
+            kind: t.kind,
+            readyState: t.readyState,
+            enabled: t.enabled,
+          })),
+          videoState: videoElementRef.current?.readyState,
+        });
+
+        // 🟢 Ensure video is actually playing before creating MediaRecorder
+        const videoEl = videoElementRef.current;
+        if (videoEl) {
+          console.log("Waiting for video readiness...");
+          await new Promise<void>((resolve) => {
+            if (videoEl.readyState >= 2 && !videoEl.paused) {
+              console.log("Video already playing");
+              resolve();
+            } else {
+              videoEl.onplaying = () => {
+                console.log("Video is now playing — safe to start MediaRecorder");
+                resolve();
+              };
+            }
+          });
+        }
+
         try {
           mediaRecorderRef.current = new MediaRecorder(streamRef.current, options);
           console.log(`MediaRecorder created for segment ${currentSegmentRef.current}`);
         } catch (err) {
           console.error(`Failed to create MediaRecorder: ${err}`);
           showMessage("statusMessage", "⚠️ Could not create MediaRecorder. Recording aborted.");
+          recordingFlagRef.current = 0;
           return;
         }        
 
@@ -1464,9 +1519,15 @@ const startRecording_FaceReference = useCallback(async () => {
           return;
         }
 
-        isRecordingRef.current = true;
+        // isRecordingRef.current = true;
 
         console.log(`MediaRecorder created for segment ${currentSegmentRef.current}`);
+
+        mediaRecorderRef.current.onstart = () => {
+          console.log("🎥 MediaRecorder started:", mediaRecorderRef.current?.state);
+          recordingFlagRef.current = 1;   // set the flag only once recording truly starts
+          isRecordingRef.current = true;  // mark recording active
+        };
 
         const segmentTarget =
           segmentDurationsRef.current[currentSegmentRef.current - 1];
@@ -1494,6 +1555,9 @@ const startRecording_FaceReference = useCallback(async () => {
         };
 
         mediaRecorderRef.current.onstop = async () => {
+          recordingFlagRef.current = 0;       // ✅ allow retriggers later
+          isRecordingRef.current = false;
+
             console.log(`MediaRecorder stopped for segment ${currentSegmentRef.current}. Total chunks recorded:`, recordedChunksPerSegmentRef.current[currentSegmentRef.current]?.length);
             console.log("⚙️ onstop fired for segment", currentSegmentRef.current);
           const chunkCount =
@@ -1542,6 +1606,9 @@ const startRecording_FaceReference = useCallback(async () => {
             await _performVerificationForCurrentSegment();
             return;
           }
+
+          console.log("💾 Debug: Downloading immediately...");
+          _downloadAllBlobs();
 
           await _onSegmentComplete();
         };
@@ -1604,11 +1671,13 @@ const startRecording_FaceReference = useCallback(async () => {
           }
         }, 1000);
 
-        mediaRecorderRef.current.start(1000);
+        mediaRecorderRef.current.start();
+
       } catch (err) {
         showMessage("statusMessage", "âš ï¸ Unable to start recording segment. Please try again.");
         // eslint-disable-next-line no-console
         console.error("Failed to start recording:", err);
+        recordingFlagRef.current = 0;
       }
     },
     [_checkDifferentFace, showMessage]
@@ -2176,12 +2245,12 @@ const startRecording_FaceReference = useCallback(async () => {
     let options: MediaRecorderOptions | undefined;
     if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9"))
       options = { mimeType: "video/webm;codecs=vp9" };
-    else if (MediaRecorder.isTypeSupported("video/webm")) options = { mimeType: "video/webm" };
-    else if (MediaRecorder.isTypeSupported("video/mp4"))
-      options = { mimeType: "video/mp4", videoBitsPerSecond: 100000 };
+    else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8"))
+      options = { mimeType: "video/webm;codecs=vp8" };
+    else if (MediaRecorder.isTypeSupported("video/webm"))
+      options = { mimeType: "video/webm" };
     else {
-      logService.log("error", "No supported MIME type found for MediaRecorder on this browser.");
-      showMessage("statusMessage", "âš ï¸ MediaRecorder MIME type not supported.");
+      console.error("⚠️ No supported MediaRecorder MIME type found");
       return;
     }
 
@@ -2242,6 +2311,12 @@ const startRecording_FaceReference = useCallback(async () => {
     console.log(`Starting MediaRecorder for segment ${currentSegmentRef.current}`);
 
     headMediaRecorderRef.current.start();
+    console.log("🎥 Recorder started with state:", headMediaRecorderRef.current.state);
+
+    setTimeout(() => {
+      console.log("⏱️ Recorder state after 2s:", mediaRecorderRef.current?.state);
+    }, 2000);
+
 
     const success = await _startHeadMovementVerification(verificationDirection);
 

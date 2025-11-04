@@ -2,7 +2,7 @@ import { useState } from "react";
 import { TemplateVersionSection } from "@shared/api";
 import { PersonalInformationForm } from "./PersonalInformationForm";
 import { IdentityDocumentForm } from "./IdentityDocumentForm";
-import  CameraSelfieStep  from "./CameraSelfieStep";
+import  CameraSelfieStep from "./CameraSelfieStep";
 import { LockedStepComponent } from "./LockedStepComponent";
 import { FormData } from "@shared/templates";
 
