@@ -95,7 +95,8 @@ export function OngoingVerificationCard({
               {documentType}
             </span>
             <div className="text-[#505258] font-roboto text-xs font-normal leading-5">
-              <span className="font-semibold text-[#D83A52]">Expires</span> on {expiryDate}
+              <span className="font-semibold text-[#D83A52]">Expires</span> on{" "}
+              {expiryDate}
             </div>
           </div>
         </div>

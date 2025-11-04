@@ -389,7 +389,8 @@ export function Dashboard() {
                 Welcome, Opinder Singh !
               </h1>
               <p className="text-white font-roboto text-[13px] font-normal leading-[30px]">
-                Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots in a piece of classical Latin
+                Contrary to popular belief, Lorem Ipsum is not simply random
+                text. It has roots in a piece of classical Latin
               </p>
             </div>
           </div>
