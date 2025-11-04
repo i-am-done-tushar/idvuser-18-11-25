@@ -150,7 +150,7 @@ const handleGetTemplate = (req, res) => {
   const template = { ...mockTemplate, id: Number(id) };
   res.json(template);
 };
-const API_BASE_URL = "http://10.10.2.133:8080";
+const API_BASE_URL = "https://idvapi-test.arconnet.com:1019";
 const handleResolveShortCode = async (req, res) => {
   const { shortCode } = req.params;
   if (!shortCode) {
@@ -367,14 +367,6 @@ function createServer() {
     "/api/templates-link-generation/resolve/:shortCode",
     handleResolveShortCode
   );
-  app2.get("/api/links/resolve", (req, res, next) => {
-    const shortCode = req.query.shortCode;
-    if (!shortCode) {
-      return res.status(400).json({ error: "shortCode query parameter is required" });
-    }
-    const modifiedReq = { ...req, params: { ...req.params, shortCode } };
-    handleResolveShortCode(modifiedReq, res);
-  });
   app2.get("/api/TemplateVersion/:versionId", handleGetTemplateVersionDirect);
   return app2;
 }

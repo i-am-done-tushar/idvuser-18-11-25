@@ -1,14 +1,20 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { CameraDialog } from "./CameraDialog";
 import { UploadDialog } from "./UploadDialog";
 import { DocumentConfig } from "@shared/templates";
 import { getDocumentDefinitionId } from "@/lib/document-definitions";
+import { useToast } from "@/hooks/use-toast";
 import { QRCodeDisplay } from "./QRCodeDisplay";
 import { useSessionSync } from "@/hooks/useSessionSync";
 import { extractSessionFromURL } from "@/lib/qr-utils";
+import { CloseIcon, Spinner } from "./SVG_Files";
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+// read API base from env; avoid hardcoding
+const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+
+// base for IdentityVerification service (uses port 8086 in some environments)
+const IDV_VERIFICATION_BASE =
+  import.meta.env.VITE_IDV_VERIFICATION_BASE || import.meta.env.VITE_IDV_API_BASE || import.meta.env.VITE_API_BASE || "";
 
 interface UploadedFile {
   id: string;
@@ -31,8 +37,34 @@ interface IdentityDocumentFormProps {
     uploadedDocuments: string[];
     uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
     documentUploadIds: Record<string, { front?: number; back?: number }>;
+    documentsDetails: Array<{
+      documentName: string;
+      documentDefinitionId: number;
+      frontFileId: number;
+      backFileId?: number;
+      status: "uploaded" | "pending";
+      uploadedAt: string;
+    }>;
   };
-  setDocumentFormState?: (state: any) => void;
+  setDocumentFormState?: React.Dispatch<React.SetStateAction<{
+    country: string;
+    selectedDocument: string;
+    uploadedDocuments: string[];
+    uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
+    documentUploadIds: Record<string, { front?: number; back?: number }>;
+    documentsDetails: Array<{
+      documentName: string;
+      documentDefinitionId: number;
+      frontFileId: number;
+      backFileId?: number;
+      status: "uploaded" | "pending";
+      uploadedAt: string;
+    }>;
+  }>>;
+  // Callback to trigger auto-save after document upload
+  onDocumentUploaded?: () => void;
+  // Added prop to control identity document completion state
+  setIsIdentityDocumentCompleted?: (completed: boolean) => void;
 }
 
 export function IdentityDocumentForm({
@@ -44,6 +76,8 @@ export function IdentityDocumentForm({
   userId,
   documentFormState,
   setDocumentFormState,
+  onDocumentUploaded,
+  setIsIdentityDocumentCompleted,
 }: IdentityDocumentFormProps) {
   // Use lifted state directly if available, otherwise local state
   const [localCountry, setLocalCountry] = useState("");
@@ -56,9 +90,59 @@ export function IdentityDocumentForm({
   const [localDocumentUploadIds, setLocalDocumentUploadIds] = useState<
     Record<string, { front?: number; back?: number }>
   >({});
+  const [isDigilockerLoading, setIsDigilockerLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Build state parameter with shortCode and submissionId for DigiLocker redirect
+  // Format: "shortCode:submissionId" - this allows us to redirect back to the form and fetch saved data
+  const getBackString = `${shortCode || 'unknown'}:${submissionId || 0}`;
+
+  // call backend to get DigiLocker URL and redirect
+  const handleDigilockerClick = async () => {
+    try {
+      setIsDigilockerLoading(true);
+
+      const authUrl = `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
+        getBackString,
+      )}`;
+
+      const res = await fetch(authUrl, { method: "GET", headers: { accept: "*/*" } });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`Failed to generate auth URL: ${res.status} ${txt}`);
+      }
+
+      const { url, codeVerifier } = await res.json();
+
+      // Persist the PKCE code_verifier + state so we can use it after redirect
+      sessionStorage.setItem("digilocker_code_verifier", codeVerifier || "");
+      sessionStorage.setItem("digilocker_state", getBackString);
+      // persist user choice so the callback knows what to mark as uploaded
+      sessionStorage.setItem("digilocker_selected_document", selectedDocument || "");
+      sessionStorage.setItem("digilocker_country", country || "");
+      // Hard redirect to DigiLocker consent page
+      window.location.href = url;
+    } catch (err) {
+      console.error(err);
+      alert("Could not start DigiLocker flow. Please try again.");
+    } finally {
+      setIsDigilockerLoading(false);
+    }
+  };
 
   // Determine if we're using lifted state or local state
   const isUsingLiftedState = !!(documentFormState && setDocumentFormState);
+  
+  console.log('🏗️ IdentityDocumentForm render:', {
+    isUsingLiftedState,
+    hasDocumentFormState: !!documentFormState,
+    hasSetDocumentFormState: !!setDocumentFormState,
+    currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
+    currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
+  });
 
   // Get current state values
   const country = isUsingLiftedState ? documentFormState!.country : localCountry;
@@ -70,10 +154,10 @@ export function IdentityDocumentForm({
   // State setters that work with either lifted or local state
   const setCountry = (value: string) => {
     if (isUsingLiftedState) {
-      setDocumentFormState!({
-        ...documentFormState!,
+      setDocumentFormState!((prevState) => ({
+        ...prevState,
         country: value,
-      });
+      }));
     } else {
       setLocalCountry(value);
     }
@@ -81,54 +165,60 @@ export function IdentityDocumentForm({
 
   const setSelectedDocument = (value: string) => {
     if (isUsingLiftedState) {
-      setDocumentFormState!({
-        ...documentFormState!,
+      setDocumentFormState!((prevState) => ({
+        ...prevState,
         selectedDocument: value,
-      });
+      }));
     } else {
       setLocalSelectedDocument(value);
     }
   };
 
   const setUploadedDocuments = (value: string[] | ((prev: string[]) => string[])) => {
+    console.log('🔧 setUploadedDocuments called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedDocuments) : value;
-      setDocumentFormState!({
-        ...documentFormState!,
+      console.log('🔧 Setting lifted uploadedDocuments:', newValue);
+      setDocumentFormState!((prevState) => ({
+        ...prevState,
         uploadedDocuments: newValue,
-      });
+      }));
     } else {
       if (typeof value === 'function') {
         setLocalUploadedDocuments(value);
       } else {
         setLocalUploadedDocuments(value);
       }
+      console.log('🔧 Setting local uploadedDocuments');
     }
   };
 
   const setUploadedFiles = (value: UploadedFile[] | ((prev: UploadedFile[]) => UploadedFile[])) => {
+    console.log('🔧 setUploadedFiles called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedFiles) : value;
-      setDocumentFormState!({
-        ...documentFormState!,
+      console.log('🔧 Setting lifted uploadedFiles:', newValue);
+      setDocumentFormState!((prevState) => ({
+        ...prevState,
         uploadedFiles: newValue,
-      });
+      }));
     } else {
       if (typeof value === 'function') {
         setLocalUploadedFiles(value);
       } else {
         setLocalUploadedFiles(value);
       }
+      console.log('🔧 Setting local uploadedFiles');
     }
   };
 
   const setDocumentUploadIds = (value: Record<string, { front?: number; back?: number }> | ((prev: Record<string, { front?: number; back?: number }>) => Record<string, { front?: number; back?: number }>)) => {
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.documentUploadIds) : value;
-      setDocumentFormState!({
-        ...documentFormState!,
+      setDocumentFormState!((prevState) => ({
+        ...prevState,
         documentUploadIds: newValue,
-      });
+      }));
     } else {
       if (typeof value === 'function') {
         setLocalDocumentUploadIds(value);
@@ -137,6 +227,73 @@ export function IdentityDocumentForm({
       }
     }
   };
+
+  // Helper to add/update document details after upload
+  const addDocumentDetail = (
+    documentName: string,
+    documentDefinitionId: number,
+    frontFileId: number,
+    backFileId?: number
+  ) => {
+    if (!isUsingLiftedState) return; // Only use this with lifted state
+    
+    setDocumentFormState!((prevState) => {
+      const existingIndex = prevState.documentsDetails.findIndex(
+        (doc) => doc.documentName === documentName
+      );
+      
+      const newDetail = {
+        documentName,
+        documentDefinitionId,
+        frontFileId,
+        backFileId,
+        status: "uploaded" as const,
+        uploadedAt: new Date().toISOString(),
+      };
+      
+      let newDetails;
+      if (existingIndex >= 0) {
+        // Update existing document
+        newDetails = [...prevState.documentsDetails];
+        newDetails[existingIndex] = newDetail;
+      } else {
+        // Add new document
+        newDetails = [...prevState.documentsDetails, newDetail];
+      }
+      
+      console.log('📝 Updated documentsDetails:', newDetails);
+      
+      return {
+        ...prevState,
+        documentsDetails: newDetails,
+      };
+    });
+  };
+
+  // Auto-trigger POST request when documentsDetails changes (new document added)
+  const [previousDocsLength, setPreviousDocsLength] = useState(0);
+  
+  useEffect(() => {
+    if (!isUsingLiftedState || !documentFormState) return;
+    
+    const currentLength = documentFormState.documentsDetails.length;
+    
+    // Only trigger if length increased (new document added)
+    if (currentLength > previousDocsLength && currentLength > 0) {
+      console.log('🔔 documentsDetails changed! Length:', currentLength);
+      console.log('📋 Current documentsDetails:', documentFormState.documentsDetails);
+      
+      // Trigger POST request in background after short delay
+      setTimeout(() => {
+        console.log('⏰ Triggering auto-save after document upload...');
+        console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
+        onDocumentUploaded?.();
+      }, 200);
+    }
+    
+    // Update previous length
+    setPreviousDocsLength(currentLength);
+  }, [documentFormState?.documentsDetails, isUsingLiftedState, onDocumentUploaded, previousDocsLength]);
 
   // Initialize session sync for cross-device functionality
   const { sessionState, updateSession } = useSessionSync({
@@ -148,15 +305,209 @@ export function IdentityDocumentForm({
     formData: { country, selectedDocument },
   });
 
-  // Sync state changes with session
+  // Sync state changes with session (with proper dependency array)
   useEffect(() => {
     updateSession({
       uploadedDocuments,
       formData: { country, selectedDocument },
       currentStep: 'document-upload',
     });
-  }, [uploadedDocuments, country, selectedDocument, updateSession]);
+  }, [uploadedDocuments, country, selectedDocument]); // Removed updateSession from dependencies since it's now memoized
 
+  const { toast } = useToast();
+
+  useEffect(() => {
+    // Check if we're returning from DigiLocker
+    const authCode = sessionStorage.getItem("digilocker_auth_code");
+    const callbackState = sessionStorage.getItem("digilocker_callback_state");
+    const timestamp = sessionStorage.getItem("digilocker_callback_timestamp");
+
+    // Only process if we have fresh DigiLocker data (within last 5 minutes)
+    const isFreshCallback = timestamp && (Date.now() - parseInt(timestamp)) < 5 * 60 * 1000;
+
+    if (!authCode || !callbackState || !isFreshCallback) return;
+
+    console.log("🔐 Processing DigiLocker callback data");
+
+    const run = async () => {
+      const codeVerifier = sessionStorage.getItem("digilocker_code_verifier") || "";
+      const expectedState = sessionStorage.getItem("digilocker_state") || "";
+
+      if (expectedState && callbackState !== expectedState) {
+        console.warn("⚠️ DigiLocker state mismatch");
+        return;
+      }
+
+      // Parse state to get submissionId for context
+      const [stateShortCode, stateSubmissionId] = callbackState.split(":");
+      console.log("📝 DigiLocker callback context:", {
+        shortCode: stateShortCode,
+        submissionId: stateSubmissionId,
+      });
+
+      // Map your selected document id to the label DigiLocker expects
+      // e.g. "aadhaar_card" -> "Aadhaar card"
+      const toRequestedDocType = (id: string) => {
+        const map: Record<string, string> = {
+          aadhaar_card: "Aadhar Card",
+          passport: "Passport",
+          pan_card: "Pan Card",
+          driving_license: "Driving License",
+          voter_id: "Voter ID",
+          // add others as needed
+        };
+        return map[id] ?? id.replace(/_/g, " ");
+      };
+
+      // // You may already know these from your form context
+      // // const requestedDocType = toRequestedDocType(selectedDocument || "Pan Card");
+      // const requestedDocType = toRequestedDocType("Pan Card");
+      // const email = "siddhi.tawde@arconnet.com";         // or from logged-in user context
+      // const documentId = 3;                     // your internal doc def id
+      // const templateName = "Test Template";        // current template name
+
+      // Pull what the user had picked before redirect
+const storedDocId = sessionStorage.getItem("digilocker_selected_document") || selectedDocument || "";
+const storedCountry = sessionStorage.getItem("digilocker_country") || country || "";
+
+// Ensure country is set (so downstream helpers work)
+if (storedCountry && !country) setCountry(storedCountry);
+
+// Normalize and derive display name
+// const docId = (storedDocId || "pan_card").toLowerCase().trim(); // e.g. "pan_card"
+const docId ="pan_card"; // e.g. "pan_card"
+
+const docsForCountry = getDocumentsForCountry(storedCountry || country || "");
+const displayName =
+  docsForCountry
+    .map(d => (typeof d === "string" ? d : d.title))
+    .find(title => toDocId(title) === docId) ||
+  docId.replace(/_/g, " ").replace(/\b\w/g, m => m.toUpperCase());
+
+// Map to DigiLocker’s label
+const requestedDocType = toRequestedDocType(docId);
+
+// Derive DocumentDefinitionId from config or fallback helper
+let documentDefinitionIdStr =
+  getDocumentDefinitionIdFromConfig(storedCountry || country || "", displayName) || "";
+if (!documentDefinitionIdStr) {
+  documentDefinitionIdStr = String(getDocumentDefinitionId(storedCountry || country || "", displayName));
+}
+// const documentDefinitionId = parseInt(documentDefinitionIdStr, 10) || 3;
+const documentDefinitionId = 3;
+
+
+// (Keep these placeholders or wire to your real context)
+const email = "siddhi.tawde@arconnet.com";
+const templateName = "Test Template";
+
+
+  const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
+
+      url.searchParams.set("AuthCode", authCode);
+      url.searchParams.set("CodeVerifier", codeVerifier);
+      url.searchParams.set("RequestedDocType", requestedDocType);
+      url.searchParams.set("EmailID", email);
+      // url.searchParams.set("DocumentID", String(documentId));
+      url.searchParams.set("DocumentID", String(documentDefinitionId));
+      url.searchParams.set("TemplateName", templateName);
+
+      try {
+        const res = await fetch(url.toString(), {
+          method: "POST",
+          headers: { accept: "*/*" },
+          body: ""
+        });
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            console.error("❌ DigiLocker document fetch failed:", {
+              status: res.status,
+              statusText: res.statusText,
+              text
+            });
+            throw new Error(`Failed to fetch document: ${res.status} ${text}`);
+          }
+
+          const data = await res.json().catch((err) => {
+            console.error("❌ Failed to parse DigiLocker response:", err);
+            throw new Error("Invalid response from DigiLocker service");
+          });
+
+          console.log("📝 DigiLocker response:", data);
+
+          // Only check for success flag, not data.id
+if (!data || typeof data.success !== "boolean") {
+  throw new Error("Invalid document data received from DigiLocker");
+}
+
+if (data.success === true) {
+  // Make sure markDocUploaded can compute the definition id (it reads selectedDocument)
+  setSelectedDocument(docId);
+
+  const maybeFileId = Number.isFinite(data.id) ? Number(data.id) : undefined;
+
+  // Single source of truth: flips the tile tick, shows the card, stores fileIds, updates lifted details (if any), advances flow
+  markDocUploaded({
+    docId,
+    displayName,
+    fileId: maybeFileId,
+    source: "DigiLocker",
+  });
+
+  toast({
+    title: `${displayName} Uploaded`,
+    description: data.message || "Document saved successfully.",
+    duration: 5000,
+  });
+} else {
+  toast({
+    title: "Document Fetch Failed",
+    description: data.message || "Failed to fetch document from DigiLocker",
+    duration: 5000,
+    variant: "destructive",
+  });
+}
+
+        } catch (e) {
+        console.error("❌ Error fetching DigiLocker document:", e);
+        toast({
+          title: "Error",
+          description: "Could not fetch DigiLocker document. Please try again.",
+          duration: 5000,
+          variant: "destructive",
+        });
+      } finally {
+        // Clean up DigiLocker session data after processing
+        sessionStorage.removeItem("digilocker_auth_code");
+        sessionStorage.removeItem("digilocker_callback_state");
+        sessionStorage.removeItem("digilocker_callback_timestamp");
+        sessionStorage.removeItem("digilocker_code_verifier");
+        sessionStorage.removeItem("digilocker_state");
+        sessionStorage.removeItem("digilocker_skip_consent");
+        sessionStorage.removeItem("digilocker_selected_document");
+        sessionStorage.removeItem("digilocker_country");
+
+        console.log("🧹 DigiLocker session data cleaned up");
+      }
+    };
+
+    // Only run if we have DigiLocker callback data
+    const handleDigilockerCallback = async () => {
+      if (authCode && callbackState) {
+        try {
+          await run();
+          // After successful document fetch, set identity document as completed
+          setIsIdentityDocumentCompleted?.(true);
+        } catch (error) {
+          console.error("Failed to process DigiLocker callback:", error);
+        }
+      }
+    };
+
+    handleDigilockerCallback();
+  }, []); // Only run once on mount to check for DigiLocker callback
+  
   // Load session state from URL if coming from QR scan
   useEffect(() => {
     const urlSession = extractSessionFromURL();
@@ -268,10 +619,23 @@ export function IdentityDocumentForm({
         (docName) =>
           docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument,
       ) || "";
-    const documentDefinitionId = getDocumentDefinitionId(
+    
+    // First try to get the document definition ID from the API config
+    let documentDefinitionId = getDocumentDefinitionIdFromConfig(
       country,
       selectedDocumentName,
     );
+
+    // Fallback to the hardcoded mapping if not found in config
+    if (!documentDefinitionId) {
+      console.warn(
+        `Document definition ID not found in config for ${selectedDocumentName}, using fallback mapping`
+      );
+      documentDefinitionId = getDocumentDefinitionId(
+        country,
+        selectedDocumentName,
+      );
+    }
 
     formData.append("DocumentDefinitionId", documentDefinitionId);
     formData.append("Bucket", "string");
@@ -325,6 +689,284 @@ export function IdentityDocumentForm({
     return uploadOrUpdateFile(file, filename);
   };
 
+  // Function to download file from server
+  const downloadFileFromServer = async (fileId: number, fileName: string) => {
+    try {
+      console.log('🔽 Starting download for fileId:', fileId, 'fileName:', fileName);
+      const downloadUrl = `${API_BASE}/api/Files/${fileId}/content?inline=false`;
+      console.log('🔽 Download URL:', downloadUrl);
+      
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          Accept: '*/*',
+        },
+      });
+
+      console.log('🔽 Download response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.statusText}`);
+      }
+
+      // Get the blob from response
+      const blob = await response.blob();
+      console.log('🔽 Downloaded blob size:', blob.size, 'bytes');
+      
+      // Create a temporary URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a temporary anchor element and trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || `document-${fileId}`;
+      document.body.appendChild(a);
+      a.click();
+      
+      console.log('🔽 Download triggered for:', fileName);
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('❌ Error downloading file:', error);
+      alert(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Function to download all files for a document (front and back)
+  const downloadDocumentFiles = async (docId: string) => {
+    console.log('📥 downloadDocumentFiles called for docId:', docId);
+    console.log('📥 Available documentUploadIds:', documentUploadIds);
+    
+    const fileIds = documentUploadIds[docId];
+    if (!fileIds) {
+      console.error('❌ No fileIds found for docId:', docId);
+      alert('No files found for this document');
+      return;
+    }
+
+    console.log('📥 Found fileIds:', fileIds);
+
+    const documentName = currentDocuments.find(
+      (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
+    ) || docId.replace(/_/g, " ");
+
+    console.log('📥 Document name:', documentName);
+
+    // Download front side if exists
+    if (fileIds.front) {
+      console.log('📥 Downloading front file, ID:', fileIds.front);
+      await downloadFileFromServer(fileIds.front, `${documentName} - Front.jpg`);
+    }
+
+    // Download back side if exists (with a small delay to avoid browser blocking multiple downloads)
+    if (fileIds.back) {
+      console.log('📥 Downloading back file (after 500ms delay), ID:', fileIds.back);
+      setTimeout(() => {
+        downloadFileFromServer(fileIds.back!, `${documentName} - Back.jpg`);
+      }, 500);
+    }
+  };
+
+  // Normalize a document label into our internal id: "PAN Card" -> "pan_card"
+  const toDocId = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "_");
+
+  // (Only if you need to map "id" -> DigiLocker label)
+  const toRequestedDocType = (id: string) => {
+    const map: Record<string, string> = {
+      aadhaar_card: "Aadhar card",
+      passport: "Passport",
+      pan_card: "Pan card",
+      driving_license: "Driving License",
+      voter_id: "Voter ID",
+    };
+    return map[id] ?? id.replace(/_/g, " ");
+  };
+
+  /**
+   * Marks a document as uploaded in *all* the right places and advances the flow.
+   * - Adds to uploadedDocuments (drives the green tick on the tile)
+   * - Adds/updates uploadedFiles (so it appears in "Documents Uploaded")
+   * - Adds/updates documentUploadIds (to support download)
+   * - Optionally appends documentsDetails (when using lifted state and fileId present)
+   * - Triggers next-section enabling via setIsIdentityDocumentCompleted / onComplete
+   */
+  const markDocUploaded = ({
+    docId,
+    displayName,
+    fileId,
+    source = "DigiLocker",
+  }: {
+    docId: string;
+    displayName: string;
+    fileId?: number; // may be undefined; we still show as uploaded
+    source?: string;
+  }) => {
+    // 1) Green tick + tile state
+    setUploadedDocuments((prev) => (prev.includes(docId) ? prev : [...prev, docId]));
+
+    // 2) Card in "Documents Uploaded" (show even if fileId missing)
+    setUploadedFiles((prev) => {
+      const filtered = prev.filter((f) => !f.id.startsWith(`${docId}-`));
+      return [
+        ...filtered,
+        {
+          id: `${docId}-${fileId ?? "remote"}`,
+          name: `${displayName} (${source})`,
+          size: source === "DigiLocker" ? "Fetched remotely" : "Uploaded",
+          type: "application/pdf",
+        },
+      ];
+    });
+
+    // 3) For download flows, store fileId if we got one
+    setDocumentUploadIds((prev) => ({
+      ...prev,
+      [docId]: {
+        ...(prev[docId] || {}),
+        ...(typeof fileId === "number" ? { front: fileId } : {}),
+      },
+    }));
+
+    // 4) If using lifted state and we got a fileId, add to documentsDetails too
+    if (isUsingLiftedState) {
+      const documentDefinitionId = getCurrentDocumentDefinitionId();
+      if (documentDefinitionId && typeof fileId === "number") {
+        addDocumentDetail(displayName, documentDefinitionId, fileId);
+      }
+    }
+
+    // 5) Advance flow
+    setIsIdentityDocumentCompleted?.(true);
+    onDocumentUploaded?.();
+    onComplete?.();
+
+    // Collapse the upload methods panel
+    setSelectedDocument("");
+  };
+
+  // Function to delete a file from server
+  const deleteFileFromServer = async (fileId: number) => {
+    try {
+      console.log('🗑️ Deleting file ID:', fileId);
+      const deleteUrl = `${API_BASE}/api/Files/${fileId}`;
+      console.log('🗑️ Delete URL:', deleteUrl);
+      
+      const response = await fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+          Accept: '*/*',
+        },
+      });
+
+      console.log('🗑️ Delete response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete file: ${response.statusText}`);
+      }
+
+      console.log('✅ File deleted successfully:', fileId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting file:', error);
+      throw error;
+    }
+  };
+
+  // Function to handle document deletion
+  const handleDeleteDocument = async (docId: string) => {
+    const fileIds = documentUploadIds[docId];
+    if (!fileIds) {
+      console.error('❌ No fileIds found for docId:', docId);
+      alert('No files found for this document');
+      return;
+    }
+
+    const documentName = currentDocuments.find(
+      (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
+    ) || docId.replace(/_/g, " ");
+
+    try {
+      setIsDeleting(true);
+      const deletePromises: Promise<boolean>[] = [];
+
+      // Delete front side if exists
+      if (fileIds.front) {
+        console.log('🗑️ Deleting front file, ID:', fileIds.front);
+        deletePromises.push(deleteFileFromServer(fileIds.front));
+      }
+
+      // Delete back side if exists
+      if (fileIds.back) {
+        console.log('🗑️ Deleting back file, ID:', fileIds.back);
+        deletePromises.push(deleteFileFromServer(fileIds.back));
+      }
+
+      // Wait for all deletions to complete
+      await Promise.all(deletePromises);
+
+      // Remove from uploaded documents list
+      setUploadedDocuments((prev) => prev.filter((id) => id !== docId));
+
+      // Remove from uploaded files list
+      setUploadedFiles((prev) => prev.filter((file) => {
+        const fileDocId = file.id.replace(/-\d+$/, "");
+        return fileDocId !== docId;
+      }));
+
+      // Remove from document upload IDs
+      setDocumentUploadIds((prev) => {
+        const newIds = { ...prev };
+        delete newIds[docId];
+        return newIds;
+      });
+
+      // Remove from documentsDetails array (if using lifted state) and trigger POST
+      if (isUsingLiftedState) {
+        setDocumentFormState!((prevState) => {
+          const newDetails = prevState.documentsDetails.filter(
+            (doc) => doc.documentName !== documentName
+          );
+          console.log('🗑️ Removed from documentsDetails:', documentName);
+          console.log('📋 Updated documentsDetails after deletion:', newDetails);
+          console.log('📊 Remaining documents count:', newDetails.length);
+          
+          // Schedule POST request to run after this state update completes
+          // Use queueMicrotask + setTimeout to ensure React has updated parent state
+          queueMicrotask(() => {
+            setTimeout(() => {
+              if (onDocumentUploaded) {
+                console.log('📤 POST request triggered after deleting:', documentName);
+                console.log('📋 Remaining documents to be sent:', newDetails.map(doc => doc.documentName));
+                onDocumentUploaded();
+              }
+            }, 150); // Delay to ensure parent state is updated
+          });
+          
+          return {
+            ...prevState,
+            documentsDetails: newDetails,
+          };
+        });
+      }
+
+      // Remove from localStorage
+      localStorage.removeItem(`document_${docId}_image`);
+
+      console.log('✅ Document deleted successfully:', documentName);
+      
+      console.log(`✅ ${documentName} deleted and backend will be updated with remaining documents`);
+    } catch (error) {
+      console.error('❌ Error deleting document:', error);
+      alert(`Failed to delete ${documentName}. Please try again.`);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setDocumentToDelete(null);
+    }
+  };
+
   // Get available countries from configuration
   const availableCountries = documentConfig.supportedCountries || [];
 
@@ -336,8 +978,56 @@ export function IdentityDocumentForm({
     return countryData?.documents || [];
   };
 
-  // Get current documents to display
-  const currentDocuments = country ? getDocumentsForCountry(country) : [];
+  // Get document definition ID for a specific document
+  const getDocumentDefinitionIdFromConfig = (countryName: string, documentTitle: string): string | null => {
+    const countryData = availableCountries.find(
+      (c) => c.countryName === countryName,
+    );
+    if (!countryData) return null;
+
+    // Find the document in the country's documents array
+    const doc = countryData.documents.find((d) => {
+      if (typeof d === 'string') {
+        return d === documentTitle;
+      } else {
+        return d.title === documentTitle;
+      }
+    });
+
+    // Return the documentDefinitionId if it exists
+    if (doc && typeof doc !== 'string' && doc.documentDefinitionId) {
+      return doc.documentDefinitionId;
+    }
+
+    return null;
+  };
+
+  // Helper to get documentDefinitionId for current selected document
+  const getCurrentDocumentDefinitionId = (): number | null => {
+    if (!country || !selectedDocument) return null;
+    
+    // Get the human-readable document name
+    const documentName = currentDocuments.find(
+      (docName) => docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
+    );
+    
+    if (!documentName) return null;
+    
+    // Try to get from config first
+    let documentDefinitionId = getDocumentDefinitionIdFromConfig(country, documentName);
+    
+    // Fallback to hardcoded IDs if not in config
+    if (!documentDefinitionId) {
+      documentDefinitionId = getDocumentDefinitionId(country, documentName);
+    }
+    
+    return documentDefinitionId ? parseInt(documentDefinitionId, 10) : null;
+  };
+
+  // Get current documents to display (titles only)
+  const currentDocuments = country 
+    ? getDocumentsForCountry(country).map(d => typeof d === 'string' ? d : d.title)
+    : [];
 
   // Default document colors and icons
   const getDocumentStyle = (docName: string) => {
@@ -546,6 +1236,12 @@ export function IdentityDocumentForm({
                           </svg>
                         </div>
                       )}
+                      {isUploaded && (
+                        <span className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded bg-[#EEF2FF] text-[#4F46E5] border border-[#E0E7FF]">
+                          {/* DigiLocker */}
+                          Uploaded
+                        </span>
+                      )}
                     </button>
                   </div>
                 );
@@ -665,7 +1361,7 @@ export function IdentityDocumentForm({
                   </div>
 
                   {/* Right Section - DigiLocker */}
-                  <div className="flex flex-col gap-4">
+                  {/* <div className="flex flex-col gap-4">
                     <div className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer">
                       <div className="flex flex-col justify-center items-center gap-3">
                         <div className="flex w-[48px] h-[48px] p-2 justify-center items-center rounded-xl bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]">
@@ -701,9 +1397,35 @@ export function IdentityDocumentForm({
                         </div>
                       </div>
                     </div>
-                    
-                    
-                  </div>
+                  </div> */}
+                  <div className="flex flex-col gap-4">
+                  <button
+                    onClick={handleDigilockerClick}
+                    disabled={isDigilockerLoading}
+                    className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    <div className="flex flex-col justify-center items-center gap-3">
+                      <div className="flex w-[48px] h-[48px] p-2 justify-center items-center rounded-xl bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]">
+                        {/* lock icon (unchanged) */}
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                          xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 10V8C6 6.93913 6.42143 5.92172 7.17157 5.17157C7.92172 4.42143 8.93913 4 10 4H14C15.0609 4 16.0783 4.42143 16.8284 5.17157C17.5786 5.92172 18 6.93913 18 8V10M5 10H19C19.5523 10 20 10.4477 20 11V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V11C4 10.4477 4.44772 10 5 10Z"
+                            stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <circle cx="12" cy="15" r="1.5" fill="white"/>
+                        </svg>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="text-[#6366F1] text-center font-figtree text-[14px] font-semibold">
+                          {isDigilockerLoading ? "Opening DigiLocker…" : "DigiLocker"}
+                        </div>
+                        <div className="text-[#676879] text-center font-roboto text-[11px] font-normal leading-4">
+                          Your documents anytime, anywhere
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
                 </div>
 
                 {/* QR Code Upload - Dynamic QR Code */}
@@ -726,7 +1448,7 @@ export function IdentityDocumentForm({
                         />
                       </div>
                       <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
-                        Scan this QR code with your mobile device to continue verification (Click to enlarge)
+                        Scan this QR code with your other device to continue verification.
                       </div>
                     </div>
                   </div>
@@ -760,220 +1482,91 @@ export function IdentityDocumentForm({
       )}
 
       {/* Files Uploaded Section */}
-      {(uploadedFiles.length > 0 || uploadedDocuments.length > 0) && (
+      {(() => {
+        const hasUploadedDocs = uploadedDocuments && uploadedDocuments.length > 0;
+        console.log('🔍 Documents Uploaded section:', {
+          uploadedFiles,
+          uploadedDocuments,
+          hasUploadedDocs,
+          documentUploadIds
+        });
+        return hasUploadedDocs;
+      })() && (
         <div className="flex flex-col items-start gap-4 self-stretch">
           {/* Section Header */}
           <div className="flex flex-col items-start gap-1 self-stretch">
             <div className="flex items-center gap-2 self-stretch">
               <div className="text-text-primary font-roboto text-base font-bold leading-[26px]">
-                Documents Uploaded ({Math.max(uploadedFiles.length, uploadedDocuments.length)})
+                Documents Uploaded
               </div>
             </div>
             <div className="self-stretch text-text-secondary font-roboto text-[13px] font-normal leading-5">
-              Click on any document to view the captured image.
+              Click on any document to download it.
             </div>
           </div>
 
-          {/* Uploaded Files Grid - Matches Figma Design */}
+          {/* Uploaded Files Grid - Uniform Card Design */}
           <div className="flex flex-wrap items-start gap-4 self-stretch">
-            {uploadedFiles.length > 0 ? (
-              uploadedFiles.map((file) => {
-                const docId = file.id.replace(/-\d+$/, "");
-                const isUploaded = uploadedDocuments.includes(docId);
-                const storedImage = localStorage.getItem(`document_${docId}_image`);
-                
-                return (
-                  <div
-                    key={file.id}
-                    className={`flex flex-1 min-w-0 max-w-[456px] p-4 flex-col justify-center items-start gap-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                      isUploaded 
-                        ? 'bg-green-100 border-2 border-green-300 hover:bg-green-200' 
-                        : 'bg-muted hover:bg-muted/80'
-                    }`}
-                    onClick={() => {
-                      if (storedImage) {
-                        // Create a modal to view the image
-                        const modal = document.createElement('div');
-                        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
-                        modal.innerHTML = `
-                          <div class="relative max-w-3xl max-h-[90vh] bg-white rounded-lg p-4">
-                            <button class="absolute top-2 right-2 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300" onclick="this.closest('.fixed').remove()">
-                              ×
-                            </button>
-                            <img src="${storedImage}" alt="${file.name}" class="max-w-full max-h-full object-contain" />
-                            <p class="text-center mt-2 text-sm text-gray-600">${file.name}</p>
-                          </div>
-                        `;
-                        document.body.appendChild(modal);
-                        modal.addEventListener('click', (e) => {
-                          if (e.target === modal) modal.remove();
-                        });
-                      } else {
-                        alert(`No image available for ${file.name}`);
-                      }
-                    }}
-                  >
-                    <div className="flex justify-between items-start self-stretch">
-                      <div className="flex items-center gap-2">
-                        <div className={`flex p-[7px] justify-center items-center gap-2 rounded border ${
-                          isUploaded ? 'border-green-500 bg-green-50' : 'border-border bg-background'
-                        }`}>
-                          {isUploaded ? (
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M13.5 4.5L6 12L2.5 8.5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          ) : (
-                            getFileIcon()
-                          )}
-                        </div>
-                        <div className="flex flex-col justify-center items-start gap-[2px]">
-                          <div className={`font-figtree text-[13px] font-medium leading-normal ${
-                            isUploaded ? 'text-green-800' : 'text-text-primary'
-                          }`}>
-                            {file.name}
-                            {isUploaded && <span className="ml-2 text-xs text-green-600">✓ Uploaded</span>}
-                          </div>
-                          <div className={`font-figtree text-xs font-normal leading-5 ${
-                            isUploaded ? 'text-green-600' : 'text-text-muted'
-                          }`}>
-                            Size {file.size} {storedImage && '• Click to view'}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent modal from opening
-                          removeUploadedFile(file.id);
-                        }}
-                        aria-label="Remove file"
-                        className="flex w-7 h-7 justify-center items-center gap-2.5 rounded-full bg-white/70 hover:bg-white transition-colors"
-                      >
-                        <svg
-                          width="18"
-                          height="18"
-                          viewBox="0 0 18 18"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M13.5 4.5L4.5 13.5M4.5 4.5L13.5 13.5"
-                            stroke="#676879"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              // Fallback: Show uploaded documents from uploadedDocuments array if uploadedFiles is empty
-              uploadedDocuments.map((docId) => {
-                const storedImage = localStorage.getItem(`document_${docId}_image`);
-                const displayName = docId.replace(/_/g, " ");
-                
-                return (
-                  <div
-                    key={docId}
-                    className="flex flex-1 min-w-0 max-w-[456px] p-4 flex-col justify-center items-start gap-2 rounded-lg cursor-pointer transition-all duration-200 bg-green-100 border-2 border-green-300 hover:bg-green-200"
-                    onClick={() => {
-                      if (storedImage) {
-                        // Create a modal to view the image
-                        const modal = document.createElement('div');
-                        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
-                        modal.innerHTML = `
-                          <div class="relative max-w-3xl max-h-[90vh] bg-white rounded-lg p-4">
-                            <button class="absolute top-2 right-2 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300" onclick="this.closest('.fixed').remove()">
-                              ×
-                            </button>
-                            <img src="${storedImage}" alt="${displayName}" class="max-w-full max-h-full object-contain" />
-                            <p class="text-center mt-2 text-sm text-gray-600">${displayName}</p>
-                          </div>
-                        `;
-                        document.body.appendChild(modal);
-                        modal.addEventListener('click', (e) => {
-                          if (e.target === modal) modal.remove();
-                        });
-                      } else {
-                        alert(`No image available for ${displayName}`);
-                      }
-                    }}
-                  >
-                    <div className="flex justify-between items-start self-stretch">
-                      <div className="flex items-center gap-2">
-                        <div className="flex p-[7px] justify-center items-center gap-2 rounded border border-green-500 bg-green-50">
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M13.5 4.5L6 12L2.5 8.5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                        <div className="flex flex-col justify-center items-start gap-[2px]">
-                          <div className="font-figtree text-[13px] font-medium leading-normal text-green-800">
-                            {displayName} <span className="ml-2 text-xs text-green-600">✓ Uploaded</span>
-                          </div>
-                          <div className="font-figtree text-xs font-normal leading-5 text-green-600">
-                            Document captured {storedImage && '• Click to view'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Submit Button and Progress - Show when documents are uploaded */}
-      {uploadedFiles.length > 0 && (
-        <div className="flex flex-col items-start gap-4 self-stretch pt-4 border-t border-border">
-          <button
-            onClick={() => {
-              const requiredIds = currentDocuments.map((docName) =>
-                docName.toLowerCase().replace(/\s+/g, "_"),
-              );
-              const allUploaded = requiredIds.every((id) => 
-                uploadedDocuments.includes(id)
-              );
+            {uploadedDocuments.map((docId) => {
+              const displayName = currentDocuments.find(
+                (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
+              ) || docId.replace(/_/g, " ");
+              const fileIds = documentUploadIds[docId];
+              const hasFileIds = fileIds && (fileIds.front || fileIds.back);
               
-              if (allUploaded) {
-                onComplete?.();
-              } else {
-                // Show which documents are still missing
-                const missingDocs = requiredIds.filter(id => !uploadedDocuments.includes(id));
-                alert(`Please upload the following documents: ${missingDocs.map(id => id.replace(/_/g, ' ')).join(', ')}`);
-              }
-            }}
-            className="flex w-full px-6 py-3 justify-center items-center gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-          >
-            Submit Documents
-          </button>
-          
-          {/* Upload Progress Indicator */}
-          <div className="flex flex-col gap-2 self-stretch">
-            <div className="text-text-secondary font-roboto text-sm">
-              {uploadedDocuments.length} of {currentDocuments.length} required documents uploaded
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {currentDocuments.map((docName) => {
-                const docId = docName.toLowerCase().replace(/\s+/g, "_");
-                const isUploaded = uploadedDocuments.includes(docId);
-                return (
-                  <div
-                    key={docId}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                      isUploaded 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
+              return (
+                <div
+                  key={docId}
+                  className="relative flex w-[180px] h-[180px] p-4 flex-col justify-between items-center gap-3 rounded-lg border-2 border-green-300 bg-green-50 cursor-pointer transition-all duration-200 hover:bg-green-100 hover:border-green-400 hover:shadow-md"
+                  onClick={() => {
+                    console.log('📥 Download clicked for document:', docId, 'File IDs:', fileIds);
+                    if (hasFileIds) {
+                      downloadDocumentFiles(docId);
+                    } else {
+                      alert(`No files available for ${displayName}`);
+                    }
+                  }}
+                >
+                  {/* Delete Button - Top Right Corner */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent download when clicking delete
+                      setDocumentToDelete(docId);
+                      setShowDeleteConfirm(true);
+                    }}
+                    className="absolute top-2 right-2 flex w-7 h-7 justify-center items-center rounded-full bg-red-500 hover:bg-red-600 transition-colors shadow-md z-10"
+                    aria-label="Delete document"
                   >
-                    {isUploaded ? '✓' : '○'} {docName}
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+
+                  {/* Document Icon */}
+                  <div className="flex w-16 h-16 justify-center items-center rounded-full bg-green-500">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M14 2V8H20" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 18V12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M9 15L12 12L15 15" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
                   </div>
-                );
-              })}
-            </div>
+                  
+                  {/* Document Name */}
+                  <div className="flex flex-col items-center gap-1 self-stretch">
+                    <div className="text-center font-figtree text-sm font-semibold leading-tight text-green-800 line-clamp-2">
+                      {displayName}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13.5 4.5L6 12L2.5 8.5" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span className="text-xs font-medium text-green-600">Uploaded</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1000,7 +1593,8 @@ export function IdentityDocumentForm({
         selectedDocumentName={currentDocuments.find((docName) => 
           docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
         ) || ""}
-        onSubmit={(capturedImageData) => {
+        documentConfig={documentConfig}
+        onSubmit={(capturedImageData, uploadedFileIds) => {
           setShowCameraDialog(false);
           if (selectedDocument) {
             const docId = selectedDocument;
@@ -1011,9 +1605,11 @@ export function IdentityDocumentForm({
             }
 
             // ensure uploadedDocuments contains docId
-            setUploadedDocuments((prevDocs) =>
-              prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId],
-            );
+            setUploadedDocuments((prevDocs) => {
+              const newDocs = prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId];
+              console.log('📄 Updated uploadedDocuments (Camera):', newDocs);
+              return newDocs;
+            });
 
             // Add uploaded file to the files list, but first remove previous instances of this docId
             const newFile: UploadedFile = {
@@ -1027,8 +1623,32 @@ export function IdentityDocumentForm({
               const filtered = prev.filter(
                 (f) => f.id.replace(/-\d+$/, "") !== docId,
               );
-              return [...filtered, newFile];
+              const newFiles = [...filtered, newFile];
+              console.log('📁 Updated uploadedFiles (Camera):', newFiles);
+              return newFiles;
             });
+
+            // Add document details for backend storage (if using lifted state)
+            // Use the fileIds passed from CameraDialog to ensure we have the correct uploaded IDs
+            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            if (documentDefinitionId && uploadedFileIds?.front) {
+              const documentName = currentDocuments.find(
+                (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
+              ) || docId.replace(/_/g, " ");
+              
+              addDocumentDetail(
+                documentName,
+                documentDefinitionId,
+                uploadedFileIds.front,
+                uploadedFileIds.back
+              );
+              console.log('✅ Added document detail (Camera):', {
+                documentName,
+                documentDefinitionId,
+                frontFileId: uploadedFileIds.front,
+                backFileId: uploadedFileIds.back,
+              });
+            }
 
             setSelectedDocument("");
             // call onComplete only when all required documents are uploaded
@@ -1071,9 +1691,11 @@ export function IdentityDocumentForm({
               [docId]: { front: frontId, back: backId },
             }));
 
-            setUploadedDocuments((prevDocs) =>
-              prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId],
-            );
+            setUploadedDocuments((prevDocs) => {
+              const newDocs = prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId];
+              console.log('📄 Updated uploadedDocuments:', newDocs);
+              return newDocs;
+            });
 
             const newFile: UploadedFile = {
               id: `${docId}-${Date.now()}`,
@@ -1085,8 +1707,31 @@ export function IdentityDocumentForm({
               const filtered = prev.filter(
                 (f) => f.id.replace(/-\d+$/, "") !== docId,
               );
-              return [...filtered, newFile];
+              const newFiles = [...filtered, newFile];
+              console.log('📁 Updated uploadedFiles:', newFiles);
+              return newFiles;
             });
+
+            // Add document details for backend storage (if using lifted state)
+            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            if (documentDefinitionId && frontId) {
+              const documentName = currentDocuments.find(
+                (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
+              ) || docId.replace(/_/g, " ");
+              
+              addDocumentDetail(
+                documentName,
+                documentDefinitionId,
+                frontId,
+                backId
+              );
+              console.log('✅ Added document detail (Upload Dialog):', {
+                documentName,
+                documentDefinitionId,
+                frontFileId: frontId,
+                backFileId: backId,
+              });
+            }
 
             setSelectedDocument("");
 
@@ -1106,36 +1751,113 @@ export function IdentityDocumentForm({
       {/* QR Code Modal */}
       {showQRModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setShowQRModal(false);
             }
           }}
         >
-          <div className="relative bg-white rounded-lg p-8 max-w-md w-full mx-4">
-            <button
-              onClick={() => setShowQRModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 text-xl font-bold transition-colors"
-            >
-              ×
-            </button>
-            <div className="flex flex-col items-center gap-6">
-              <h3 className="text-xl font-semibold text-gray-800">Scan QR Code</h3>
-              <div className="scale-150 transform">
-                <QRCodeDisplay
-                  shortCode={shortCode}
-                  templateVersionId={templateVersionId}
-                  userId={userId}
-                  sessionId={sessionState?.sessionId || 'default-session'}
-                  currentStep="document-upload"
-                  size="large"
-                  showUrl={true}
-                />
+          <div className="flex flex-col items-center gap-6 p-10 rounded-xl bg-black/40 backdrop-blur-sm">
+            <div className="scale-[2.5] transform p-4 bg-white rounded-lg shadow-2xl">
+              <QRCodeDisplay
+                shortCode={shortCode}
+                templateVersionId={templateVersionId}
+                userId={userId}
+                sessionId={sessionState?.sessionId || 'default-session'}
+                currentStep="document-upload"
+                size="large"
+                showUrl={false}
+              />
+            </div>
+            <p className="text-center text-base font-medium text-white/90 mt-4">
+              Scan this QR code with your mobile device
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && documentToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="flex w-[440px] max-w-[90vw] flex-col items-start rounded-lg bg-white shadow-xl">
+            {/* Header */}
+            <div className="flex h-[58px] justify-between items-center self-stretch border-b border-[#D0D4E4] px-6">
+              <div className="flex items-center gap-3">
+                <div className="flex w-10 h-10 justify-center items-center rounded-full bg-red-100">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8.33333 5V4.33333C8.33333 3.39991 8.33333 2.9332 8.51499 2.57668C8.67384 2.26308 8.92977 2.00715 9.24337 1.8483C9.59989 1.66663 10.0666 1.66663 11 1.66663H12.3333C13.2668 1.66663 13.7335 1.66663 14.09 1.8483C14.4036 2.00715 14.6595 2.26308 14.8184 2.57668C15 2.9332 15 3.39991 15 4.33333V5M16.6667 5L16.1991 13.0654C16.1296 14.3267 16.0949 14.9574 15.8203 15.4369C15.5802 15.8566 15.2188 16.1935 14.7822 16.4008C14.2875 16.6333 13.6561 16.6333 12.3933 16.6333H10.9401C9.67725 16.6333 9.04583 16.6333 8.55111 16.4008C8.11457 16.1935 7.75315 15.8566 7.51301 15.4369C7.23842 14.9574 7.20375 14.3267 7.13441 13.0654L6.66667 5M2.5 5H17.5M10.8333 9.16663V12.5M12.5 9.16663V12.5" stroke="#DC2626" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="text-[#172B4D] font-figtree text-xl font-bold leading-[30px]">
+                  Delete Document
+                </div>
               </div>
-              <p className="text-center text-sm text-gray-600 max-w-xs leading-relaxed">
-                Scan this QR code with your mobile device to continue the verification process
-              </p>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDocumentToDelete(null);
+                }}
+                disabled={isDeleting}
+                className="flex w-8 h-8 justify-center items-center gap-2.5 rounded-full bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                <CloseIcon width={20} height={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex p-6 flex-col items-start gap-4 self-stretch">
+              <div className="text-[#172B4D] font-roboto text-base leading-6">
+                Are you sure you want to delete{" "}
+                <span className="font-semibold">
+                  {currentDocuments.find(
+                    (docName) => docName.toLowerCase().replace(/\s+/g, "_") === documentToDelete
+                  ) || documentToDelete.replace(/_/g, " ")}
+                </span>
+                ?
+              </div>
+              <div className="text-[#676879] font-roboto text-sm leading-5">
+                This will permanently delete both the front and back images of this document from the server. This action cannot be undone.
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex h-[68px] justify-end items-center gap-3 self-stretch border-t border-[#D0D4E4] bg-white px-6">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDocumentToDelete(null);
+                }}
+                disabled={isDeleting}
+                className="flex h-[38px] px-4 py-[11px] justify-center items-center gap-2 rounded border border-[#C3C6D4] bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span className="text-[#172B4D] font-roboto text-[13px] font-medium">
+                  Cancel
+                </span>
+              </button>
+              <button
+                onClick={() => handleDeleteDocument(documentToDelete)}
+                disabled={isDeleting}
+                className="flex h-[38px] px-4 py-[11px] justify-center items-center gap-2 rounded bg-red-600 hover:bg-red-700 disabled:bg-red-400"
+              >
+                {isDeleting ? (
+                  <>
+                    <Spinner className="animate-spin h-4 w-4 text-white" />
+                    <span className="text-white font-roboto text-[13px] font-medium">
+                      Deleting...
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M7.5 4.5V3.9C7.5 3.05992 7.5 2.63988 7.66349 2.31901C7.80615 2.03677 8.03677 1.80615 8.31901 1.66349C8.63988 1.5 9.05992 1.5 9.9 1.5H11.1C11.9401 1.5 12.3601 1.5 12.681 1.66349C12.9632 1.80615 13.1938 2.03677 13.3365 2.31901C13.5 2.63988 13.5 3.05992 13.5 3.9V4.5M15 4.5L14.5792 11.7588C14.5189 12.8803 14.4887 13.441 14.2382 13.8732C14.0172 14.2509 13.6869 14.5542 13.2903 14.7407C12.8387 15 12.2772 15 11.1543 15H9.84573C8.72282 15 8.16136 15 7.70971 14.7407C7.31312 14.5542 6.98282 14.2509 6.76181 13.8732C6.51134 13.441 6.48113 12.8803 6.42071 11.7588L6 4.5M2.25 4.5H15.75M9.75 8.25V11.25M11.25 8.25V11.25" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-white font-roboto text-[13px] font-medium">
+                      Delete Document
+                    </span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

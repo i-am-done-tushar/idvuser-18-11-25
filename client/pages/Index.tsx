@@ -1,28 +1,72 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { IdentityVerificationPage } from "@/components/IdentityVerificationPage";
 import { ShortCodeResolveResponse } from "@shared/api";
+import Dev_shortcode from "./Development_shortcode";
 
 export default function Index() {
-  const { shortCode } = useParams<{ shortCode?: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Read shortcode from query string: /form?code={shortcode}
+  const shortCode = searchParams.get("code") || undefined;
   const [templateVersionId, setTemplateVersionId] = useState<number>(1);
   const [userId, setUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputShortCode, setInputShortCode] = useState("");
 
-  const DEMO_SHORTCODE = "AUUjTRki720FsI827EgyntezgkMZ7g4hnZPVkpJyaZQ_dvOUTeRFml1SRjAyAeU_h2twOeJ8oI0SB5LCPV7632zrDKgroiUMybLOWtwl0CEZ5KCiK40C3n9Lbviy2qu-tEk_PH_UhNawpcKPIS5yebDJikf6kz8_rUI1e6lqgMYKD-oL1UMx8uE-om2x6oE1FtMiOEHHe70VWJE5zHdOtis7tGoI2W4HPx0cNObLnCLjbIV-ZBdCF3fT5fUEOWCd-QssMaAT12ovHRxs43um3hN5wmez6d4_";
+  const DEMO_SHORTCODE = "AYemIxGWTQ1zjei90uyCquVea75MNcfcll7tYW6wp3WSPDKOSBLDMWEEoOmyM2ljt0vzkm75pVrSekH9uXS_TVRFNoIQ8BCJhPKRPdPLzywDu-13MBt3OF0smun8rIRjlIX43ORXimsrxPQ4ixGX8grfU0cqyNequuyYQKTqz3oGrY75eZTYvqxWk35tPnn4slRlRCKM2nJLv31L6YcBZo-SKdGrxSZokDzWQEVnd4mDSVwo7zUSpn-1r8ei4uFRcPTZDVvo8ODiAtdMf9D0a6IULBiXs14";
 
-  const API_BASE =
-    import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+  // read API base from env; avoid hardcoding
+  const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
+  // Check for DigiLocker callback at root URL
   useEffect(() => {
-    if (shortCode) {
-      // If we have a shortcode, resolve it to get template version ID
-      resolveShortCode(shortCode);
-    }
-  }, [shortCode]);
+    const handleCallback = async () => {
+      const code = searchParams.get("code");
+      const state = searchParams.get("state");
+      const jti = searchParams.get("jti");
+
+      // If this is a DigiLocker callback (has code and state), handle it
+      if (code && state) {
+        console.log("🔐 DigiLocker callback detected at root URL");
+        
+        try {
+          // Parse state to extract shortCode and submissionId
+          const [shortCodeFromState, submissionIdFromState] = state.split(":");
+          
+          if (!shortCodeFromState || shortCodeFromState === "unknown") {
+            console.error("❌ Invalid shortCode in DigiLocker state");
+            alert("Invalid DigiLocker callback. Please try again.");
+            return;
+          }
+
+          // Store DigiLocker data in sessionStorage
+          sessionStorage.setItem("digilocker_auth_code", code);
+          sessionStorage.setItem("digilocker_callback_state", state);
+          sessionStorage.setItem("digilocker_jti", jti || "");
+          sessionStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
+          // Flag to skip terms and conditions on form load
+          sessionStorage.setItem("digilocker_skip_consent", "true");
+
+          // Resolve the shortcode from DigiLocker state first
+          await resolveShortCode(shortCodeFromState);
+
+          console.log("✅ DigiLocker data stored, redirecting to /form?code=" + shortCodeFromState);
+          // Redirect to the form page with the shortCode in query string
+          navigate(`/form?code=${encodeURIComponent(shortCodeFromState)}`, { replace: true });
+        } catch (error) {
+          console.error("❌ Error processing DigiLocker callback:", error);
+          alert("Failed to process DigiLocker response. Please try again.");
+        }
+      } else if (code) {
+        // If we just have a code but no state, it's a regular shortcode to resolve
+        await resolveShortCode(code);
+      }
+    };
+
+    handleCallback();
+  }, [searchParams, navigate]);
 
   const resolveShortCode = async (code: string) => {
     setLoading(true);
@@ -53,19 +97,21 @@ export default function Index() {
   const handleShortCodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputShortCode.trim()) {
-      navigate(`/form/${inputShortCode.trim()}`);
+      navigate(`/form?code=${encodeURIComponent(inputShortCode.trim())}`);
     }
   };
 
   const handleTryDemo = () => {
     setInputShortCode(DEMO_SHORTCODE);
-    navigate(`/form/${DEMO_SHORTCODE}`);
+    navigate(`/form?code=${encodeURIComponent(DEMO_SHORTCODE)}`);
   };
 
   // If no shortcode in URL, show the shortcode input page
   if (!shortCode) {
     return (
+      
       <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <Dev_shortcode />
         <div className="max-w-md w-full space-y-8">
           <div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">

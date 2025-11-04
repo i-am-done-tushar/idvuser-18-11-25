@@ -22,8 +22,8 @@ import {
 import { truncate } from "fs";
 
 // ---- single source of truth for API base ----
-const API_BASE =
-  import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+// read API base from Vite env; do not hardcode
+const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 // 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
 const BYPASS_OTP_FOR_DEVELOPMENT = true;
@@ -59,11 +59,30 @@ export function IdentityVerificationPage({
   const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] =
     useState(false);
   const [hasShownStep2Toast, setHasShownStep2Toast] = useState(false);
+  const [hasShownWelcomeBackToast, setHasShownWelcomeBackToast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
-  const [showConsentDialog, setShowConsentDialog] = useState(true);
+  const [showConsentDialog, setShowConsentDialog] = useState(false);
   const [hasConsented, setHasConsented] = useState(false);
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
+
+  // Check if we're coming from DigiLocker to skip consent
+  useEffect(() => {
+    const digilockerAuthCode = sessionStorage.getItem("digilocker_auth_code");
+    const skipConsent = sessionStorage.getItem("digilocker_skip_consent");
+    const isDigilockerReturn = !!digilockerAuthCode || !!skipConsent;
+    
+    // Set initial consent state
+    if (isDigilockerReturn) {
+      console.log("🔒 DigiLocker return detected, skipping consent");
+      setHasConsented(true);
+      // Clear the skip consent flag
+      sessionStorage.removeItem("digilocker_skip_consent");
+    } else {
+      // Only show consent dialog if not returning from DigiLocker
+      setShowConsentDialog(true);
+    }
+  }, []);
   // Track which sections are expanded (can have multiple expanded at once)
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({ 1: true });
   // Track completed state for each section
@@ -108,10 +127,27 @@ export function IdentityVerificationPage({
   const [documentFormState, setDocumentFormState] = useState({
     country: "",
     selectedDocument: "",
-    uploadedDocuments: [] as string[],
+    uploadedDocuments: [] as string[], // List of document names uploaded (e.g., ["Passport", "Driver's License"])
     uploadedFiles: [] as Array<{id: string, name: string, size: string, type: string}>,
-    documentUploadIds: {} as Record<string, { front?: number; back?: number }>,
+    documentUploadIds: {} as Record<string, { front?: number; back?: number }>, // Maps document name to file IDs
+    // New: Detailed document tracking for backend storage
+    documentsDetails: [] as Array<{
+      documentName: string; // e.g., "Passport"
+      documentDefinitionId: number; // From API config
+      frontFileId: number;
+      backFileId?: number; // Optional for single-sided documents
+      status: "uploaded" | "pending";
+      uploadedAt: string; // ISO timestamp
+    }>,
   });
+
+  // Wrap setDocumentFormState to add logging
+  const setDocumentFormStateWithLogging = (newState: any) => {
+    console.log('🔧 Parent setDocumentFormState called with:', newState);
+    console.log('🔧 Previous documentFormState:', documentFormState);
+    setDocumentFormState(newState);
+    console.log('🔧 After setState, new documentFormState should be:', newState);
+  };
 
   // Biometric form state - lift up to preserve across section toggles  
   const [biometricFormState, setBiometricFormState] = useState({
@@ -142,7 +178,7 @@ export function IdentityVerificationPage({
     try {
       // First, check if a UserTemplateSubmission already exists
       const checkResponse = await fetch(
-        `${API_BASE}/api/UserTemplateSubmissions?TemplateVersionId=${templateVersion.versionId}&UserId=${userId}`,
+        `https://idvapi-test.arconnet.com:1019/api/UserTemplateSubmissions?TemplateVersionId=${templateVersion.versionId}&UserId=${userId}`,
         {
           method: "GET",
           headers: {
@@ -166,7 +202,7 @@ export function IdentityVerificationPage({
       // If no existing submission found, create a new one
       console.log("No existing submission found, creating new UserTemplateSubmission...");
       const submissionResponse = await fetch(
-        `${API_BASE}/api/UserTemplateSubmissions`,
+        `https://idvapi-test.arconnet.com:1019/api/UserTemplateSubmissions`,
         {
           method: "POST",
           headers: {
@@ -238,6 +274,233 @@ export function IdentityVerificationPage({
     }
   }, [templateVersion, userId, submissionId]);
 
+  // ---- fetch and populate submission values if submissionId exists ----
+  useEffect(() => {
+    if (!submissionId || !templateVersion) return;
+
+    const fetchSubmissionValues = async () => {
+      try {
+        console.log("Fetching submission values for submissionId:", submissionId);
+        const response = await fetch(
+          `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+          },
+        );
+
+        if (!response.ok) {
+          console.error("Failed to fetch submission values:", response.status);
+          return;
+        }
+
+        const submissionValues = await response.json();
+        console.log("Fetched submission values:", submissionValues);
+
+        // Track which sections are completed based on API response
+        const completedSectionIds = new Set<number>();
+        
+        // Parse and populate each section's data
+        submissionValues.forEach((submission: any) => {
+          const section = templateVersion.sections.find(
+            (s) => s.id === submission.templateSectionId,
+          );
+
+          if (!section) return;
+
+          // Mark this section as completed (data exists in backend)
+          completedSectionIds.add(submission.templateSectionId);
+
+          try {
+            const parsedValue = JSON.parse(submission.fieldValue);
+
+            // Populate personal information section
+            if (section.sectionType === "personalInformation") {
+              setFormData((prev) => ({
+                ...prev,
+                firstName: parsedValue.firstName || prev.firstName,
+                lastName: parsedValue.lastName || prev.lastName,
+                middleName: parsedValue.middleName || prev.middleName,
+                dateOfBirth: parsedValue.dateOfBirth || prev.dateOfBirth,
+                email: parsedValue.email || prev.email,
+                countryCode: parsedValue.countryCode || prev.countryCode,
+                phoneNumber: parsedValue.phoneNumber || prev.phoneNumber,
+                gender: parsedValue.gender || prev.gender,
+                address: parsedValue.address || prev.address,
+                city: parsedValue.city || prev.city,
+                postalCode: parsedValue.postalCode || prev.postalCode,
+                permanentAddress: parsedValue.permanentAddress || prev.permanentAddress,
+                permanentCity: parsedValue.permanentCity || prev.permanentCity,
+                permanentPostalCode: parsedValue.permanentPostalCode || prev.permanentPostalCode,
+              }));
+              console.log("✅ Populated personal information from submission");
+            }
+
+            // Populate document section
+            if (section.sectionType === "documents" && parsedValue) {
+              // New structure: { country, documents: [...] }
+              const documentsArray = parsedValue.documents || [];
+              
+              // Extract document names and rebuild documentUploadIds for UI compatibility
+              const uploadedDocIds: string[] = [];
+              const rebuiltDocumentUploadIds: Record<string, { front?: number; back?: number }> = {};
+              
+              documentsArray.forEach((doc: any) => {
+                const docName = doc.documentName;
+                
+                // Convert document name to docId format (lowercase with underscores)
+                const docId = docName.toLowerCase().replace(/\s+/g, "_");
+                uploadedDocIds.push(docId);
+                
+                // Rebuild documentUploadIds map for file downloads
+                rebuiltDocumentUploadIds[docId] = {
+                  front: doc.frontFileId,
+                  ...(doc.backFileId && { back: doc.backFileId }),
+                };
+              });
+              
+              setDocumentFormState((prev) => ({
+                ...prev,
+                country: parsedValue.country || prev.country,
+                // Populate uploadedDocuments with docIds (matches the format used during upload)
+                uploadedDocuments: uploadedDocIds,
+                // Rebuild documentUploadIds for download functionality
+                documentUploadIds: rebuiltDocumentUploadIds,
+                // Restore detailed document information from the new structure
+                documentsDetails: documentsArray,
+              }));
+              
+              // Mark document section as completed if any documents exist
+              if (documentsArray.length > 0) {
+                setIsIdentityDocumentCompleted(true);
+              }
+              
+              console.log("✅ Populated document information from submission");
+              console.log("📄 Restored country:", parsedValue.country);
+              console.log("📄 Restored uploadedDocuments (docIds):", uploadedDocIds);
+              console.log("📄 Restored documentUploadIds:", rebuiltDocumentUploadIds);
+              console.log("📄 Restored documentsDetails:", documentsArray);
+              console.log(`📊 Total documents uploaded: ${documentsArray.length}`);
+            }
+
+            // Populate biometric section
+            if (section.sectionType === "biometrics" && parsedValue) {
+              setBiometricFormState((prev) => ({
+                ...prev,
+                capturedImage: parsedValue.capturedImage || prev.capturedImage,
+                isImageCaptured: parsedValue.isImageCaptured || prev.isImageCaptured,
+              }));
+              
+              // Mark biometric section as completed
+              if (parsedValue.isImageCaptured) {
+                setIsSelfieCompleted(true);
+              }
+              console.log("✅ Populated biometric information from submission");
+            }
+          } catch (parseError) {
+            console.error("Error parsing fieldValue for section:", section.sectionType, parseError);
+          }
+        });
+
+        // Update completedSections state based on which sections have data
+        const sections = templateVersion.sections
+          .filter((s) => s.isActive)
+          .sort((a, b) => a.orderIndex - b.orderIndex);
+        
+        const newCompletedSections: Record<number, boolean> = {};
+        
+        sections.forEach((section, index) => {
+          const sectionIndex = index + 1; // 1-based indexing
+          
+          // Check if this section's ID exists in the API response
+          if (completedSectionIds.has(section.id)) {
+            newCompletedSections[sectionIndex] = true;
+            console.log(`✅ Section ${sectionIndex} (${section.name}) marked as completed`);
+          } else {
+            console.log(`⏳ Section ${sectionIndex} (${section.name}) not yet completed`);
+          }
+        });
+        
+        // Set all completed sections at once
+        setCompletedSections(newCompletedSections);
+        
+        // Log summary
+        const completedCount = Object.values(newCompletedSections).filter(Boolean).length;
+        console.log(`📊 Summary: ${completedCount}/${sections.length} sections completed`);
+        
+      } catch (error) {
+        console.error("Error fetching submission values:", error);
+      }
+    };
+
+    fetchSubmissionValues();
+  }, [submissionId, templateVersion]);
+
+  // Show welcome-back toast for already-completed sections on page load
+  useEffect(() => {
+    if (!templateVersion || Object.keys(completedSections).length === 0) return;
+    if (hasShownWelcomeBackToast) return; // Prevent showing multiple times
+    
+    // Only run once when completedSections is first populated
+    const hasAnyCompletedSections = Object.values(completedSections).some(Boolean);
+    if (!hasAnyCompletedSections) return;
+    
+    const sections = templateVersion.sections
+      .filter((s) => s.isActive)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    
+    const completedSectionNames: string[] = [];
+    let firstIncompleteSection: number | null = null;
+    const sectionsToExpand: Record<number, boolean> = {};
+    
+    sections.forEach((section, index) => {
+      const sectionIndex = index + 1;
+      if (completedSections[sectionIndex]) {
+        completedSectionNames.push(section.name);
+        // Expand all completed sections
+        sectionsToExpand[sectionIndex] = true;
+      } else if (firstIncompleteSection === null) {
+        // Track the first incomplete section
+        firstIncompleteSection = sectionIndex;
+        // Also expand the first incomplete section
+        sectionsToExpand[sectionIndex] = true;
+      }
+    });
+    
+    if (completedSectionNames.length > 0) {
+      const completedCount = completedSectionNames.length;
+      const totalCount = sections.length;
+      
+      // Navigate to the first incomplete section (or last section if all complete)
+      const targetSection = firstIncompleteSection || sections.length;
+      
+      console.log(`🎯 Navigating to section ${targetSection} (first incomplete section)`);
+      setCurrentStep(targetSection);
+      // Expand all completed sections plus the first incomplete one
+      setExpandedSections(sectionsToExpand);
+      
+      // Show a single summary toast
+      setTimeout(() => {
+        const nextSectionName = firstIncompleteSection 
+          ? sections[firstIncompleteSection - 1]?.name 
+          : null;
+        
+        toast({
+          title: "🎉 Welcome Back!",
+          description: `You've already completed ${completedCount}/${totalCount} section${completedCount > 1 ? 's' : ''}: ${completedSectionNames.join(', ')}${
+            nextSectionName ? `. Continue with ${nextSectionName}.` : ''
+          }`,
+          duration: 6000,
+        });
+        setHasShownWelcomeBackToast(true); // Mark as shown
+      }, 500); // Small delay to ensure page has loaded
+    }
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedSections, templateVersion, hasShownWelcomeBackToast]); // Only run when completedSections is populated
+
   // Helper: POST section data
   const postSectionData = async (section: any) => {
     if (!templateVersion || !userId || !submissionId) return;
@@ -267,10 +530,14 @@ export function IdentityVerificationPage({
       }
       fieldValue = JSON.stringify(mappedData);
     } else if (section.sectionType === "documents") {
-      fieldValue = JSON.stringify({
-        documentsUploaded: isIdentityDocumentCompleted,
-        completedAt: new Date().toISOString(),
-      });
+      // Build clean document data structure
+      const documentData = {
+        country: documentFormState.country,
+        documents: documentFormState.documentsDetails,
+      };
+      
+      fieldValue = JSON.stringify(documentData);
+      console.log("📤 Posting document section data:", documentData);
     } else if (section.sectionType === "biometrics") {
       fieldValue = JSON.stringify({
         selfieUploaded: isSelfieCompleted,
@@ -279,7 +546,7 @@ export function IdentityVerificationPage({
     }
     try {
       await fetch(
-        `${API_BASE}/api/${submissionId}/${section.id}`,
+        `${API_BASE}/api/UserTemplateSubmissionValues/${submissionId}/${section.id}`,
         {
           method: "POST",
           headers: {
@@ -1068,6 +1335,20 @@ export function IdentityVerificationPage({
     }
   };
 
+  // Callback to auto-save document section data after each document upload
+  const handleDocumentUploaded = async () => {
+    console.log('📤 Document state changed, triggering auto-save...');
+    const documentsSection = activeSections.find(s => s.sectionType === "documents");
+    if (documentsSection) {
+      console.log('📋 Current documents state:', {
+        uploadedDocuments: documentFormState.uploadedDocuments,
+        documentsDetails: documentFormState.documentsDetails,
+      });
+      await postSectionData(documentsSection);
+      console.log('✅ Document section auto-saved successfully');
+    }
+  };
+
   const handleIdentityDocumentComplete = () => {
     setIsIdentityDocumentCompleted(true);
     
@@ -1188,10 +1469,10 @@ export function IdentityVerificationPage({
 
           fieldValue = JSON.stringify(mappedData);
         } else if (section.sectionType === "documents") {
-          // Documents section - mark as completed if documents were uploaded
+          // Documents section - clean structure
           fieldValue = JSON.stringify({
-            documentsUploaded: isIdentityDocumentCompleted,
-            completedAt: new Date().toISOString(),
+            country: documentFormState.country,
+            documents: documentFormState.documentsDetails,
           });
         } else if (section.sectionType === "biometrics") {
           // Biometrics section - mark as completed if selfie was uploaded
@@ -1203,7 +1484,7 @@ export function IdentityVerificationPage({
 
         // Submit section data
         const sectionResponse = await fetch(
-          `${API_BASE}/api/${submissionId}/${section.id}`,
+          `${API_BASE}/api/UserTemplateSubmissionValues/${submissionId}/${section.id}`,
           {
             method: "POST",
             headers: {
@@ -1653,7 +1934,8 @@ export function IdentityVerificationPage({
                     userId={userId}
                     isFilled={!!completedSections[index + 1]}
                     documentFormState={documentFormState}
-                    setDocumentFormState={setDocumentFormState}
+                    setDocumentFormState={setDocumentFormStateWithLogging}
+                    onDocumentUploaded={handleDocumentUploaded}
                     biometricFormState={biometricFormState}
                     setBiometricFormState={setBiometricFormState}
                     // personalInfoConfig={personalCfg}
@@ -1692,7 +1974,8 @@ export function IdentityVerificationPage({
                       isExpanded={!!expandedSections[index + 1]}
                       onToggle={toggleSection}
                       documentFormState={documentFormState}
-                      setDocumentFormState={setDocumentFormState}
+                      setDocumentFormState={setDocumentFormStateWithLogging}
+                      onDocumentUploaded={handleDocumentUploaded}
                       biometricFormState={biometricFormState}
                       setBiometricFormState={setBiometricFormState}
                       // personalInfoConfig={personalCfg}

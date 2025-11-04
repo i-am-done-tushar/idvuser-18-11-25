@@ -1,20 +1,15 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useForm, useController} from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { makePersonalInfoSchema, PersonalInfoSchema } from "@/validations/personalInfoSchema";
+// import personalInfoSchema, { PersonalInfoSchema } from "@/validations/personalInfoSchema";
 import { FormData } from "@shared/templates";
-import {
-  isValidName,
-  isValidEmail,
-  isValidPhone,
-  isValidDOB,
-  isValidAddress,
-  isValidPostalCode,
-  isValidPhoneForCountry,
-  COUNTRY_PHONE_RULES,
-  digitsOnly,
-} from "@/lib/validation";
+import { COUNTRY_PHONE_RULES, digitsOnly } from "@/lib/validation";
 
 interface PersonalInformationFormProps {
   formData: FormData;
-  setFormData: (data: FormData) => void;
+  // setFormData: (data: FormData) => void;
+  setFormData: React.Dispatch<React.SetStateAction<FormData>>; 
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   onSendEmailOTP: () => void;
@@ -46,305 +41,240 @@ interface PersonalInformationFormProps {
   };
 }
 
-export function PersonalInformationForm({
-  formData,
-  setFormData,
-  isEmailVerified,
-  isPhoneVerified,
-  onSendEmailOTP,
-  onSendPhoneOTP,
-  fieldConfig = {}, // Default to empty object
-}: PersonalInformationFormProps) {
-  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>(
-    {},
-  );
+export function PersonalInformationForm(props: PersonalInformationFormProps) {
+  const {
+    formData,
+    setFormData,
+    isEmailVerified,
+    isPhoneVerified,
+    onSendEmailOTP,
+    onSendPhoneOTP,
+    fieldConfig = {},
+  } = props;
 
-    // read required toggles from backend (camelCase only)
   const rt = fieldConfig?.requiredToggles ?? {};
 
-  // map backend toggles to form field names used in this component
   const isRequired = (field: string) => {
     const map: Record<string, boolean> = {
-      // backend → UI field names
       dateOfBirth: !!rt.dob,
       middleName: !!rt.middleName,
       gender: !!rt.gender,
       phoneNumber: !!rt.phoneNumber,
-
       address: !!rt.currentAddress,
       city: !!rt.currentCity,
       postalCode: !!rt.currentPostal,
-
       permanentAddress: !!rt.permanentAddress,
       permanentCity: !!rt.permanentCity,
       permanentPostalCode: !!rt.permanentPostal,
-
-      // if you later add toggles for these, wire them here:
-      // firstName: !!rt.firstName,
-      // lastName:  !!rt.lastName,
-      // email:     !!rt.email,
     };
     return !!map[field];
   };
-
-  // tiny component to show the red star
   const RequiredMark = ({ show }: { show: boolean }) =>
     show ? <span className="text-destructive">*</span> : null;
 
-
-  // Helper function to check if a field should be displayed
   const shouldShowField = (fieldName: string): boolean => {
-    // Debug: log every call to shouldShowField
-    if (fieldName === 'currentAddress' || fieldName === 'permanentAddress') {
-      console.log(`🔍 shouldShowField called with: ${fieldName}`);
-    }
-    
-    // If no fieldConfig provided or it's an empty object, this means the API didn't provide proper config
-    // In this case, show only essential fields as fallback
     if (!fieldConfig || Object.keys(fieldConfig).length === 0) {
-      const essentialFields = ['firstName', 'lastName', 'email'];
-      return essentialFields.includes(fieldName);
+      return ["firstName", "lastName", "email"].includes(fieldName);
     }
-    
-    // Handle direct section names like 'currentAddress' and 'permanentAddress'
-    if (fieldName === 'currentAddress') {
-      const shouldShow = fieldConfig.currentAddress === true;
-      console.log(`Field ${fieldName}: ${shouldShow} (config value: ${fieldConfig.currentAddress})`);
-      console.log('Full config:', fieldConfig);
-      return shouldShow;
-    }
-    
-    if (fieldName === 'permanentAddress') {
-      const shouldShow = fieldConfig.permanentAddress === true;
-      console.log(`Field ${fieldName}: ${shouldShow} (config value: ${fieldConfig.permanentAddress})`);
-      console.log('Full config:', fieldConfig);
-      return shouldShow;
-    }
-    
-    // Map form field names to config field names
+    if (fieldName === "currentAddress") return fieldConfig.currentAddress === true;
+    if (fieldName === "permanentAddress") return fieldConfig.permanentAddress === true;
+
     const fieldMapping: Record<string, string> = {
-      firstName: 'firstName',
-      lastName: 'lastName', 
-      email: 'email',
-      gender: 'gender',
-      dateOfBirth: 'dateOfBirth',
-      address: 'currentAddress',
-      city: 'currentAddress', // City is part of current address
-      postalCode: 'currentAddress', // Postal code is part of current address
-      permanentCity: 'permanentAddress', // Permanent city is part of permanent address
-      permanentPostalCode: 'permanentAddress', // Permanent postal code is part of permanent address
-      phoneNumber: 'phoneNumber',
-      countryCode: 'phoneNumber', // Country code is part of phone number
-      middleName: 'middleName'
+      firstName: "firstName",
+      lastName: "lastName",
+      email: "email",
+      gender: "gender",
+      dateOfBirth: "dateOfBirth",
+      address: "currentAddress",
+      city: "currentAddress",
+      postalCode: "currentAddress",
+      permanentCity: "permanentAddress",
+      permanentPostalCode: "permanentAddress",
+      phoneNumber: "phoneNumber",
+      countryCode: "phoneNumber",
+      middleName: "middleName",
     };
-    
-    const configKey = fieldMapping[fieldName];
-    
-    if (!configKey) {
-      return false; // Hide if not configured
-    }
-    
-    const shouldShow = fieldConfig[configKey as keyof typeof fieldConfig] === true;
-    
-    // Enhanced logging for address fields and related fields to debug both current and permanent
-    if (fieldName.includes('Address') || 
-        fieldName === 'address' || 
-        fieldName === 'city' || 
-        fieldName === 'postalCode' ||
-        configKey === 'currentAddress' ||
-        configKey === 'permanentAddress') {
-      console.log(`Field ${fieldName} (${configKey}): ${shouldShow} (config value: ${fieldConfig[configKey as keyof typeof fieldConfig]})`);
-    }
-    
-    return shouldShow;
+    const key = fieldMapping[fieldName];
+    if (!key) return false;
+    return fieldConfig[key as keyof typeof fieldConfig] === true;
   };
 
-  const updateField = (field: keyof FormData, value: string) => {
-    setErrors((prev) => ({ ...prev, [field]: undefined }));
-    setFormData({ ...formData, [field]: value });
-  };
+  // Stable defaults on mount
+  const initialDefaults = useMemo(() => formData as PersonalInfoSchema, []); // mount-only
+  // ⬇️ NEW: Build schema from toggles
+  const schema = useMemo(() => makePersonalInfoSchema(rt), [rt]);
 
-  const validateField = (field: keyof FormData) => {
-    const value = (formData[field] || "").toString();
-    let error: string | undefined = undefined;
+    const REQUIRED_KEYS = useMemo(() => {
+    const keys: (keyof PersonalInfoSchema)[] = ["firstName", "lastName", "email"];
+    if (rt.dob) keys.push("dateOfBirth");
+    if (rt.middleName) keys.push("middleName");
+    if (rt.gender) keys.push("gender");
+    if (rt.currentAddress) keys.push("address");
+    if (rt.currentCity) keys.push("city");
+    if (rt.currentPostal) keys.push("postalCode");
+    if (rt.permanentAddress) keys.push("permanentAddress");
+    if (rt.permanentCity) keys.push("permanentCity");
+    if (rt.permanentPostal) keys.push("permanentPostalCode");
+    if (rt.phoneNumber) keys.push("countryCode", "phoneNumber");
+    return keys;
+  }, [rt]);
 
-    switch (field) {
-      case "firstName":
-      case "lastName":
-        if (!isValidName(value)) error = "Enter at least 2 valid letters.";
-        break;
-      case "dateOfBirth":
-        if (!isValidDOB(value))
-          error = "Enter a valid DOB (DD/MM/YYYY). You must be at least 18.";
-        break;
-      case "email":
-        if (!isValidEmail(value)) error = "Please enter a valid email address.";
-        break;
-      case "countryCode":
-        if (!formData.countryCode) error = "Please select a country code.";
-        break;
-      case "phoneNumber":
-        if (!isValidPhoneForCountry(formData.countryCode, value))
-          error = "Please enter a valid phone number.";
-        break;
-      case "address":
-      case "permanentAddress":
-        if (!isValidAddress(value))
-          error = "Enter your address (at least 5 characters).";
-        break;
-      case "city":
-      case "permanentCity":
-        if (!value || value.trim().length < 2) error = "Enter your city.";
-        break;
-      case "postalCode":
-      case "permanentPostalCode":
-        if (!isValidPostalCode(value)) error = "Enter a valid postal code.";
-        break;
-    }
+  // ---- RHF + Zod ----
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    getValues,
+    formState: { errors},
+    reset,
+    clearErrors,
+    trigger,
+    control, 
+  } = useForm<PersonalInfoSchema>({
+    resolver: zodResolver(schema),
+    mode: "onBlur",
+    reValidateMode: "onChange",
+    shouldUnregister: false,
+    defaultValues: initialDefaults,
+  });
 
-    setErrors((prev) => ({ ...prev, [field]: error }));
-    return !error;
-  };
+  const { field: dob } = useController({
+    name: "dateOfBirth",
+    control,
+  });
 
-  const validateAll = () => {
-    const fields: (keyof FormData)[] = [
-      "firstName",
-      "lastName",
-      "dateOfBirth",
-      "email",
-      "countryCode",
-      "phoneNumber",
-      "address",
-      "city",
-      "postalCode",
-      "permanentAddress",
-      "permanentCity",
-      "permanentPostalCode",
-    ];
-    return fields.every((f) => validateField(f));
-  };
 
-  // DOB helpers
-  const formatDOBToInput = (dob: string) => {
+  // ----- Guard to avoid feedback loop -----
+  const hydratingRef = useRef(false);
+  const debounceTimerRef = useRef<number | null>(null);
+
+  // Hydrate form and validate only required fields
+  useEffect(() => {
+    hydratingRef.current = true;
+    reset(formData as PersonalInfoSchema, { keepDefaultValues: false });
+    clearErrors();
+    void trigger(REQUIRED_KEYS); // ⬅️ only required fields gate the next section
+    const t = window.setTimeout(() => { hydratingRef.current = false; }, 0);
+    return () => window.clearTimeout(t);
+  }, [formData, reset, clearErrors, trigger, REQUIRED_KEYS]);
+
+  // Child → parent with debounce
+  useEffect(() => {
+    const sub = watch((values: Partial<PersonalInfoSchema>) => {
+      if (hydratingRef.current) return;
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = window.setTimeout(() => {
+        setFormData(prev => ({ ...prev, ...(values as Partial<FormData>) }));
+      }, 200) as unknown as number;
+    });
+    return () => {
+      sub.unsubscribe();
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+    };
+  }, [watch, setFormData]);
+
+  // DOB adapters
+  const formatDOBToInput = (dob: string | undefined) => {
     if (!dob) return "";
     const m = dob.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (!m) return "";
-    const [_, day, month, year] = m;
+    const [, day, month, year] = m;
     return `${year}-${month}-${day}`;
   };
-
   const parseInputDateToDOB = (value: string) => {
     if (!value) return "";
-    const parts = value.split("-");
-    if (parts.length !== 3) return "";
-    const [year, month, day] = parts;
+    const [year, month, day] = value.split("-");
+    if (!year || !month || !day) return "";
     return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
   };
 
+  const onSubmit = (_data: PersonalInfoSchema) => {
+    // Valid; parent already updated via watch.
+  };
+
   return (
-    <div className="flex flex-col items-start self-stretch">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col items-start self-stretch">
       <div className="flex flex-col items-start gap-6 self-stretch">
-        {/* Name Fields Row */}
+        {/* ===== Name row ===== */}
         <div className="flex flex-col items-start self-stretch">
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 self-stretch">
             {/* First Name */}
-            {shouldShowField('firstName') && (
+            {shouldShowField("firstName") && (
               <div className="flex flex-col items-start flex-1 w-full">
                 <div className="flex pb-2 items-start gap-2 self-stretch">
                   <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                     <span className="text-text-primary">
-                    First Name
-                    <span className="text-destructive"> *</span>
+                      First Name <span className="text-destructive"> *</span>
                     </span>
                   </div>
                 </div>
-
-                <div
-                  className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.firstName ? "border-destructive" : "border-input-border"} bg-background`}
-                >
+                <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.firstName ? "border-destructive" : "border-input-border"} bg-background`}>
                   <div className="flex items-center gap-2 flex-1">
                     <input
                       type="text"
                       placeholder="Enter Name"
-                      value={formData.firstName}
-                      onChange={(e) =>
-                        updateField(
-                          "firstName",
-                          e.target.value.replace(/[^\p{L}]/gu, ""),
-                        )
-                      }
-                      onBlur={() => validateField("firstName")}
+                      // value={formData.firstName}
+                      {...register("firstName", {
+                        onChange: (e) =>
+                          setValue("firstName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
+                            shouldValidate: true,
+                          }),
+                      })}
                       aria-invalid={!!errors.firstName}
-                      aria-describedby={
-                        errors.firstName ? "err-firstName" : undefined
-                      }
+                      aria-describedby={errors.firstName ? "err-firstName" : undefined}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                     />
                   </div>
                 </div>
                 {errors.firstName && (
-                  <div
-                    id="err-firstName"
-                    role="alert"
-                    className="text-destructive text-[12px] mt-1"
-                  >
-                    {errors.firstName}
+                  <div id="err-firstName" role="alert" className="text-destructive text-[12px] mt-1">
+                    {errors.firstName.message as string}
                   </div>
                 )}
               </div>
             )}
 
             {/* Last Name */}
-            {shouldShowField('lastName') && (
-            <div className="flex flex-col items-start flex-1 w-full">
-              <div className="flex pb-2 items-start gap-2 self-stretch">
-                <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
-                  <span className="text-text-primary">
-                    Last Name
-                    <span className="text-destructive"> *</span>
+            {shouldShowField("lastName") && (
+              <div className="flex flex-col items-start flex-1 w-full">
+                <div className="flex pb-2 items-start gap-2 self-stretch">
+                  <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
+                    <span className="text-text-primary">
+                      Last Name <span className="text-destructive"> *</span>
                     </span>
+                  </div>
                 </div>
+                <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.lastName ? "border-destructive" : "border-input-border"} bg-background`}>
+                  <div className="flex items-center gap-2 flex-1">
+                    <input
+                      type="text"
+                      placeholder="Enter Your Full Name"
+                      // value={formData.lastName}
+                      {...register("lastName", {
+                        onChange: (e) =>
+                          setValue("lastName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
+                            shouldValidate: true,
+                          }),
+                      })}
+                      aria-invalid={!!errors.lastName}
+                      aria-describedby={errors.lastName ? "err-lastName" : undefined}
+                      className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
+                    />
+                  </div>
+                </div>
+                {errors.lastName && (
+                  <div id="err-lastName" role="alert" className="text-destructive text-[12px] mt-1">
+                    {errors.lastName.message as string}
+                  </div>
+                )}
               </div>
-
-              <div
-                className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.lastName ? "border-destructive" : "border-input-border"} bg-background`}
-              >
-                <div className="flex items-center gap-2 flex-1">
-                  <input
-                    type="text"
-                    placeholder="Enter Your Full Name"
-                    value={formData.lastName}
-                    onChange={(e) =>
-                      updateField(
-                        "lastName",
-                        e.target.value.replace(/[^\p{L}]/gu, ""),
-                      )
-                    }
-                    onBlur={() => validateField("lastName")}
-                    aria-invalid={!!errors.lastName}
-                    aria-describedby={
-                      errors.lastName ? "err-lastName" : undefined
-                    }
-                    className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
-                  />
-                </div>
-              </div>
-              {errors.lastName && (
-                <div
-                  id="err-lastName"
-                  role="alert"
-                  className="text-destructive text-[12px] mt-1"
-                >
-                  {errors.lastName}
-                </div>
-              )}
-            </div>
             )}
           </div>
 
-          {/* Middle Name and DOB */}
+          {/* ===== Middle Name & DOB ===== */}
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 self-stretch mt-6">
-            {shouldShowField('middleName') && (
+            {shouldShowField("middleName") && (
               <div className="flex flex-col items-start flex-1 w-full">
                 <div className="flex pb-2 items-start gap-2 self-stretch">
                   <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
@@ -358,8 +288,8 @@ export function PersonalInformationForm({
                     <input
                       type="text"
                       placeholder="Enter Name"
-                      value={formData.middleName}
-                      onChange={(e) => updateField("middleName", e.target.value)}
+                      // value={formData.middleName}
+                      {...register("middleName")}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                     />
                   </div>
@@ -367,276 +297,240 @@ export function PersonalInformationForm({
               </div>
             )}
 
-            {shouldShowField('dateOfBirth') && (
+            {shouldShowField("dateOfBirth") && (
               <div className="flex w-full sm:flex-1 flex-col items-start">
                 <div className="flex pb-2 items-start gap-2 self-stretch">
                   <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                     <span className="text-text-primary">
-                    Date Of Birth <RequiredMark show={isRequired("dateOfBirth")} />
+                      Date Of Birth <RequiredMark show={isRequired("dateOfBirth")} />
                     </span>
                   </div>
                 </div>
 
-                <div
-                  className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.dateOfBirth ? "border-destructive" : "border-input-border"} bg-background`}
-                >
+                <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.dateOfBirth ? "border-destructive" : "border-input-border"} bg-background`}>
                   <div className="flex items-center gap-2 flex-1">
                     <input
                       type="date"
                       placeholder="DD/MM/YYYY"
-                      value={formatDOBToInput(formData.dateOfBirth)}
-                      onChange={(e) =>
-                        updateField(
-                          "dateOfBirth",
-                          parseInputDateToDOB(e.target.value),
-                        )
-                      }
-                      onBlur={() => validateField("dateOfBirth")}
+                      value={formatDOBToInput(dob.value)}                 // ⬅️ render DD/MM/YYYY as YYYY-MM-DD
+                      onChange={(e) => dob.onChange(                     // ⬅️ store back as DD/MM/YYYY
+                        parseInputDateToDOB(e.target.value)
+                      )}
+                      onBlur={dob.onBlur}
+                      name={dob.name}
+                      ref={dob.ref}
                       aria-invalid={!!errors.dateOfBirth}
-                      aria-describedby={
-                        errors.dateOfBirth ? "err-dateOfBirth" : undefined
-                      }
+                      aria-describedby={errors.dateOfBirth ? "err-dateOfBirth" : undefined}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                     />
                   </div>
                 </div>
                 {errors.dateOfBirth && (
-                  <div
-                    id="err-dateOfBirth"
-                    role="alert"
-                    className="text-destructive text-[12px] mt-1"
-                  >
-                    {errors.dateOfBirth}
+                  <div id="err-dateOfBirth" role="alert" className="text-destructive text-[12px] mt-1">
+                    {errors.dateOfBirth.message as string}
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Email & Phone */}
+          {/* ===== Email & Phone ===== */}
           <div className="flex flex-col items-start gap-6 self-stretch mt-6">
             <div className="flex flex-col lg:flex-row items-start gap-4 lg:gap-6 self-stretch">
-              {shouldShowField('email') && (
+              {/* Email */}
+              {shouldShowField("email") && (
                 <div className="flex flex-col items-start flex-1 w-full">
-                <div className="flex pb-2 items-start gap-2 self-stretch">
-                  <div className="flex h-2.5 flex-col justify-center flex-1 font-roboto text-[13px] font-normal leading-[18px]">
-                    <span className="text-text-primary">Email
-                    <span className="text-destructive"> *</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  className={`flex flex-col items-start gap-1 self-stretch ${errors.email ? "" : ""}`}
-                >
-                  <div
-                    className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.email ? "border-destructive" : "border-input-border"} bg-background`}
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      <input
-                        type="email"
-                        placeholder="Enter Your Email Address"
-                        value={formData.email}
-                        onChange={(e) =>
-                          updateField("email", e.target.value.trim())
-                        }
-                        onBlur={() => validateField("email")}
-                        aria-invalid={!!errors.email}
-                        aria-describedby={
-                          errors.email ? "err-email" : undefined
-                        }
-                        className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
-                      />
-                    </div>
-                    <button
-                      onClick={onSendEmailOTP}
-                      disabled={
-                        !isValidEmail(formData.email) || isEmailVerified
-                      }
-                      aria-disabled={
-                        !isValidEmail(formData.email) || isEmailVerified
-                      }
-                      className={`flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background ${!isValidEmail(formData.email) || isEmailVerified ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <span className="text-primary font-figtree text-[12px] font-normal">
-                        {isEmailVerified ? "Verified" : "Send OTP"}
+                  <div className="flex pb-2 items-start gap-2 self-stretch">
+                    <div className="flex h-2.5 flex-col justify-center flex-1 font-roboto text-[13px] font-normal leading-[18px]">
+                      <span className="text-text-primary">
+                        Email <span className="text-destructive"> *</span>
                       </span>
-                    </button>
-                  </div>
-                  {errors.email ? (
-                    <div
-                      id="err-email"
-                      role="alert"
-                      className="text-destructive text-[12px] mt-1"
-                    >
-                      {errors.email}
                     </div>
-                  ) : (
-                    !isEmailVerified && (
-                      <div className="text-text-muted text-[12px] mt-1">
-                        Email verification is required to continue.
+                  </div>
+
+                  <div className="flex flex-col items-start gap-1 self-stretch">
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.email ? "border-destructive" : "border-input-border"} bg-background`}>
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          type="email"
+                          placeholder="Enter Your Email Address"
+                          // value={formData.email}
+                          {...register("email", {
+                            onChange: (e) =>
+                              setValue("email", e.target.value.trim(), { shouldValidate: true }),
+                          })}
+                          aria-invalid={!!errors.email}
+                          aria-describedby={errors.email ? "err-email" : undefined}
+                          className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
+                        />
                       </div>
-                    )
-                  )}
+                      <button
+                        onClick={onSendEmailOTP}
+                        type="button"
+                        disabled={!!errors.email || !getValues("email") || isEmailVerified}
+                        aria-disabled={!!errors.email || !getValues("email") || isEmailVerified}
+                        className={`flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background ${
+                          !!errors.email || !getValues("email") || isEmailVerified ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        <span className="text-primary font-figtree text-[12px] font-normal">
+                          {isEmailVerified ? "Verified" : "Send OTP"}
+                        </span>
+                      </button>
+                    </div>
+                    {errors.email ? (
+                      <div id="err-email" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.email.message as string}
+                      </div>
+                    ) : (
+                      !isEmailVerified && (
+                        <div className="text-text-muted text-[12px] mt-1">Email verification is required to continue.</div>
+                      )
+                    )}
+                  </div>
                 </div>
-              </div>
               )}
 
-              {shouldShowField('phoneNumber') && (
+              {/* Phone */}
+              {shouldShowField("phoneNumber") && (
                 <div className="flex flex-col items-start flex-1 w-full">
-                <div className="flex pb-2 items-start gap-2 self-stretch">
-                  <div className="flex h-2.5 flex-col justify-center flex-1 font-roboto text-[13px] font-normal leading-[18px]">
-                    <span className="text-text-primary">
+                  <div className="flex pb-2 items-start gap-2 self-stretch">
+                    <div className="flex h-2.5 flex-col justify-center flex-1 font-roboto text-[13px] font-normal leading-[18px]">
+                      <span className="text-text-primary">
                         Phone Number <RequiredMark show={isRequired("phoneNumber")} />
-                    </span>
-                  </div>
-                </div>
-
-                <div className={`flex flex-col items-start gap-1 self-stretch`}>
-                  <div
-                    className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.phoneNumber || errors.countryCode ? "border-destructive" : "border-input-border"} bg-background`}
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      <select
-                        value={formData.countryCode}
-                        onChange={(e) =>
-                          updateField("countryCode", e.target.value)
-                        }
-                        onBlur={() => validateField("countryCode")}
-                        aria-invalid={!!errors.countryCode}
-                        aria-describedby={
-                          errors.countryCode ? "err-countryCode" : undefined
-                        }
-                        className="text-text-muted font-roboto text-[13px] font-normal leading-5 bg-transparent outline-none border-r border-input-border pr-2 mr-2 min-w-[70px] max-w-[100px] flex-shrink-0"
-                      >
-                        <option value="">Select</option>
-                        {COUNTRY_PHONE_RULES.map((c) => (
-                          <option
-                            key={c.dial}
-                            value={c.dial}
-                          >{`${c.dial} ${c.name}`}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="tel"
-                        placeholder="Enter Your Mobile Number"
-                        value={formData.phoneNumber}
-                        onChange={(e) =>
-                          updateField("phoneNumber", digitsOnly(e.target.value))
-                        }
-                        onBlur={() => validateField("phoneNumber")}
-                        aria-invalid={!!errors.phoneNumber}
-                        aria-describedby={
-                          errors.phoneNumber ? "err-phoneNumber" : undefined
-                        }
-                        className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
-                      />
-                    </div>
-                    <button
-                      onClick={onSendPhoneOTP}
-                      disabled={
-                        !isValidPhoneForCountry(
-                          formData.countryCode,
-                          formData.phoneNumber,
-                        ) || isPhoneVerified
-                      }
-                      aria-disabled={
-                        !isValidPhoneForCountry(
-                          formData.countryCode,
-                          formData.phoneNumber,
-                        ) || isPhoneVerified
-                      }
-                      className={`flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background ${!isValidPhoneForCountry(formData.countryCode, formData.phoneNumber) || isPhoneVerified ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <span className="text-primary font-figtree text-[12px] font-normal">
-                        {isPhoneVerified ? "Verified" : "Send OTP"}
                       </span>
-                    </button>
+                    </div>
                   </div>
-                  {errors.countryCode ? (
-                    <div
-                      id="err-countryCode"
-                      role="alert"
-                      className="text-destructive text-[12px] mt-1"
-                    >
-                      {errors.countryCode}
+
+                  <div className="flex flex-col items-start gap-1 self-stretch">
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.phoneNumber || errors.countryCode ? "border-destructive" : "border-input-border"} bg-background`}>
+                      <div className="flex items-center gap-2 flex-1">
+                        <select
+                          {...register("countryCode")}
+                          aria-invalid={!!errors.countryCode}
+                          aria-describedby={errors.countryCode ? "err-countryCode" : undefined}
+                          className="text-text-muted font-roboto text-[13px] font-normal leading-5 bg-transparent outline-none border-r border-input-border pr-2 mr-2 min-w-[70px] max-w-[100px] flex-shrink-0"
+                        >
+                          <option value="">Select</option>
+                          {COUNTRY_PHONE_RULES.map((c) => (
+                            <option key={c.dial} value={c.dial}>{`${c.dial} ${c.name}`}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="tel"
+                          placeholder="Enter Your Mobile Number"
+                          // value={formData.phoneNumber}
+                          {...register("phoneNumber", {
+                            onChange: (e) =>
+                              setValue("phoneNumber", digitsOnly(e.target.value), { shouldValidate: true }),
+                          })}
+                          aria-invalid={!!errors.phoneNumber}
+                          aria-describedby={errors.phoneNumber ? "err-phoneNumber" : undefined}
+                          className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
+                        />
+                      </div>
+                      <button
+                        onClick={onSendPhoneOTP}
+                        type="button"
+                        disabled={
+                          !!errors.countryCode ||
+                          !!errors.phoneNumber ||
+                          !getValues("phoneNumber") ||
+                          !getValues("countryCode") ||
+                          isPhoneVerified
+                        }
+                        aria-disabled={
+                          !!errors.countryCode ||
+                          !!errors.phoneNumber ||
+                          !getValues("phoneNumber") ||
+                          !getValues("countryCode") ||
+                          isPhoneVerified
+                        }
+                        className={`flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background ${
+                          !!errors.countryCode ||
+                          !!errors.phoneNumber ||
+                          !getValues("phoneNumber") ||
+                          !getValues("countryCode") ||
+                          isPhoneVerified
+                            ? "opacity-50 cursor-not-allowed"
+                            : ""
+                        }`}
+                      >
+                        <span className="text-primary font-figtree text-[12px] font-normal">
+                          {isPhoneVerified ? "Verified" : "Send OTP"}
+                        </span>
+                      </button>
                     </div>
-                  ) : errors.phoneNumber ? (
-                    <div
-                      id="err-phoneNumber"
-                      role="alert"
-                      className="text-destructive text-[12px] mt-1"
-                    >
-                      {errors.phoneNumber}
-                    </div>
-                  ) : !isPhoneVerified ? (
-                    <div className="text-text-muted text-[12px] mt-1">
-                      Phone number verification is required to continue.
-                    </div>
-                  ) : null}
+                    {errors.countryCode ? (
+                      <div id="err-countryCode" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.countryCode.message as string}
+                      </div>
+                    ) : errors.phoneNumber ? (
+                      <div id="err-phoneNumber" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.phoneNumber.message as string}
+                      </div>
+                    ) : !isPhoneVerified ? (
+                      <div className="text-text-muted text-[12px] mt-1">Phone number verification is required to continue.</div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
               )}
             </div>
           </div>
 
-          {/* Gender */}
-          {shouldShowField('gender') && (
+          {/* ===== Gender (place before addresses) ===== */}
+          {shouldShowField("gender") && (
             <div className="flex w-full items-start gap-4 lg:gap-6 mt-6">
-            <div className="flex w-full lg:w-[458px] h-auto lg:h-14 items-start gap-4 lg:gap-6 flex-shrink-0">
-              <div className="flex w-full h-auto lg:h-14 flex-col items-start flex-1">
-                <div className="flex pb-2 items-start gap-2 self-stretch">
-                  <span className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
-                    Gender <RequiredMark show={isRequired("gender")} />
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-start gap-2 sm:gap-3">
-                  {["Male", "Female", "Non-Binary", "Prefer Not To Say"].map(
-                    (option) => (
-                      <div
+              <div className="flex w-full lg:w-[458px] h-auto lg:h-14 items-start gap-4 lg:gap-6 flex-shrink-0">
+                <div className="flex w-full h-auto lg:h-14 flex-col items-start flex-1">
+                  <div className="flex pb-2 items-start gap-2 self-stretch">
+                    <span className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
+                      Gender <RequiredMark show={isRequired("gender")} />
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                    {["Male", "Female", "Non-Binary", "Prefer Not To Say"].map((option) => (
+                      <label
                         key={option}
-                        className="flex h-[38px] py-2 pr-2 items-center gap-2 rounded-full"
+                        className="flex h-[38px] py-2 pr-2 items-center gap-2 rounded-full cursor-pointer"
                       >
-                        <div className="w-4 h-4 rounded-full border-[0.667px] border-step-inactive-border bg-background relative">
+                        <span className="w-4 h-4 rounded-full border-[0.667px] border-step-inactive-border bg-background relative inline-flex items-center justify-center">
                           <input
                             type="radio"
-                            name="gender"
                             value={option}
-                            checked={formData.gender === option}
-                            onChange={(e) =>
-                              updateField("gender", e.target.value)
+                            {...register("gender")}
+                            checked={watch("gender") === option}
+                            onChange={() =>
+                              setValue("gender", option, { shouldValidate: true, shouldTouch: true })
                             }
                             className="absolute inset-0 opacity-0 cursor-pointer"
+                            aria-label={option}
                           />
-                          {formData.gender === option && (
-                            <div className="absolute inset-1 rounded-full bg-primary" />
+                          {watch("gender") === option && (
+                            <span className="absolute inset-1 rounded-full bg-primary" />
                           )}
-                        </div>
-                        <label className="text-text-muted font-roboto text-[13px] font-normal leading-[22px] cursor-pointer">
+                        </span>
+                        <span className="text-text-muted font-roboto text-[13px] font-normal leading-[22px]">
                           {option}
-                        </label>
-                      </div>
-                    ),
-                  )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           )}
 
-          {/* Current Address Section */}
-          {shouldShowField('currentAddress') && (
+          {/* ===== Current Address ===== */}
+          {shouldShowField("currentAddress") && (
             <div className="flex flex-col items-start gap-4 self-stretch w-full mt-6">
               <div className="flex pb-1 flex-col items-start gap-1 self-stretch">
                 <div className="text-text-primary font-roboto text-[16px] font-bold leading-[26px]">
-                  Current Address{" "}
-                  <span className="font-normal text-[13px] text-text-muted">
-                    (as per ID)
-                  </span>
+                  Current Address <span className="font-normal text-[13px] text-text-muted">(as per ID)</span>
                 </div>
                 <div className="self-stretch text-text-muted font-roboto text-[13px] font-normal leading-5">
-                  Enter your current residential address exactly as shown on your
-                  government-issued ID.
+                  Enter your current residential address exactly as shown on your government-issued ID.
                 </div>
               </div>
 
@@ -646,60 +540,48 @@ export function PersonalInformationForm({
                     <div className="flex pb-2 items-start gap-2 self-stretch">
                       <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                         <span className="text-text-primary">
-                        Current Address <RequiredMark show={isRequired("address")} />
+                          Current Address <RequiredMark show={isRequired("address")} />
                         </span>
                       </div>
                     </div>
-                    <div
-                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.address ? "border-destructive" : "border-input-border"} bg-background w-full`}
-                    >
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.address ? "border-destructive" : "border-input-border"} bg-background w-full`}>
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 123 MG Road, Shastri Nagar, Near City Park"
-                          value={formData.address}
-                          onChange={(e) => updateField("address", e.target.value)}
-                          onBlur={() => validateField("address")}
+                          // value={formData.address}
+                          {...register("address")}
                           aria-invalid={!!errors.address}
-                          aria-describedby={
-                            errors.address ? "err-address" : undefined
-                          }
+                          aria-describedby={errors.address ? "err-address" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                         />
                       </div>
                     </div>
                     {errors.address && (
-                      <div
-                        id="err-address"
-                        role="alert"
-                        className="text-destructive text-[12px] mt-1"
-                      >
-                        {errors.address}
+                      <div id="err-address" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.address.message as string}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Current Address City and Postal Code Row */}
+                {/* City / Postal Code */}
                 <div className="inline-flex flex-col sm:flex-row items-start gap-4 sm:gap-6 w-full mt-6">
                   <div className="flex flex-col items-start w-full sm:flex-1">
                     <div className="flex pb-2 items-start gap-2 self-stretch">
                       <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                         <span className="text-text-primary">
-                        City <RequiredMark show={isRequired("city")} />
+                          City <RequiredMark show={isRequired("city")} />
                         </span>
                       </div>
                     </div>
-                    <div
-                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.city ? "border-destructive" : "border-input-border"} bg-background w-full`}
-                    >
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.city ? "border-destructive" : "border-input-border"} bg-background w-full`}>
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g Mumbai"
-                          value={formData.city}
-                          onChange={(e) => updateField("city", e.target.value)}
-                          onBlur={() => validateField("city")}
+                          // value={formData.city}
+                          {...register("city")}
                           aria-invalid={!!errors.city}
                           aria-describedby={errors.city ? "err-city" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
@@ -707,12 +589,8 @@ export function PersonalInformationForm({
                       </div>
                     </div>
                     {errors.city && (
-                      <div
-                        id="err-city"
-                        role="alert"
-                        className="text-destructive text-[12px] mt-1"
-                      >
-                        {errors.city}
+                      <div id="err-city" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.city.message as string}
                       </div>
                     )}
                   </div>
@@ -720,38 +598,27 @@ export function PersonalInformationForm({
                   <div className="flex flex-col items-start w-full sm:flex-1">
                     <div className="flex pb-2 items-start gap-2 self-stretch">
                       <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
-                       <span className="text-text-primary">
-                        Postal Code <RequiredMark show={isRequired("postalCode")} />
-                       </span>
+                        <span className="text-text-primary">
+                          Postal Code <RequiredMark show={isRequired("postalCode")} />
+                        </span>
                       </div>
                     </div>
-                    <div
-                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.postalCode ? "border-destructive" : "border-input-border"} bg-background w-full`}
-                    >
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.postalCode ? "border-destructive" : "border-input-border"} bg-background w-full`}>
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 432001"
-                          value={formData.postalCode}
-                          onChange={(e) =>
-                            updateField("postalCode", e.target.value)
-                          }
-                          onBlur={() => validateField("postalCode")}
+                          // value={formData.postalCode}
+                          {...register("postalCode")}
                           aria-invalid={!!errors.postalCode}
-                          aria-describedby={
-                            errors.postalCode ? "err-postalCode" : undefined
-                          }
+                          aria-describedby={errors.postalCode ? "err-postalCode" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                         />
                       </div>
                     </div>
                     {errors.postalCode && (
-                      <div
-                        id="err-postalCode"
-                        role="alert"
-                        className="text-destructive text-[12px] mt-1"
-                      >
-                        {errors.postalCode}
+                      <div id="err-postalCode" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.postalCode.message as string}
                       </div>
                     )}
                   </div>
@@ -760,19 +627,15 @@ export function PersonalInformationForm({
             </div>
           )}
 
-          {/* Permanent Address Section */}
-          {shouldShowField('permanentAddress') && (
+          {/* ===== Permanent Address ===== */}
+          {shouldShowField("permanentAddress") && (
             <div className="flex flex-col items-start gap-4 self-stretch w-full mt-6">
               <div className="flex pb-1 flex-col items-start gap-1 self-stretch">
                 <div className="text-text-primary font-roboto text-[16px] font-bold leading-[26px]">
-                  Permanent Address{" "}
-                  <span className="font-normal text-[13px] text-text-muted">
-                    (as per ID)
-                  </span>
+                  Permanent Address <span className="font-normal text-[13px] text-text-muted">(as per ID)</span>
                 </div>
                 <div className="self-stretch text-text-muted font-roboto text-[13px] font-normal leading-5">
-                  Enter your permanent address exactly as shown on your
-                  government-issued ID.
+                  Enter your permanent address exactly as shown on your government-issued ID.
                 </div>
               </div>
 
@@ -782,60 +645,47 @@ export function PersonalInformationForm({
                     <div className="flex pb-2 items-start gap-2 self-stretch">
                       <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                         <span className="text-text-primary">
-                        Permanent Address <RequiredMark show={isRequired("permanentAddress")} />
+                          Permanent Address <RequiredMark show={isRequired("permanentAddress")} />
                         </span>
                       </div>
                     </div>
-                    <div
-                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentAddress ? "border-destructive" : "border-input-border"} bg-background w-full`}
-                    >
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentAddress ? "border-destructive" : "border-input-border"} bg-background w-full`}>
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 456 Park Street, Gandhi Nagar, Near Mall"
-                          value={formData.permanentAddress}
-                          onChange={(e) => updateField("permanentAddress", e.target.value)}
-                          onBlur={() => validateField("permanentAddress")}
+                          // value={formData.permanentAddress}
+                          {...register("permanentAddress")}
                           aria-invalid={!!errors.permanentAddress}
-                          aria-describedby={
-                            errors.permanentAddress ? "err-permanentAddress" : undefined
-                          }
+                          aria-describedby={errors.permanentAddress ? "err-permanentAddress" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                         />
                       </div>
                     </div>
                     {errors.permanentAddress && (
-                      <div
-                        id="err-permanentAddress"
-                        role="alert"
-                        className="text-destructive text-[12px] mt-1"
-                      >
-                        {errors.permanentAddress}
+                      <div id="err-permanentAddress" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.permanentAddress.message as string}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Permanent Address City and Postal Code Row */}
                 <div className="inline-flex flex-col sm:flex-row items-start gap-4 sm:gap-6 w-full mt-6">
                   <div className="flex flex-col items-start w-full sm:flex-1">
                     <div className="flex pb-2 items-start gap-2 self-stretch">
                       <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                         <span className="text-text-primary">
-                        Permanent City <RequiredMark show={isRequired("permanentCity")} />
+                          Permanent City <RequiredMark show={isRequired("permanentCity")} />
                         </span>
                       </div>
                     </div>
-                    <div
-                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentCity ? "border-destructive" : "border-input-border"} bg-background w-full`}
-                    >
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentCity ? "border-destructive" : "border-input-border"} bg-background w-full`}>
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g Delhi"
-                          value={formData.permanentCity}
-                          onChange={(e) => updateField("permanentCity", e.target.value)}
-                          onBlur={() => validateField("permanentCity")}
+                          // value={formData.permanentCity}
+                          {...register("permanentCity")}
                           aria-invalid={!!errors.permanentCity}
                           aria-describedby={errors.permanentCity ? "err-permanentCity" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
@@ -843,12 +693,8 @@ export function PersonalInformationForm({
                       </div>
                     </div>
                     {errors.permanentCity && (
-                      <div
-                        id="err-permanentCity"
-                        role="alert"
-                        className="text-destructive text-[12px] mt-1"
-                      >
-                        {errors.permanentCity}
+                      <div id="err-permanentCity" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.permanentCity.message as string}
                       </div>
                     )}
                   </div>
@@ -857,37 +703,26 @@ export function PersonalInformationForm({
                     <div className="flex pb-2 items-start gap-2 self-stretch">
                       <div className="flex h-2.5 flex-col justify-center flex-1 text-text-primary font-roboto text-[13px] font-normal leading-[18px]">
                         <span className="text-text-primary">
-                        Permanent Postal Code <RequiredMark show={isRequired("permanentPostalCode")} />
+                          Permanent Postal Code <RequiredMark show={isRequired("permanentPostalCode")} />
                         </span>
                       </div>
                     </div>
-                    <div
-                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentPostalCode ? "border-destructive" : "border-input-border"} bg-background w-full`}
-                    >
+                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentPostalCode ? "border-destructive" : "border-input-border"} bg-background w-full`}>
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 110001"
-                          value={formData.permanentPostalCode}
-                          onChange={(e) =>
-                            updateField("permanentPostalCode", e.target.value)
-                          }
-                          onBlur={() => validateField("permanentPostalCode")}
+                          // value={formData.permanentPostalCode}
+                          {...register("permanentPostalCode")}
                           aria-invalid={!!errors.permanentPostalCode}
-                          aria-describedby={
-                            errors.permanentPostalCode ? "err-permanentPostalCode" : undefined
-                          }
+                          aria-describedby={errors.permanentPostalCode ? "err-permanentPostalCode" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                         />
                       </div>
                     </div>
                     {errors.permanentPostalCode && (
-                      <div
-                        id="err-permanentPostalCode"
-                        role="alert"
-                        className="text-destructive text-[12px] mt-1"
-                      >
-                        {errors.permanentPostalCode}
+                      <div id="err-permanentPostalCode" role="alert" className="text-destructive text-[12px] mt-1">
+                        {errors.permanentPostalCode.message as string}
                       </div>
                     )}
                   </div>
@@ -897,6 +732,6 @@ export function PersonalInformationForm({
           )}
         </div>
       </div>
-    </div>
+    </form>
   );
 }

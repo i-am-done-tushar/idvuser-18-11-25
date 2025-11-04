@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { getDocumentDefinitionId } from "@/lib/document-definitions";
+import { DocumentConfig } from "@shared/templates";
 
 interface CameraDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (capturedImageData?: string) => void;
+  onSubmit: (capturedImageData?: string, uploadedFileIds?: { front?: number; back?: number }) => void;
   previousFileIds?: { front?: number; back?: number };
   onUploaded?: (side: "front" | "back", id: number) => void;
   submissionId?: number | null;
   country?: string;
   selectedDocumentName?: string;
+  documentConfig?: DocumentConfig;
 }
 
 interface CapturedImage {
@@ -18,10 +20,7 @@ interface CapturedImage {
   dataUrl: string;
 }
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  import.meta.env.VITE_API_URL ||
-  "http://10.10.2.133:8080";
+const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
 export function CameraDialog({
   isOpen,
@@ -32,6 +31,7 @@ export function CameraDialog({
   submissionId,
   country = "",
   selectedDocumentName = "",
+  documentConfig,
 }: CameraDialogProps) {
   const { toast } = useToast();
   const [frontCaptured, setFrontCaptured] = useState<CapturedImage | null>(
@@ -57,6 +57,32 @@ export function CameraDialog({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Helper function to get document definition ID from API config (same logic as IdentityDocumentForm)
+  const getDocumentDefinitionIdFromConfig = (countryName: string, documentTitle: string): string | null => {
+    if (!documentConfig || !documentConfig.supportedCountries) return null;
+
+    const countryData = documentConfig.supportedCountries.find(
+      (c) => c.countryName === countryName,
+    );
+    if (!countryData) return null;
+
+    // Find the document in the country's documents array
+    const doc = countryData.documents.find((d) => {
+      if (typeof d === 'string') {
+        return d === documentTitle;
+      } else {
+        return d.title === documentTitle;
+      }
+    });
+
+    // Return the documentDefinitionId if it exists
+    if (doc && typeof doc !== 'string' && doc.documentDefinitionId) {
+      return doc.documentDefinitionId;
+    }
+
+    return null;
+  };
 
   // Initialize camera when camera view is shown
   useEffect(() => {
@@ -180,14 +206,23 @@ export function CameraDialog({
       const formData = new FormData();
       formData.append("File", image.blob, `${side}-document.jpg`);
       
-      // Get dynamic document definition ID based on selected country and document
-      const documentDefinitionId = getDocumentDefinitionId(country, selectedDocumentName);
+      // First try to get the document definition ID from the API config (dynamic)
+      let documentDefinitionId = getDocumentDefinitionIdFromConfig(country, selectedDocumentName);
+
+      // Fallback to the hardcoded mapping if not found in config
+      if (!documentDefinitionId) {
+        console.warn(
+          `CameraDialog: Document definition ID not found in config for ${selectedDocumentName}, using fallback mapping`
+        );
+        documentDefinitionId = getDocumentDefinitionId(country, selectedDocumentName);
+      }
+
       formData.append("DocumentDefinitionId", documentDefinitionId);
       
       formData.append("Bucket", "string");
       const submissionIdToUse = submissionId?.toString() || "1";
       console.log("CameraDialog: Using UserTemplateSubmissionId:", submissionIdToUse);
-      console.log("CameraDialog: Using DocumentDefinitionId:", documentDefinitionId, "for document:", selectedDocumentName);
+      console.log("CameraDialog: Using DocumentDefinitionId:", documentDefinitionId, "for document:", selectedDocumentName, "(country:", country, ")");
       formData.append("UserTemplateSubmissionId", submissionIdToUse);
 
       // Always use POST for uploads, never PUT
@@ -251,9 +286,9 @@ export function CameraDialog({
         description: `Document${sidesUploaded > 1 ? 's' : ''} uploaded successfully.`,
       });
       
-      // Pass the front image data (or back if front not available)
+      // Pass the front image data (or back if front not available) AND the uploaded file IDs
       const imageData = frontCaptured?.dataUrl || backCaptured?.dataUrl;
-      onSubmit(imageData);
+      onSubmit(imageData, uploadedFileIds);
     }
   };
 
