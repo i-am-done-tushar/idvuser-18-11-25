@@ -297,6 +297,7 @@ export function Dashboard() {
           />
         </svg>
       ),
+      onClick: () => navigate("/verified-credentials"),
     },
     {
       id: "contact",

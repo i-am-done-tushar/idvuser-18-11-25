@@ -1,56 +1,70 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ExpiredVerificationCard } from "./ExpiredVerificationCard";
+import { VerifiedCredentialCard } from "./VerifiedCredentialCard";
 
-interface ExpiredVerificationItem {
+interface VerifiedCredentialItem {
   id: string;
   title: string;
   documentType: string;
-  expiredDate: string;
-  issuedOn: string;
+  completedOn: string;
+  expiresOn: string;
 }
 
-const expiredVerifications: ExpiredVerificationItem[] = [
+const verifiedCredentials: VerifiedCredentialItem[] = [
   {
     id: "1",
     title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    expiredDate: "Oct 10, 2025",
-    issuedOn: "June 05, 2025",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
   },
   {
     id: "2",
     title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    expiredDate: "Oct 10, 2025",
-    issuedOn: "June 05, 2025",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
   },
   {
     id: "3",
     title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    expiredDate: "Oct 10, 2025",
-    issuedOn: "June 05, 2025",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
   },
   {
     id: "4",
     title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    expiredDate: "Oct 10, 2025",
-    issuedOn: "June 05, 2025",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
   },
   {
     id: "5",
     title: "Arcon Document Submission",
     documentType: "Employee ID Card",
-    expiredDate: "Oct 10, 2025",
-    issuedOn: "June 05, 2025",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
+  },
+  {
+    id: "6",
+    title: "Arcon Document Submission",
+    documentType: "Employee ID Card",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
+  },
+  {
+    id: "7",
+    title: "Arcon Document Submission",
+    documentType: "Employee ID Card",
+    completedOn: "Oct 10, 2025",
+    expiresOn: "Oct 10, 2025",
   },
 ];
 
-export function ExpiredVerificationPage() {
+export function VerifiedCredentialsPage() {
   const navigate = useNavigate();
-  const [activeNav, setActiveNav] = useState("expired");
+  const [activeNav, setActiveNav] = useState("verified");
 
   const navItems = [
     {
@@ -110,7 +124,7 @@ export function ExpiredVerificationPage() {
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <g clipPath="url(#clip0_11001_26397)">
+          <g clipPath="url(#clip0_11001_23158)">
             <path
               d="M12.5052 7.50521L7.50521 12.5052M7.50521 7.50521L12.5052 12.5052M18.3385 10.0052C18.3385 14.6075 14.6075 18.3385 10.0052 18.3385C5.40283 18.3385 1.67188 14.6075 1.67188 10.0052C1.67188 5.40283 5.40283 1.67188 10.0052 1.67188C14.6075 1.67188 18.3385 5.40283 18.3385 10.0052Z"
               stroke={isActive ? "#0073EA" : "#676879"}
@@ -120,7 +134,7 @@ export function ExpiredVerificationPage() {
             />
           </g>
           <defs>
-            <clipPath id="clip0_11001_26397">
+            <clipPath id="clip0_11001_23158">
               <rect width="20" height="20" fill="white" />
             </clipPath>
           </defs>
@@ -246,7 +260,7 @@ export function ExpiredVerificationPage() {
             <div className="flex px-4 py-2 items-center gap-2 flex-1 self-stretch">
               <div className="flex items-start gap-2">
                 <h1 className="text-[#172B4D] font-roboto text-xl font-bold leading-[30px]">
-                  Expired Verification
+                  Verified Credentials
                 </h1>
               </div>
             </div>
@@ -254,16 +268,13 @@ export function ExpiredVerificationPage() {
 
           <div className="flex px-4 flex-col items-start gap-2.5 flex-1 self-stretch">
             <div className="flex items-start gap-5 self-stretch flex-wrap">
-              {expiredVerifications.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex-1 min-w-[320px] max-w-[400px]"
-                >
-                  <ExpiredVerificationCard
+              {verifiedCredentials.map((item) => (
+                <div key={item.id} className="flex-1 min-w-[320px] max-w-[400px]">
+                  <VerifiedCredentialCard
                     title={item.title}
                     documentType={item.documentType}
-                    expiredDate={item.expiredDate}
-                    issuedOn={item.issuedOn}
+                    completedOn={item.completedOn}
+                    expiresOn={item.expiresOn}
                   />
                 </div>
               ))}

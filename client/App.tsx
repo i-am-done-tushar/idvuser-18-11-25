@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import { PasswordSetupPage } from "./components/PasswordSetupPage";
 import { OngoingVerificationPage } from "./components/OngoingVerificationPage";
 import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
+import { VerifiedCredentialsPage } from "./components/VerifiedCredentialsPage";
 
 //1st change
 
@@ -52,6 +53,10 @@ const App = () => (
           <Route
             path="/expired-verification"
             element={<ExpiredVerificationPage />}
+          />
+          <Route
+            path="/verified-credentials"
+            element={<VerifiedCredentialsPage />}
           />
           <Route path="/profile" element={<Profile />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

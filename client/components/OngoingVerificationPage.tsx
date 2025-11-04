@@ -182,7 +182,7 @@ export function OngoingVerificationPage() {
           />
         </svg>
       ),
-      onClick: () => {},
+      onClick: () => navigate("/verified-credentials"),
     },
     {
       id: "contact",
