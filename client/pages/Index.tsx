@@ -17,8 +17,8 @@ export default function Index() {
 
   const DEMO_SHORTCODE = "AYemIxGWTQ1zjei90uyCquVea75MNcfcll7tYW6wp3WSPDKOSBLDMWEEoOmyM2ljt0vzkm75pVrSekH9uXS_TVRFNoIQ8BCJhPKRPdPLzywDu-13MBt3OF0smun8rIRjlIX43ORXimsrxPQ4ixGX8grfU0cqyNequuyYQKTqz3oGrY75eZTYvqxWk35tPnn4slRlRCKM2nJLv31L6YcBZo-SKdGrxSZokDzWQEVnd4mDSVwo7zUSpn-1r8ei4uFRcPTZDVvo8ODiAtdMf9D0a6IULBiXs14";
 
-  // read API base from env; avoid hardcoding
-  const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+  // Use relative path for API calls (the proxy will handle the actual routing)
+  const API_BASE = "";
 
   // Check for DigiLocker callback at root URL
   useEffect(() => {

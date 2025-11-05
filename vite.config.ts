@@ -9,11 +9,19 @@ export default defineConfig(({ mode }) => ({
   base:'/',
   server: {
     host: "::",
-    port: 3000,
+    port: 4200,
     fs: {
       allow: ["./client", "./shared","index.html"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
     },
+    proxy: {
+      '/api': {
+        target: 'http://10.10.2.133:8080',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path
+      }
+    }
   },
   build: {
     outDir: "dist/spa",
