@@ -176,6 +176,11 @@ export default function CameraSelfieStep({ userId, onComplete }: CameraSelfieSte
 
   const messageCooldownsRef = useRef<Record<string, boolean>>({});
 
+  const isStartingSegmentRef = useRef<boolean>(false);
+  const segmentSessionIdRef = useRef<number>(0);
+  const segmentRetryRef = useRef<number>(0);
+  const MAX_SEGMENT_RETRIES = 3;
+
   /* ------------------ UI states (Angular bindings) ------------------ */
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
@@ -199,6 +204,14 @@ export default function CameraSelfieStep({ userId, onComplete }: CameraSelfieSte
   const [direction, setDirection] = useState<"left" | "right" | "up" | "down" | null>(null);
   const [overlaySize, setOverlaySize] = useState({ width: 640, height: 480 });
   const [cvReady, setCvReady] = useState(false);
+
+
+
+  const startSegmentRecordingRef = useRef<(resume?: number) => void>(() => { });
+  const performVerificationRef = useRef<() => Promise<void>>(async () => { });
+  const onSegmentCompleteRef = useRef<() => Promise<void>>(async () => { });
+  const restartCurrentSegmentRef = useRef<() => void>(() => { });
+
 
 
 
@@ -461,175 +474,175 @@ export default function CameraSelfieStep({ userId, onComplete }: CameraSelfieSte
   }, []);
 
   /* ---------------- startCamera (Angular startCamera) ---------------- */
-const startCamera = useCallback(async () => {
-  if (isStartingCameraRef.current) return;
-  isStartingCameraRef.current = true;
-  try {
-    const videoEl = videoRef.current;
-    videoElementRef.current = videoEl;
-    const overlayEl = overlayRef.current;
-
-    if (!videoEl) {
-      logService.log("error", "Video element not found");
-      showMessage("cameraErrorMessage", "Video element not found");
-      return;
-    }
-
-    if (!overlayEl) {
-      logService.log("error", "Overlay element not found");
-      showMessage("cameraErrorMessage", "Overlay element not found");
-      return;
-    }
-    overlayCanvasRef.current = overlayEl;
-
-    logService.log("info", "Starting camera...");
-    
-    // 1. Request stream AFTER video element checks
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "user",
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        frameRate: { ideal: 30, max: 30 }
-      },
-      audio: false,
-    });
-    streamRef.current = stream;
-
-    // 2. Stop previous tracks (if any)
-    if (videoEl.srcObject) {
-      (videoEl.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-    }
-
-    // 3. Assign new stream to video, call play
-    videoEl.srcObject = stream;
+  const startCamera = useCallback(async () => {
+    if (isStartingCameraRef.current) return;
+    isStartingCameraRef.current = true;
     try {
-      await videoEl.play();
-    } catch (playError) {
-      logService.log("warn", "Video playback interrupted: " + playError);
-    }
+      const videoEl = videoRef.current;
+      videoElementRef.current = videoEl;
+      const overlayEl = overlayRef.current;
 
-  
-    // 4. **Ensure camera status is updated ONLY after play starts**
-    // This avoids the issue where video exists but isn't streaming!
-    videoEl.onplaying = () => {
+      if (!videoEl) {
+        logService.log("error", "Video element not found");
+        showMessage("cameraErrorMessage", "Video element not found");
+        return;
+      }
+
+      if (!overlayEl) {
+        logService.log("error", "Overlay element not found");
+        showMessage("cameraErrorMessage", "Overlay element not found");
+        return;
+      }
+      overlayCanvasRef.current = overlayEl;
+
+      logService.log("info", "Starting camera...");
+
+      // 1. Request stream AFTER video element checks
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 30, max: 30 }
+        },
+        audio: false,
+      });
       streamRef.current = stream;
-      setIsCameraOn(true);
-      logService.log("info", "Camera is playing and detection is allowed.");
-    };
 
-    // 5. If video is already playing (for some browsers), set flag
-    if (!videoEl.paused && videoEl.readyState >= 2) {
-      setIsCameraOn(true);
-      logService.log("info", "Camera is auto-playing and detection is allowed.");
-    }
+      // 2. Stop previous tracks (if any)
+      if (videoEl.srcObject) {
+        (videoEl.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      }
 
-    logService.log("info", "Camera stream acquired and video playback started.");
+      // 3. Assign new stream to video, call play
+      videoEl.srcObject = stream;
+      try {
+        await videoEl.play();
+      } catch (playError) {
+        logService.log("warn", "Video playback interrupted: " + playError);
+      }
 
-    const videoTracks = stream.getVideoTracks();
-    if (videoTracks.length) {
-      const settings = videoTracks[0].getSettings();
-      logService.log("debug", `Camera settings: ${JSON.stringify(settings)}`);
-      if (
-        (settings.width && settings.width < 400) ||
-        (settings.height && settings.height < 300)
-      ) {
-        const msg = "⚠️ Low camera resolution. Face detection may not work properly.";
+
+      // 4. **Ensure camera status is updated ONLY after play starts**
+      // This avoids the issue where video exists but isn't streaming!
+      videoEl.onplaying = () => {
+        streamRef.current = stream;
+        setIsCameraOn(true);
+        logService.log("info", "Camera is playing and detection is allowed.");
+      };
+
+      // 5. If video is already playing (for some browsers), set flag
+      if (!videoEl.paused && videoEl.readyState >= 2) {
+        setIsCameraOn(true);
+        logService.log("info", "Camera is auto-playing and detection is allowed.");
+      }
+
+      logService.log("info", "Camera stream acquired and video playback started.");
+
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length) {
+        const settings = videoTracks[0].getSettings();
+        logService.log("debug", `Camera settings: ${JSON.stringify(settings)}`);
+        if (
+          (settings.width && settings.width < 400) ||
+          (settings.height && settings.height < 300)
+        ) {
+          const msg = "⚠️ Low camera resolution. Face detection may not work properly.";
+          showMessage("cameraErrorMessage", msg);
+          logService.log("warn", msg);
+        }
+        if (settings.frameRate && settings.frameRate < 15) {
+          const msg = "⚠️ Low frame rate. Detection quality may be affected.";
+          showMessage("cameraErrorMessage", msg);
+          logService.log("warn", msg);
+        }
+      }
+
+      const fps = await checkCameraFPS();
+      logService.log("debug", `Measured camera FPS: ${fps}`);
+      if (fps < 15) {
+        const msg = "⚠️ Camera FPS is too low for reliable detection.";
         showMessage("cameraErrorMessage", msg);
         logService.log("warn", msg);
       }
-      if (settings.frameRate && settings.frameRate < 15) {
-        const msg = "⚠️ Low frame rate. Detection quality may be affected.";
+
+      if (!videoEl.srcObject || !(videoEl.srcObject instanceof MediaStream)) {
+        const msg = "⚠️ Camera not providing video. Try refreshing or switching device.";
         showMessage("cameraErrorMessage", msg);
-        logService.log("warn", msg);
+        logService.log("error", msg);
+        return;
       }
-    }
 
-    const fps = await checkCameraFPS();
-    logService.log("debug", `Measured camera FPS: ${fps}`);
-    if (fps < 15) {
-      const msg = "⚠️ Camera FPS is too low for reliable detection.";
-      showMessage("cameraErrorMessage", msg);
-      logService.log("warn", msg);
-    }
+      // 6. You can display success message after camera is confirmed
+      showMessage("recordingMessage", "📷 Camera started successfully.");
+      logService.log("info", "📷 Camera started successfully.");
 
-    if (!videoEl.srcObject || !(videoEl.srcObject instanceof MediaStream)) {
-      const msg = "⚠️ Camera not providing video. Try refreshing or switching device.";
-      showMessage("cameraErrorMessage", msg);
-      logService.log("error", msg);
-      return;
-    }
+      _checkVideoResolution();
 
-    // 6. You can display success message after camera is confirmed
-    showMessage("recordingMessage", "📷 Camera started successfully.");
-    logService.log("info", "📷 Camera started successfully.");
+      // Setup overlay & brightness canvas
+      const setupOverlay = () => {
+        const w = videoEl.videoWidth || 640;
+        const h = videoEl.videoHeight || 480;
+        console.log("Canvas dimensions (w, h):", w, h);  // Add this log
 
-    _checkVideoResolution();
+        overlayEl.width = w;
+        overlayEl.height = h;
+        overlayEl.style.width = w + "px";
+        overlayEl.style.height = h + "px";
+        setOverlaySize({ width: w, height: h });
+        const ctx = overlayEl.getContext("2d");
+        ctx?.clearRect(0, 0, w, h);
+        if (ovalRef.current) {
+          ovalRef.current.w = w * 0.5;
+          ovalRef.current.h = h * 0.6;
+          ovalRef.current.cx = w / 2;
+          ovalRef.current.cy = h / 2;
+        }
+        if (!brightnessCanvasRef.current)
+          brightnessCanvasRef.current = document.createElement("canvas");
+        const bc = brightnessCanvasRef.current!;
+        bc.width = w;
+        bc.height = h;
+        brightnessCtxRef.current = bc.getContext("2d");
+        _drawFaceGuideOverlay(currentBrightnessRef.current || 100);
+        console.log(`Overlay and brightness canvas set up with dimensions: ${w}x${h}`);
+      };
 
-    // Setup overlay & brightness canvas
-    const setupOverlay = () => {
-      const w = videoEl.videoWidth || 640;
-      const h = videoEl.videoHeight || 480;
-      console.log("Canvas dimensions (w, h):", w, h);  // Add this log
-
-      overlayEl.width = w;
-      overlayEl.height = h;
-      overlayEl.style.width = w + "px";
-      overlayEl.style.height = h + "px";
-      setOverlaySize({ width: w, height: h });
-      const ctx = overlayEl.getContext("2d");
-      ctx?.clearRect(0, 0, w, h);
-      if (ovalRef.current) {
-        ovalRef.current.w = w * 0.5;
-        ovalRef.current.h = h * 0.6;
-        ovalRef.current.cx = w / 2;
-        ovalRef.current.cy = h / 2;
+      // Run setupOverlay after video metadata is loaded
+      if (videoEl.readyState >= 1) {
+        setupOverlay();
+      } else {
+        videoEl.addEventListener("loadedmetadata", setupOverlay, { once: true });
       }
-      if (!brightnessCanvasRef.current)
-        brightnessCanvasRef.current = document.createElement("canvas");
-      const bc = brightnessCanvasRef.current!;
-      bc.width = w;
-      bc.height = h;
-      brightnessCtxRef.current = bc.getContext("2d");
-      _drawFaceGuideOverlay(currentBrightnessRef.current || 100);
-      console.log(`Overlay and brightness canvas set up with dimensions: ${w}x${h}`);
-    };
 
-    // Run setupOverlay after video metadata is loaded
-    if (videoEl.readyState >= 1) {
-      setupOverlay();
-    } else {
-      videoEl.addEventListener("loadedmetadata", setupOverlay, { once: true });
+      console.log("Before detection loop: isCameraOn=", isCameraOn, "video", videoElementRef.current, "stream", streamRef.current);
+      logService.log("debug", `Detection precheck: isCameraOn=${isCameraOn} videoRef=${!!videoElementRef.current}`);
+
+
+    } catch (err: any) {
+      const errorMsg = `Camera initialization failed: ${err.message || err}`;
+      logService.log("error", errorMsg);
+      // eslint-disable-next-line no-console
+      console.error(errorMsg);
+
+      if (err.name === "NotAllowedError") {
+        const msg = "❌ Camera permission denied. Please allow access and refresh.";
+        showMessage("cameraErrorMessage", msg);
+        logService.log("error", msg);
+      } else if (err.name === "NotFoundError") {
+        const msg = "⚠️ No camera found on this device.";
+        showMessage("cameraErrorMessage", msg);
+        logService.log("error", msg);
+      } else {
+        const msg = "⚠️ Failed to access the camera. Try again.";
+        showMessage("cameraErrorMessage", msg);
+        logService.log("error", msg);
+      }
+      setIsCameraOn(false);
+    } finally {
+      isStartingCameraRef.current = false;
     }
-
-    console.log("Before detection loop: isCameraOn=", isCameraOn, "video", videoElementRef.current, "stream", streamRef.current);
-    logService.log("debug", `Detection precheck: isCameraOn=${isCameraOn} videoRef=${!!videoElementRef.current}`);
-
-
-  } catch (err: any) {
-    const errorMsg = `Camera initialization failed: ${err.message || err}`;
-    logService.log("error", errorMsg);
-    // eslint-disable-next-line no-console
-    console.error(errorMsg);
-
-    if (err.name === "NotAllowedError") {
-      const msg = "❌ Camera permission denied. Please allow access and refresh.";
-      showMessage("cameraErrorMessage", msg);
-      logService.log("error", msg);
-    } else if (err.name === "NotFoundError") {
-      const msg = "⚠️ No camera found on this device.";
-      showMessage("cameraErrorMessage", msg);
-      logService.log("error", msg);
-    } else {
-      const msg = "⚠️ Failed to access the camera. Try again.";
-      showMessage("cameraErrorMessage", msg);
-      logService.log("error", msg);
-    }
-    setIsCameraOn(false);
-  } finally {
-    isStartingCameraRef.current = false;
-  }
-}, [checkCameraFPS, showMessage, logService]);
+  }, [checkCameraFPS, showMessage, logService]);
 
 
   /* small wrapper to keep Angular method names exactly */
@@ -881,7 +894,7 @@ const startCamera = useCallback(async () => {
       return false;
     },
 
-    
+
     [logService, showAndLogMessage, showMessage]
   );
 
@@ -917,29 +930,29 @@ const startCamera = useCallback(async () => {
     [showAndLogMessage, showMessage]
   );
 
-const _detectSingleFaceWithLandmarks = useCallback(
-  async (options: any): Promise<void> => {
-    const v = videoElementRef.current!;
-    const res = await faceapi.detectSingleFace(v, options).withFaceLandmarks();
+  const _detectSingleFaceWithLandmarks = useCallback(
+    async (options: any): Promise<void> => {
+      const v = videoElementRef.current!;
+      const res = await faceapi.detectSingleFace(v, options).withFaceLandmarks();
 
-    // Debug (keep if useful)
-    console.log("Detection result:", res);
+      // Debug (keep if useful)
+      console.log("Detection result:", res);
 
-    if (res) {
-      // ✅ on success, populate the refs used by alignment/verification logic
-      lastLandmarksRef.current = res.landmarks;
-      lastBoxRef.current = res.detection.box;
-      // Optional: draw landmarks if you want a visual
-      // _drawFaceLandmarks(res.landmarks, overlayCanvasRef.current!);
-    } else {
-      // No face -> clear refs so alignment logic resets counters
-      lastLandmarksRef.current = null;
-      lastBoxRef.current = null;
-      logService.log("warn", "No face detected");
-    }
-  },
-  [logService]
-);
+      if (res) {
+        // ✅ on success, populate the refs used by alignment/verification logic
+        lastLandmarksRef.current = res.landmarks;
+        lastBoxRef.current = res.detection.box;
+        // Optional: draw landmarks if you want a visual
+        // _drawFaceLandmarks(res.landmarks, overlayCanvasRef.current!);
+      } else {
+        // No face -> clear refs so alignment logic resets counters
+        lastLandmarksRef.current = null;
+        lastBoxRef.current = null;
+        logService.log("warn", "No face detected");
+      }
+    },
+    [logService]
+  );
 
 
   const _areLandmarksFullyInsideOval = useCallback((landmarks: faceapi.FaceLandmarks68): boolean => {
@@ -984,8 +997,8 @@ const _detectSingleFaceWithLandmarks = useCallback(
         "ovalAlignMessage",
         faceInside ? "âœ… Yay! Your face is perfectly inside the oval! ðŸŽ‰" : ""
       );
-      
-      console.log("Alignment:", {faceInside, sizeOK, insideOvalFrames: insideOvalFramesRef.current});
+
+      console.log("Alignment:", { faceInside, sizeOK, insideOvalFrames: insideOvalFramesRef.current });
 
       return [faceInside, sizeOK];
     },
@@ -1000,7 +1013,7 @@ const _detectSingleFaceWithLandmarks = useCallback(
 
 
     if (isRecordingRef.current && !isVerifyingHeadTurnRef.current) _restartCurrentSegmentDueToFaceLoss();
-    
+
   }, []);
 
   const _checkDifferentFace = useCallback(async (): Promise<boolean> => {
@@ -1010,9 +1023,9 @@ const _detectSingleFaceWithLandmarks = useCallback(
     }
 
     if (!faceapi.nets.faceRecognitionNet.isLoaded) {
-  await faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights");
-  logService.log("info", "Loaded faceRecognitionNet on demand (FaceCheck)");
-}
+      await faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights");
+      logService.log("info", "Loaded faceRecognitionNet on demand (FaceCheck)");
+    }
 
 
     try {
@@ -1095,19 +1108,19 @@ const _detectSingleFaceWithLandmarks = useCallback(
         const [faceInside, sizeOK] = await _handleFaceAlignment(loop);
 
         console.log("Face alignment check:", {
-        faceInside,
-        sizeOK,
-        insideOvalFrames: insideOvalFramesRef.current
+          faceInside,
+          sizeOK,
+          insideOvalFrames: insideOvalFramesRef.current
         });
 
-         if (insideOvalFramesRef.current >= requiredFramesRef.current) {
-              console.log("Triggering recording due to enough frames inside the oval.");
-              console.log("Current recording flag:", recordingFlagRef.current);
-              showMessage("statusMessage", "âœ… Perfect! Stay still inside the dashed circle.");
-              setIsFaceDetected(true);
-              await _checkDifferentFace();
-          }                                
-           
+        if (insideOvalFramesRef.current >= requiredFramesRef.current) {
+          console.log("Triggering recording due to enough frames inside the oval.");
+          console.log("Current recording flag:", recordingFlagRef.current);
+          showMessage("statusMessage", "âœ… Perfect! Stay still inside the dashed circle.");
+          setIsFaceDetected(true);
+          await _checkDifferentFace();
+        }
+
 
         if (sizeOK && faceInside) {
           insideOvalFramesRef.current++;
@@ -1125,7 +1138,7 @@ const _detectSingleFaceWithLandmarks = useCallback(
             if (recordingFlagRef.current === 0) {
               await startRecording_FaceReference();
               logService.log("info", "ðŸŽ¥ Starting recording...");
-              
+
               // recordingFlagRef.current = 1;
               try {
                 await _startSegmentRecording(); // identical name & behavior
@@ -1177,81 +1190,81 @@ const _detectSingleFaceWithLandmarks = useCallback(
 
   /* ---------------- Window resize & mobile check (HostListener) --------------- */
   const _checkIsMobile = useCallback(() => setIsMobile(window.innerWidth <= 767), []);
-useEffect(() => {
-  
-  async function loadModelsAndStart() {
-    await faceapi.nets.tinyFaceDetector.loadFromUri('/assets/weights');
-    await faceapi.nets.faceLandmark68Net.loadFromUri('/assets/weights');
-    await faceapi.nets.faceRecognitionNet.loadFromUri('/assets/weights');
-    await faceapi.nets.faceExpressionNet.loadFromUri('/assets/weights');
+  useEffect(() => {
 
-    // Wait until videoRef is set by React
-    function waitForVideoRef(): Promise<HTMLVideoElement> {
-      return new Promise((resolve, reject) => {
-        const maxWaitMs = 20000;
-        const pollIntervalMs = 100;
-        let waited = 0;
+    async function loadModelsAndStart() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/assets/weights');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('/assets/weights');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('/assets/weights');
+      await faceapi.nets.faceExpressionNet.loadFromUri('/assets/weights');
 
-        const interval = setInterval(() => {
-          if (videoRef.current) {
-            clearInterval(interval);
-            resolve(videoRef.current);
-          }
-          waited += pollIntervalMs;
-          if (waited >= maxWaitMs) {
-            clearInterval(interval);
-            reject(new Error('Timed out waiting for video element'));
-          }
-        }, pollIntervalMs);
-      });
+      // Wait until videoRef is set by React
+      function waitForVideoRef(): Promise<HTMLVideoElement> {
+        return new Promise((resolve, reject) => {
+          const maxWaitMs = 5000;
+          const pollIntervalMs = 100;
+          let waited = 0;
+
+          const interval = setInterval(() => {
+            if (videoRef.current) {
+              clearInterval(interval);
+              resolve(videoRef.current);
+            }
+            waited += pollIntervalMs;
+            if (waited >= maxWaitMs) {
+              clearInterval(interval);
+              reject(new Error('Timed out waiting for video element'));
+            }
+          }, pollIntervalMs);
+        });
+      }
+
+      try {
+        await waitForVideoRef();
+      } catch (e) {
+        console.error('Failed to initialize camera: ', e);
+        showMessage('cameraErrorMessage', 'Video element not found. Please refresh.');
+      }
+      await startCamera();
+      _generateSegmentDurations();
     }
+    loadModelsAndStart();
+  }, []);
 
+  useEffect(() => {
     try {
-      await waitForVideoRef();
-    } catch (e) {
-      console.error('Failed to initialize camera: ', e);
-      showMessage('cameraErrorMessage', 'Video element not found. Please refresh.');
+      if (typeof cv !== "undefined") {
+        (cv as any).onRuntimeInitialized = () => {
+          console.log("OpenCV.js loaded");
+          setCvReady(true);
+        };
+      }
+    } catch { }
+  }, []);
+
+  useEffect(() => {
+    if (isCameraOn) {
+      _startDetectionRAF();
+      logService.log("info", "Detection loop started because camera is ON.");
     }
-    await startCamera();
-    _generateSegmentDurations();
-  }
-  loadModelsAndStart();
-}, []);
+  }, [isCameraOn]);
 
-useEffect(() => {
-  try {
-    if (typeof cv !== "undefined") {
-      (cv as any).onRuntimeInitialized = () => {
-        console.log("OpenCV.js loaded");
-        setCvReady(true);
-      };
-    }
-  } catch {}
-}, []);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const stuck =
+        recordingFlagRef.current === 1 &&
+        (!isRecordingRef.current ||
+          !mediaRecorderRef.current ||
+          mediaRecorderRef.current.state === "inactive");
 
-useEffect(() => {
-  if (isCameraOn) {
-    _startDetectionRAF();
-    logService.log("info", "Detection loop started because camera is ON.");
-  }
-}, [isCameraOn]);
+      if (stuck) {
+        console.warn("🛠 Resetting stuck recording flag");
+        recordingFlagRef.current = 0;
+      }
+    }, 1500);
 
-useEffect(() => {
-  const id = window.setInterval(() => {
-    const stuck =
-      recordingFlagRef.current === 1 &&
-      (!isRecordingRef.current ||
-        !mediaRecorderRef.current ||
-        mediaRecorderRef.current.state === "inactive");
-
-    if (stuck) {
-      console.warn("🛠 Resetting stuck recording flag");
-      recordingFlagRef.current = 0;
-    }
-  }, 1500);
-
-  return () => window.clearInterval(id);
-}, []);
+    return () => window.clearInterval(id);
+  }, []);
 
 
 
@@ -1319,369 +1332,69 @@ useEffect(() => {
   const isRecordingRef = useRef<boolean>(false);
 
   /* Angular: startRecording_FaceReference */
-const startRecording_FaceReference = useCallback(async () => {
-  completedSegmentsRef.current = [];
-  headTurnBlobRef.current = null;
-  headTurnVerifiedRef.current = false;
-  setHeadTurnAttemptStatus("");
-  referenceFaceDescriptorRef.current = null; // reset
+  const startRecording_FaceReference = useCallback(async () => {
+    completedSegmentsRef.current = [];
+    headTurnBlobRef.current = null;
+    headTurnVerifiedRef.current = false;
+    setHeadTurnAttemptStatus("");
+    referenceFaceDescriptorRef.current = null; // reset
 
-  // ✅ Check readiness via refs (not React state)
-  const canCapture =
-    !!lastLandmarksRef.current &&
-    !!lastBoxRef.current &&
-    insideOvalFramesRef.current >= (requiredFramesRef.current || 3);
+    // ✅ Check readiness via refs (not React state)
+    const canCapture =
+      !!lastLandmarksRef.current &&
+      !!lastBoxRef.current &&
+      insideOvalFramesRef.current >= (requiredFramesRef.current || 3);
 
-  if (!canCapture) {
-    showMessage("statusMessage", "🧭 Hold steady inside the circle for a moment…");
-    logService.log("info", "Reference capture attempted but face not ready via refs.");
-    return;
-  }
-
-  try {
-    // Ensure recognition model is loaded (safety guard)
-    if (!faceapi.nets.faceRecognitionNet.isLoaded) {
-      await faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights");
-      logService.log("info", "Loaded faceRecognitionNet on demand");
+    if (!canCapture) {
+      showMessage("statusMessage", "🧭 Hold steady inside the circle for a moment…");
+      logService.log("info", "Reference capture attempted but face not ready via refs.");
+      return;
     }
 
-    const v = videoElementRef.current!;
-    const opts = new faceapi.TinyFaceDetectorOptions();
+    try {
+      // Ensure recognition model is loaded (safety guard)
+      if (!faceapi.nets.faceRecognitionNet.isLoaded) {
+        await faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights");
+        logService.log("info", "Loaded faceRecognitionNet on demand");
+      }
 
-    // Try a few times; first frame may be mid-blink/blurred
-    let detection:
-      | (faceapi.WithFaceDescriptor<
+      const v = videoElementRef.current!;
+      const opts = new faceapi.TinyFaceDetectorOptions();
+
+      // Try a few times; first frame may be mid-blink/blurred
+      let detection:
+        | (faceapi.WithFaceDescriptor<
           faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>
         >)
-      | null = null;
+        | null = null;
 
-    for (let i = 0; i < 3 && !detection?.descriptor; i++) {
-      detection = await faceapi
-        .detectSingleFace(v, opts)
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-      if (!detection?.descriptor) await new Promise((r) => setTimeout(r, 120));
-    }
-
-    if (detection?.descriptor) {
-      referenceFaceDescriptorRef.current = detection.descriptor;
-      logService.log("info", "✅ Reference face descriptor captured");
-    } else {
-      logService.log("warn", "⚠️ Could not compute reference descriptor");
-      showMessage(
-        "statusMessage",
-        "⚠️ Could not lock onto your face—hold still and keep within the circle."
-      );
-    }
-  } catch (err) {
-    logService.log("error", `❌ Error capturing reference face: ${err}`);
-    showMessage("statusMessage", "⚠️ Error detecting face (will continue).");
-    recordingFlagRef.current = 0;
-  }
-
-  currentSegmentRef.current = 1;
-}, [logService, showMessage]);
-
-
-  /* Angular: _startSegmentRecording */
-  const _startSegmentRecording = useCallback(
-
-    async (resumeSecondsRecorded = 0) => {
-      console.log("🟢 _startSegmentRecording() called", { 
-        stream: !!streamRef.current,
-        tracks: streamRef.current?.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState })),
-      });
-
-      try {
-        // eslint-disable-next-line no-console
-        console.log("_startSegmentRecording called ---", {
-          resumeSecondsRecorded,
-          currentSegment: currentSegmentRef.current,
-          isRecording: isRecordingRef.current,
-          segmentSecondsRecorded: segmentSecondsRecordedRef.current,
-        });
-
-        if (!streamRef.current) {
-          showMessage("statusMessage", "âš ï¸ Camera not initialized.");
-          logService.log(
-            "error",
-            "Camera stream not initialized when trying to start segment recording."
-          );
-          // eslint-disable-next-line no-console
-          console.error("Camera stream not initialized. Aborting segment recording.");
-          recordingFlagRef.current = 0;
-          return;
-        }
-
-        if (!currentSegmentRef.current || currentSegmentRef.current <= 0) {
-          currentSegmentRef.current = 1;
-          logService.log("warn", "currentSegment was 0 or invalid, reset to 1.");
-        }
-
-        let options: MediaRecorderOptions | undefined;
-
-        if (resumeSecondsRecorded === 0) {
-          recordedChunksPerSegmentRef.current[currentSegmentRef.current] = [];
-          if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9"))
-            options = { mimeType: "video/webm;codecs=vp9" };
-          else if (MediaRecorder.isTypeSupported("video/webm")) options = { mimeType: "video/webm" };
-          else if (MediaRecorder.isTypeSupported("video/mp4"))
-            options = { mimeType: "video/mp4", videoBitsPerSecond: 100000 };
-          else {
-            logService.log("info", "No supported MIME type found for MediaRecorder on this browser.");
-            showMessage("statusMessage", "âš ï¸ MediaRecorder MIME type not supported.");
-            recordingFlagRef.current = 0;
-            return;
-          }
-        } else {
-          if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9"))
-            options = { mimeType: "video/webm;codecs=vp9" };
-          else if (MediaRecorder.isTypeSupported("video/webm")) options = { mimeType: "video/webm" };
-          else if (MediaRecorder.isTypeSupported("video/mp4"))
-            options = { mimeType: "video/mp4", videoBitsPerSecond: 100000 };
-        }
-
-        if (resumeSecondsRecorded === 0 && !isRecordingRef.current) {
-          logService.log("info", "Starting fresh new segment recording.");
-
-          if (
-            currentSegmentRef.current === 1 &&
-            (segmentSecondsRecordedRef.current === undefined ||
-              segmentSecondsRecordedRef.current === null)
-          ) {
-            completedSegmentsRef.current = [];
-            verificationDoneForSegmentRef.current = {};
-            verificationSuccessForSegmentRef.current = {};
-            headTurnAttemptsPerSegmentRef.current = {};
-            headVerificationCountPerSegmentRef.current = {};
-            partialSegmentBlobsPerSegmentRef.current = {};
-          }
-
-          segmentSecondsRecordedRef.current = 0;
-          extraSecondsRecordedRef.current = 0;
-          isSegmentValidRef.current = true;
-          // isRecordingRef.current = true;
-          headTurnAttemptsRef.current = 0;
-          currentSessionStartTimeRef.current = 0;
-
-          verificationDoneForSegmentRef.current[currentSegmentRef.current] = false;
-          headTurnAttemptsPerSegmentRef.current[currentSegmentRef.current] = 0;
-          headVerificationCountPerSegmentRef.current[currentSegmentRef.current] = 0;
-        } else {
-          segmentSecondsRecordedRef.current = resumeSecondsRecorded;
-          extraSecondsRecordedRef.current = 0;
-          currentSessionStartTimeRef.current = resumeSecondsRecorded;
-          recordedChunksPerSegmentRef.current[currentSegmentRef.current] = [];
-        }
-
-        headSegmentSecondsRecordedRef.current = 0;
-
-        console.log("🟢 _startSegmentRecording() invoked", {
-          streamExists: !!streamRef.current,
-          trackStates: streamRef.current?.getTracks().map(t => ({
-            kind: t.kind,
-            readyState: t.readyState,
-            enabled: t.enabled,
-          })),
-          videoState: videoElementRef.current?.readyState,
-        });
-
-        // 🟢 Ensure video is actually playing before creating MediaRecorder
-        const videoEl = videoElementRef.current;
-        if (videoEl) {
-          console.log("Waiting for video readiness...");
-          await new Promise<void>((resolve) => {
-            if (videoEl.readyState >= 2 && !videoEl.paused) {
-              console.log("Video already playing");
-              resolve();
-            } else {
-              videoEl.onplaying = () => {
-                console.log("Video is now playing — safe to start MediaRecorder");
-                resolve();
-              };
-            }
-          });
-        }
-
-        try {
-          mediaRecorderRef.current = new MediaRecorder(streamRef.current, options);
-          console.log(`MediaRecorder created for segment ${currentSegmentRef.current}`);
-        } catch (err) {
-          console.error(`Failed to create MediaRecorder: ${err}`);
-          showMessage("statusMessage", "⚠️ Could not create MediaRecorder. Recording aborted.");
-          recordingFlagRef.current = 0;
-          return;
-        }        
-
-        if (!streamRef.current) {
-          console.error("Stream ref is null, cannot start recording.");
-          showMessage("statusMessage", "⚠️ Camera stream not available for recording.");
-          return;
-        }
-
-        // isRecordingRef.current = true;
-
-        console.log(`MediaRecorder created for segment ${currentSegmentRef.current}`);
-
-        mediaRecorderRef.current.onstart = () => {
-          console.log("🎥 MediaRecorder started:", mediaRecorderRef.current?.state);
-          recordingFlagRef.current = 1;   // set the flag only once recording truly starts
-          isRecordingRef.current = true;  // mark recording active
-        };
-
-        const segmentTarget =
-          segmentDurationsRef.current[currentSegmentRef.current - 1];
-        const remaining = segmentTarget - segmentSecondsRecordedRef.current;
-        setTimeRemaining(remaining);
-
-        if (remaining <= 0) {
-          await _onSegmentComplete();
-          return;
-        }
-
-        showMessage(
-          "recordingMessage",
-          `ðŸŽ¥ Recording segment ${currentSegmentRef.current}... (${remaining}s left)`
-        );
-
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data && event.data.size > 0) {
-            console.log(`Data chunk received for segment ${currentSegmentRef.current}: size=${event.data.size}`);
-            recordedChunksPerSegmentRef.current[currentSegmentRef.current] ??= [];
-            recordedChunksPerSegmentRef.current[currentSegmentRef.current].push(event.data);
-          } else {
-            console.warn("Empty data chunk received");
-          }
-        };
-
-        mediaRecorderRef.current.onstop = async () => {
-          recordingFlagRef.current = 0;       // ✅ allow retriggers later
-          isRecordingRef.current = false;
-
-            console.log(`MediaRecorder stopped for segment ${currentSegmentRef.current}. Total chunks recorded:`, recordedChunksPerSegmentRef.current[currentSegmentRef.current]?.length);
-            console.log("⚙️ onstop fired for segment", currentSegmentRef.current);
-          const chunkCount =
-            recordedChunksPerSegmentRef.current[currentSegmentRef.current]?.length || 0;
-          const segmentTarget2 =
-            segmentDurationsRef.current[currentSegmentRef.current - 1];
-          const hasEnoughTime = segmentSecondsRecordedRef.current >= segmentTarget2;
-          const hasValidChunks = chunkCount > 0;
-
-          if (stoppingForRestartRef.current) {
-            const sessionDuration =
-              segmentSecondsRecordedRef.current - currentSessionStartTimeRef.current;
-            if (hasValidChunks && sessionDuration > 0) {
-              const chunks =
-                recordedChunksPerSegmentRef.current[currentSegmentRef.current];
-              const blob = new Blob(chunks, { type: options?.mimeType ?? "video/webm" });
-              if (!partialSegmentBlobsPerSegmentRef.current[currentSegmentRef.current])
-                partialSegmentBlobsPerSegmentRef.current[currentSegmentRef.current] = [];
-              partialSegmentBlobsPerSegmentRef.current[currentSegmentRef.current].push({
-                blob,
-                startTime: currentSessionStartTimeRef.current,
-                endTime: segmentSecondsRecordedRef.current,
-                duration: sessionDuration,
-              });
-            }
-            stoppingForRestartRef.current = false;
-            return;
-          }
-
-          if (isFaceDetected && isSegmentValidRef.current && hasEnoughTime && hasValidChunks) {
-            const chunks =
-              recordedChunksPerSegmentRef.current[currentSegmentRef.current];
-            const blob = new Blob(chunks, { type: options?.mimeType ?? "video/webm" });
-            completedSegmentsRef.current.push(blob);
-            logService.log("info", `Segment ${currentSegmentRef.current} COMPLETED and saved.`);
-          } else {
-            logService.log("warn", `Segment ${currentSegmentRef.current} incomplete; retrying.`);
-            window.setTimeout(
-              () => _startSegmentRecording(segmentSecondsRecordedRef.current),
-              600
-            );
-            return;
-          }
-
-          if (_shouldVerifyAfterSegment(currentSegmentRef.current)) {
-            await _performVerificationForCurrentSegment();
-            return;
-          }
-
-          console.log("💾 Debug: Downloading immediately...");
-          _downloadAllBlobs();
-
-          await _onSegmentComplete();
-        };
-
-        if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = window.setInterval(async () => {
-          if (!isRecordingRef.current) {
-            if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
-            return;
-          }
-
-          if (!isFaceDetected) {
-            if (mediaRecorderRef.current?.state === "recording") {
-              mediaRecorderRef.current.pause();
-              showMessage("recordingMessage", `â¸ï¸ Paused because face not detected`);
-            }
-            return;
-          }
-
-          if (mediaRecorderRef.current?.state === "paused") {
-            mediaRecorderRef.current.resume();
-            showMessage("recordingMessage", `â–¶ï¸ Resumed recording`);
-          }
-
-          if (mediaRecorderRef.current?.state === "recording") {
-            const target = segmentDurationsRef.current[currentSegmentRef.current - 1];
-
-            if (segmentSecondsRecordedRef.current < target) {
-              segmentSecondsRecordedRef.current++;
-              const remain = target - segmentSecondsRecordedRef.current;
-              setTimeRemaining(remain);
-
-              if (await _checkDifferentFace()) {
-                isSegmentValidRef.current = false;
-                showMessage(
-                  "verificationMessage",
-                  "âŒ Different face detected for several seconds! Restarting from scratch..."
-                );
-                if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
-                _resetAll();
-                _restartCurrentSegmentDueToFaceLoss();
-                if ((mediaRecorderRef.current?.state as MediaRecorder["state"]) !== "inactive")
-                  mediaRecorderRef.current?.stop();
-                return;
-              }
-            } else {
-              // Segment time reached → stop recorder & trigger onstop
-              if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
-
-              if (mediaRecorderRef.current?.state === "recording") {
-                console.log(
-                  "🕑 Segment target reached, stopping MediaRecorder for segment",
-                  currentSegmentRef.current
-                );
-                mediaRecorderRef.current.stop();
-              } else {
-                console.warn("MediaRecorder not in recording state at target time:", mediaRecorderRef.current?.state);
-              }
-            }
-          }
-        }, 1000);
-
-        mediaRecorderRef.current.start();
-
-      } catch (err) {
-        showMessage("statusMessage", "âš ï¸ Unable to start recording segment. Please try again.");
-        // eslint-disable-next-line no-console
-        console.error("Failed to start recording:", err);
-        recordingFlagRef.current = 0;
+      for (let i = 0; i < 3 && !detection?.descriptor; i++) {
+        detection = await faceapi
+          .detectSingleFace(v, opts)
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+        if (!detection?.descriptor) await new Promise((r) => setTimeout(r, 120));
       }
-    },
-    [_checkDifferentFace, showMessage]
-  );
+
+      if (detection?.descriptor) {
+        referenceFaceDescriptorRef.current = detection.descriptor;
+        logService.log("info", "✅ Reference face descriptor captured");
+      } else {
+        logService.log("warn", "⚠️ Could not compute reference descriptor");
+        showMessage(
+          "statusMessage",
+          "⚠️ Could not lock onto your face—hold still and keep within the circle."
+        );
+      }
+    } catch (err) {
+      logService.log("error", `❌ Error capturing reference face: ${err}`);
+      showMessage("statusMessage", "⚠️ Error detecting face (will continue).");
+      recordingFlagRef.current = 0;
+    }
+
+    currentSegmentRef.current = 1;
+  }, [logService, showMessage]);
+
 
   /* Angular: _resetAll (full reset for restart) */
   const _resetAll = useCallback(() => {
@@ -1702,6 +1415,7 @@ const startRecording_FaceReference = useCallback(async () => {
 
 
   /* Angular: _restartCurrentSegmentDueToFaceLoss */
+  // 2) Updated _restartCurrentSegmentDueToFaceLoss (uses startSegmentRecordingRef)
   const _restartCurrentSegmentDueToFaceLoss = useCallback(() => {
     logService.log("info", "Attempting to restart current segment due to face loss.");
 
@@ -1717,7 +1431,7 @@ const startRecording_FaceReference = useCallback(async () => {
       stoppingForRestartRef.current = true;
       showMessage(
         "verificationMessage",
-        "âš ï¸ Recording reset due to face loss. Continuing from current progress..."
+        "⚠️ Recording reset due to face loss. Continuing from current progress..."
       );
       logService.log("warn", "Recording reset due to face loss or quality issues.");
 
@@ -1762,7 +1476,7 @@ const startRecording_FaceReference = useCallback(async () => {
 
       if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "recording") {
         logService.log("info", "Starting segment recording after restart.");
-        _startSegmentRecording(resumeTime);
+        startSegmentRecordingRef.current(resumeTime);
       } else {
         logService.log(
           "warn",
@@ -1770,7 +1484,8 @@ const startRecording_FaceReference = useCallback(async () => {
         );
       }
     }, 1000);
-  }, [logService, showMessage, _startSegmentRecording]);
+  }, [logService, showMessage]);
+
 
   /* Angular: downloadAllBlobs -> _downloadAllBlobs */
   const _downloadAllBlobs = useCallback(() => {
@@ -2204,6 +1919,7 @@ const startRecording_FaceReference = useCallback(async () => {
   );
 
   /* Angular: _performVerificationForCurrentSegment */
+  // 4) Updated _performVerificationForCurrentSegment (all cross-calls via refs)
   const _performVerificationForCurrentSegment = useCallback(async () => {
     setShowHeadTurnPrompt(true);
 
@@ -2225,21 +1941,20 @@ const startRecording_FaceReference = useCallback(async () => {
     setDirectionRef(verificationDirection);
     showMessage(
       "headTurnAttemptStatus",
-      `Please ${
-        verificationDirection === "left"
-          ? "turn your head LEFT"
-          : verificationDirection === "right"
+      `Please ${verificationDirection === "left"
+        ? "turn your head LEFT"
+        : verificationDirection === "right"
           ? "turn your head RIGHT"
           : verificationDirection === "up"
-          ? "tilt your head UP"
-          : "tilt your head DOWN"
+            ? "tilt your head UP"
+            : "tilt your head DOWN"
       }`
     );
     logService.log("info", `Prompting user to ${verificationDirection}`);
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.pause();
-      showMessage("recordingMessage", `â¸ï¸ Paused segment recording for head verification.`);
+      showMessage("recordingMessage", `⏸️ Paused segment recording for head verification.`);
     }
 
     let options: MediaRecorderOptions | undefined;
@@ -2258,10 +1973,9 @@ const startRecording_FaceReference = useCallback(async () => {
     headSegmentSecondsRecordedRef.current = 0;
 
     if (!streamRef.current || !(streamRef.current instanceof MediaStream)) {
-    console.error("Invalid or missing stream for MediaRecorder.");
-    return;
+      console.error("Invalid or missing stream for MediaRecorder.");
+      return;
     }
-
 
     headMediaRecorderRef.current = new MediaRecorder(streamRef.current!, options);
 
@@ -2304,19 +2018,17 @@ const startRecording_FaceReference = useCallback(async () => {
 
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused" && isRecordingRef.current) {
         mediaRecorderRef.current.resume();
-        showMessage("recordingMessage", `â–¶ï¸ Resumed segment recording after head verification video.`);
+        showMessage("recordingMessage", `▶️ Resumed segment recording after head verification video.`);
       }
     };
 
     console.log(`Starting MediaRecorder for segment ${currentSegmentRef.current}`);
-
     headMediaRecorderRef.current.start();
     console.log("🎥 Recorder started with state:", headMediaRecorderRef.current.state);
 
     setTimeout(() => {
       console.log("⏱️ Recorder state after 2s:", mediaRecorderRef.current?.state);
     }, 2000);
-
 
     const success = await _startHeadMovementVerification(verificationDirection);
 
@@ -2330,15 +2042,15 @@ const startRecording_FaceReference = useCallback(async () => {
       verificationDoneForSegmentRef.current[currentSegmentRef.current] = true;
       headTurnAttemptsRef.current = 0;
       headTurnAttemptsPerSegmentRef.current[currentSegmentRef.current] = 0;
-      showMessage("headTurnAttemptStatus", `âœ… Head turn verified.`);
+      showMessage("headTurnAttemptStatus", `✅ Head turn verified.`);
 
-      window.setTimeout(() => _startSegmentRecording(segmentSecondsRecordedRef.current), 600);
+      window.setTimeout(() => startSegmentRecordingRef.current(segmentSecondsRecordedRef.current), 600);
     } else {
       headTurnAttemptsRef.current++;
       headTurnAttemptsPerSegmentRef.current[currentSegmentRef.current] = headTurnAttemptsRef.current;
       showMessage(
         "headTurnAttemptStatus",
-        `âŒ Head turn failed attempt ${headTurnAttemptsRef.current}. Please try again.`
+        `❌ Head turn failed attempt ${headTurnAttemptsRef.current}. Please try again.`
       );
 
       if (headTurnAttemptsRef.current >= maxHeadTurnAttemptsRef.current) {
@@ -2346,57 +2058,59 @@ const startRecording_FaceReference = useCallback(async () => {
           HeadTurnRecordingFailedRef.current = true;
           showMessage(
             "headTurnAttemptStatus",
-            `âŒ Verification 1 failed ${headTurnAttemptsRef.current} times. Restarting all segments.`
+            `❌ Verification 1 failed ${headTurnAttemptsRef.current} times. Restarting all segments.`
           );
           _resetAll();
-          window.setTimeout(() => _startSegmentRecording(0), 1000);
+          window.setTimeout(() => startSegmentRecordingRef.current(0), 1000);
         } else if (currentSegmentRef.current === 2) {
           HeadTurnRecordingFailedRef.current = true;
           showMessage(
             "headTurnAttemptStatus",
-            `âŒ Verification 2 failed. Will trigger verification 3 after final video.`
+            `❌ Verification 2 failed. Will trigger verification 3 after final video.`
           );
           triggerVerification3Ref.current = true;
           window.setTimeout(
-            () =>
-              _startSegmentRecording(
-                segmentDurationsRef.current[currentSegmentRef.current - 1]
-              ),
+            () => startSegmentRecordingRef.current(
+              segmentDurationsRef.current[currentSegmentRef.current - 1]
+            ),
             600
           );
         } else {
           HeadTurnRecordingFailedRef.current = true;
-          showMessage("headTurnAttemptStatus", `âŒ Verification 3 failed. Restarting all.`);
+          showMessage("headTurnAttemptStatus", `❌ Verification 3 failed. Restarting all.`);
           _resetAll();
-          window.setTimeout(() => _startSegmentRecording(0), 1000);
+          window.setTimeout(() => startSegmentRecordingRef.current(0), 1000);
         }
       } else {
-        window.setTimeout(() => _performVerificationForCurrentSegment(), 1500);
+        window.setTimeout(() => performVerificationRef.current(), 1500);
       }
     }
-  }, [_resetAll, _startHeadMovementVerification, _startSegmentRecording, showMessage]);
+  }, [_resetAll, _startHeadMovementVerification, showMessage, logService]);
 
-    /* Angular: _onSegmentComplete */
+
+  /* Angular: _onSegmentComplete */
+  // 3) Updated _onSegmentComplete (uses refs instead of direct calls)
   const _onSegmentComplete = useCallback(async () => {
-    showMessage("recordingMessage", `âœ… Segment ${currentSegmentRef.current} complete.`);
+    showMessage("recordingMessage", `✅ Segment ${currentSegmentRef.current} complete.`);
 
     if (currentSegmentRef.current < totalSegmentsRef.current) {
       currentSegmentRef.current++;
       verificationTimeInSegmentRef.current = 0;
-      window.setTimeout(() => _startSegmentRecording(0), 600);
+      window.setTimeout(() => startSegmentRecordingRef.current(0), 600);
     } else {
       if (triggerVerification3Ref.current && !verificationDoneForSegmentRef.current[3]) {
-        await _performVerificationForCurrentSegment();
+        await performVerificationRef.current();
       } else {
         isRecordingRef.current = false;
-        showMessage("recordingMessage", "âœ… All segments & verifications complete. Thank you!");
+        showMessage("recordingMessage", "✅ All segments & verifications complete. Thank you!");
 
         downloadLogs();
         window.setTimeout(() => _downloadAllBlobs(), 3000);
         setShowSuccessScreen(true);
       }
     }
-  }, [downloadLogs, showMessage, _performVerificationForCurrentSegment, _startSegmentRecording]);
+  }, [downloadLogs, showMessage, _downloadAllBlobs]);
+
 
 
   /* Angular: getRandomDirection */
@@ -2436,6 +2150,347 @@ const startRecording_FaceReference = useCallback(async () => {
     }
     return false;
   };
+
+  const _startSegmentRecording = useCallback(
+    async (resumeSecondsRecorded = 0) => {
+      // Re-entry guards
+      if (isStartingSegmentRef.current) {
+        logService.log("warn", "[SEG] Start ignored: already starting.");
+        return;
+      }
+      if (recordingFlagRef.current === 1 || isRecordingRef.current) {
+        logService.log("warn", "[SEG] Start ignored: already recording.");
+        return;
+      }
+      if (!streamRef.current) {
+        showMessage("statusMessage", "⚠️ Camera not initialized.");
+        logService.log("error", "[SEG] No camera stream.");
+        return;
+      }
+
+      isStartingSegmentRef.current = true;
+      const mySessionId = ++segmentSessionIdRef.current; // unique session
+      segmentRetryRef.current = resumeSecondsRecorded === 0 ? 0 : segmentRetryRef.current;
+
+      // Clean any previous timers/recorders
+      try { if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current); } catch { }
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      } catch { }
+
+      // Validate/normalize segment index
+      if (!currentSegmentRef.current || currentSegmentRef.current <= 0) {
+        currentSegmentRef.current = 1;
+        logService.log("warn", "[SEG] currentSegment was invalid; set to 1.");
+      }
+
+      // Prepare segment state
+      try {
+        if (resumeSecondsRecorded === 0) {
+          recordedChunksPerSegmentRef.current[currentSegmentRef.current] = [];
+          segmentSecondsRecordedRef.current = 0;
+          extraSecondsRecordedRef.current = 0;
+          isSegmentValidRef.current = true;
+          headTurnAttemptsRef.current = 0;
+          currentSessionStartTimeRef.current = 0;
+
+          if (currentSegmentRef.current === 1) {
+            completedSegmentsRef.current = [];
+            verificationDoneForSegmentRef.current = {};
+            verificationSuccessForSegmentRef.current = {};
+            headTurnAttemptsPerSegmentRef.current = {};
+            headVerificationCountPerSegmentRef.current = {};
+            partialSegmentBlobsPerSegmentRef.current = {};
+          }
+
+          verificationDoneForSegmentRef.current[currentSegmentRef.current] = false;
+          headTurnAttemptsPerSegmentRef.current[currentSegmentRef.current] = 0;
+          headVerificationCountPerSegmentRef.current[currentSegmentRef.current] = 0;
+        } else {
+          // Resuming
+          segmentSecondsRecordedRef.current = resumeSecondsRecorded;
+          extraSecondsRecordedRef.current = 0;
+          currentSessionStartTimeRef.current = resumeSecondsRecorded;
+          recordedChunksPerSegmentRef.current[currentSegmentRef.current] = [];
+        }
+
+        // Ensure video is actually playing before starting recorder
+        const videoEl = videoElementRef.current;
+        if (videoEl) {
+          await new Promise<void>((resolve) => {
+            if (videoEl.readyState >= 2 && !videoEl.paused) return resolve();
+            const onPlaying = () => {
+              videoEl.removeEventListener("playing", onPlaying);
+              resolve();
+            };
+            videoEl.addEventListener("playing", onPlaying);
+          });
+        }
+
+        // Choose a supported mime
+        let options: MediaRecorderOptions | undefined;
+        if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
+          options = { mimeType: "video/webm;codecs=vp9" };
+        } else if (MediaRecorder.isTypeSupported("video/webm")) {
+          options = { mimeType: "video/webm" };
+        } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+          options = { mimeType: "video/mp4", videoBitsPerSecond: 100000 };
+        } else {
+          showMessage("statusMessage", "⚠️ MediaRecorder MIME type not supported.");
+          logService.log("error", "[SEG] No supported MIME type.");
+          return;
+        }
+
+        const rec = new MediaRecorder(streamRef.current!, options);
+        mediaRecorderRef.current = rec;
+
+        // Session-safe helper: ignore callbacks from stale sessions
+        const isStale = () => mySessionId !== segmentSessionIdRef.current;
+
+        // rec.onstart = () => {
+        //   if (isStale()) return;
+        //   recordingFlagRef.current = 1;
+        //   isRecordingRef.current = true;
+        //   const target = segmentDurationsRef.current[currentSegmentRef.current - 1];
+        //   const remaining = target - segmentSecondsRecordedRef.current;
+        //   setTimeRemaining(Math.max(remaining, 0));
+        //   showMessage(
+        //     "recordingMessage",
+        //     `🎬 Recording segment ${currentSegmentRef.current}... (${Math.max(remaining, 0)}s left)`
+        //   );
+        //   logService.log("info", `[SEG] Started. Session=${mySessionId}`);
+        // };
+
+        // rec.ondataavailable = (event) => {
+        //   if (isStale()) return;
+        //   if (event.data && event.data.size > 0) {
+        //     recordedChunksPerSegmentRef.current[currentSegmentRef.current] ??= [];
+        //     recordedChunksPerSegmentRef.current[currentSegmentRef.current].push(event.data);
+        //   }
+        // };
+
+        // rec.onstop = async () => {
+        //   if (isStale()) return;
+
+        //   recordingFlagRef.current = 0;
+        //   isRecordingRef.current = false;
+
+        //   const chunks = recordedChunksPerSegmentRef.current[currentSegmentRef.current] || [];
+        //   const hasValidChunks = chunks.length > 0;
+        //   const target = segmentDurationsRef.current[currentSegmentRef.current - 1];
+        //   const hasEnoughTime = segmentSecondsRecordedRef.current >= target;
+
+        //   // If we stopped intentionally for restart (face loss), stash partial and return
+        //   if (stoppingForRestartRef.current) {
+        //     stoppingForRestartRef.current = false;
+        //     const sessionDuration = segmentSecondsRecordedRef.current - currentSessionStartTimeRef.current;
+        //     if (hasValidChunks && sessionDuration > 0) {
+        //       const blob = new Blob(chunks, { type: options?.mimeType ?? "video/webm" });
+        //       partialSegmentBlobsPerSegmentRef.current[currentSegmentRef.current] ??= [];
+        //       partialSegmentBlobsPerSegmentRef.current[currentSegmentRef.current].push({
+        //         blob,
+        //         startTime: currentSessionStartTimeRef.current,
+        //         endTime: segmentSecondsRecordedRef.current,
+        //         duration: sessionDuration,
+        //       });
+        //     }
+        //     // Do NOT auto-restart here; the caller (_restartCurrentSegmentDueToFaceLoss) controls it.
+        //     logService.log("info", `[SEG] Stopped for restart. Session=${mySessionId}`);
+        //     return;
+        //   }
+
+
+        //   // Normal stop: either complete or retry bounded times
+        //   if (isFaceDetected && isSegmentValidRef.current && hasEnoughTime && hasValidChunks) {
+        //     const blob = new Blob(chunks, { type: options?.mimeType ?? "video/webm" });
+        //     completedSegmentsRef.current.push(blob);
+        //     logService.log("info", `[SEG] ✅ Segment ${currentSegmentRef.current} saved. Session=${mySessionId}`);
+
+        //     if (_shouldVerifyAfterSegment(currentSegmentRef.current)) {
+        //       await _performVerificationForCurrentSegment();
+        //       return;
+        //     }
+
+        //     _downloadAllBlobs(); // keep your behavior
+        //     await _onSegmentComplete();
+        //     return;
+        //   }
+
+        //   // Bounded retries to prevent loops
+        //   if (segmentRetryRef.current < MAX_SEGMENT_RETRIES) {
+        //     segmentRetryRef.current += 1;
+        //     logService.log(
+        //       "warn",
+        //       `[SEG] Incomplete/invalid segment; retry ${segmentRetryRef.current}/${MAX_SEGMENT_RETRIES}.`
+        //     );
+        //     // Small debounce to avoid tight loops
+        //     setTimeout(() => {
+        //       if (!isStale()) _startSegmentRecording(segmentSecondsRecordedRef.current);
+        //     }, 600);
+        //   } else {
+        //     showMessage(
+        //       "statusMessage",
+        //       "⚠️ Couldn’t complete the segment reliably. Please re-align and try again."
+        //     );
+        //     logService.log("error", "[SEG] Max retries hit; aborting this segment.");
+        //   }
+        // };
+        // rec.start();
+
+        // setTimeout(() => {
+        //   rec.stop();
+        // }, 5000);
+        rec.onstart = () => {
+          if (isStale()) return;
+          recordingFlagRef.current = 1;
+          isRecordingRef.current = true;
+
+          const target = segmentDurationsRef.current[currentSegmentRef.current - 1];
+          const remaining = target - segmentSecondsRecordedRef.current;
+          setTimeRemaining(Math.max(remaining, 0));
+
+          showMessage(
+            "recordingMessage",
+            `🎬 Recording segment ${currentSegmentRef.current}... (${Math.max(remaining, 0)}s left)`
+          );
+          logService.log("info", `[SEG] Started. Session=${mySessionId}`);
+        };
+
+        rec.ondataavailable = (event) => {
+          if (isStale()) return;
+          if (event.data && event.data.size > 0) {
+            recordedChunksPerSegmentRef.current[currentSegmentRef.current] ??= [];
+            recordedChunksPerSegmentRef.current[currentSegmentRef.current].push(event.data);
+          }
+        };
+
+        // ✅ Minimal onstop: just build a blob from whatever we have and download it.
+        //    No partial stashing, no verification, no retries, no flushing of refs/arrays.
+        rec.onstop = () => {
+          if (isStale()) return;
+
+          recordingFlagRef.current = 0;
+          isRecordingRef.current = false;
+
+          const chunks = recordedChunksPerSegmentRef.current[currentSegmentRef.current] || [];
+          if (chunks.length === 0) {
+            logService.log("warn", "[SEG] No data available to download.");
+            return;
+          }
+
+          const blob = new Blob(chunks, { type: options?.mimeType ?? "video/webm" });
+
+          // Optional: keep it for later if you want, but we do NOT clear arrays.
+          completedSegmentsRef.current.push(blob);
+
+          // Generate a readable filename (no cleanup of any state)
+          const filename = `segment_${currentSegmentRef.current}_${new Date()
+            .toISOString()
+            .replace(/[:.]/g, "-")}.webm`;
+
+          const a = document.createElement("a");
+          a.style.display = "none";
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            URL.revokeObjectURL(a.href);
+            document.body.removeChild(a);
+          }, 100);
+
+          showMessage("recordingMessage", `✅ Downloaded ${filename}`);
+          logService.log("info", `[SEG] Downloaded ${filename}`);
+        };
+
+        rec.start();
+
+        // however you want to stop it (example: 5s)
+        setTimeout(() => {
+          if (rec.state === "recording") rec.stop();
+        }, 5000);
+
+        // Session-owned timer
+        if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = window.setInterval(async () => {
+          if (isStale()) {
+            try { if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current); } catch { }
+            return;
+          }
+
+          if (!isRecordingRef.current || !mediaRecorderRef.current) {
+            try { if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current); } catch { }
+            return;
+          }
+
+          // Pause/resume based on face
+          if (!isFaceDetected) {
+            if (mediaRecorderRef.current.state === "recording") {
+              mediaRecorderRef.current.pause();
+              showMessage("recordingMessage", "⏸️ Paused (face not detected)");
+            }
+            return;
+          } else if (mediaRecorderRef.current.state === "paused") {
+            mediaRecorderRef.current.resume();
+            showMessage("recordingMessage", "▶️ Resumed");
+          }
+
+          // Time accounting & different-face check
+          const target = segmentDurationsRef.current[currentSegmentRef.current - 1];
+          if (segmentSecondsRecordedRef.current < target) {
+            segmentSecondsRecordedRef.current += 1;
+            setTimeRemaining(Math.max(target - segmentSecondsRecordedRef.current, 0));
+
+            if (await _checkDifferentFace()) {
+              isSegmentValidRef.current = false;
+              showMessage(
+                "verificationMessage",
+                "❌ Different face detected for several seconds! Restarting from scratch..."
+              );
+              try { if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current); } catch { }
+              _resetAll();
+              _restartCurrentSegmentDueToFaceLoss();
+              if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
+              return;
+            }
+          } else {
+            // Target reached → stop (fires onstop)
+            try { if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current); } catch { }
+            if (mediaRecorderRef.current.state === "recording") {
+              mediaRecorderRef.current.stop();
+            }
+          }
+        }, 1000);
+
+        // Finally, start recording (async)
+        // rec.start();
+      } catch (err) {
+        showMessage("statusMessage", "⚠️ Unable to start recording segment. Please try again.");
+        logService.log("error", `[SEG] Failed to start: ${err}`);
+        recordingFlagRef.current = 0;
+      } finally {
+        isStartingSegmentRef.current = false;
+      }
+    },
+    [_checkDifferentFace, showMessage, logService, _performVerificationForCurrentSegment, _onSegmentComplete, _resetAll, _restartCurrentSegmentDueToFaceLoss, _shouldVerifyAfterSegment, _downloadAllBlobs]
+  );
+
+
+  // 5) Wire the refs once (after all four functions exist)
+  useEffect(() => {
+    startSegmentRecordingRef.current = (resume?: number) => { _startSegmentRecording(resume ?? 0); };
+    performVerificationRef.current = async () => { await _performVerificationForCurrentSegment(); };
+    onSegmentCompleteRef.current = async () => { await _onSegmentComplete(); };
+    restartCurrentSegmentRef.current = () => { _restartCurrentSegmentDueToFaceLoss(); };
+  }, [
+    _startSegmentRecording,
+    _performVerificationForCurrentSegment,
+    _onSegmentComplete,
+    _restartCurrentSegmentDueToFaceLoss,
+  ]);
+
 
   /* Angular: drawFaceLandmarks (used for debugging overlays) */
   const _drawFaceLandmarks = (landmarks: faceapi.FaceLandmarks68, canvas: HTMLCanvasElement) => {
@@ -2539,7 +2594,7 @@ const startRecording_FaceReference = useCallback(async () => {
           clearInterval(sampler);
           try {
             recorder.stop();
-          } catch {}
+          } catch { }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -2711,30 +2766,30 @@ const startRecording_FaceReference = useCallback(async () => {
 
   /* ------------------------------- JSX UI ------------------------------- */
   return (
-<div style={{ position: "relative", width: `${overlaySize.width}px`, margin: "0 auto" }}>
-  <video
-    ref={videoRef}
-    autoPlay
-    playsInline
-    muted
-    style={{
-      width: `${overlaySize.width}px`,
-      height: `${overlaySize.height}px`,
-      display: "block",
-      borderRadius: "12px"
-    }}
-  />
-  <canvas
-    ref={overlayRef}
-    style={{
-      position: "absolute",
-      top: 0,
-      left: 0,
-      width: `${overlaySize.width}px`,
-      height: `${overlaySize.height}px`,
-      pointerEvents: "none"
-    }}
-  />
-</div>
+    <div style={{ position: "relative", width: `${overlaySize.width}px`, margin: "0 auto" }}>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          width: `${overlaySize.width}px`,
+          height: `${overlaySize.height}px`,
+          display: "block",
+          borderRadius: "12px"
+        }}
+      />
+      <canvas
+        ref={overlayRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: `${overlaySize.width}px`,
+          height: `${overlaySize.height}px`,
+          pointerEvents: "none"
+        }}
+      />
+    </div>
   );
 }
