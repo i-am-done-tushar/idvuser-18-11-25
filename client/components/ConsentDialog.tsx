@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface ConsentDialogProps {
   isOpen: boolean;
@@ -19,7 +19,7 @@ export function ConsentDialog({ isOpen, onClose, onAgree }: ConsentDialogProps) 
   const handleConsentChange = (key: keyof typeof consents, value: boolean) => {
     const newConsents = { ...consents, [key]: value };
     setConsents(newConsents);
-    
+
     // Update "agree to all" based on individual consents
     const allChecked = Object.values(newConsents).every(Boolean);
     setAgreeToAll(allChecked);
@@ -43,14 +43,46 @@ export function ConsentDialog({ isOpen, onClose, onAgree }: ConsentDialogProps) 
     }
   };
 
+  // 🔒 Lock background scroll while open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const body = document.body;
+    const html = document.documentElement;
+
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+
+    // Calculate scrollbar width to prevent layout shift when locking scroll
+    const scrollbarWidth = window.innerWidth - html.clientWidth;
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+
+    body.style.overflow = "hidden";
+
+    // Prevent mobile touch scrolling
+    const preventTouch = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener("touchmove", preventTouch, { passive: false });
+
+    return () => {
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+      document.removeEventListener("touchmove", preventTouch as any);
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" // ⬅️ more opaque backdrop
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="consent-title"
+    >
       <div className="flex w-full max-w-[800px] mx-4 flex-col items-center gap-6 rounded-lg bg-background shadow-lg max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex h-[52px] py-2.5 px-5 justify-center items-center self-stretch rounded-t border-b border-border bg-background">
-          <div className="text-text-primary font-figtree text-lg font-bold leading-[26px]">
+          <div id="consent-title" className="text-text-primary font-figtree text-lg font-bold leading-[26px]">
             Identity Verification Consent
           </div>
         </div>
@@ -62,7 +94,7 @@ export function ConsentDialog({ isOpen, onClose, onAgree }: ConsentDialogProps) 
             <div className="text-text-primary font-roboto text-base font-bold">
               To verify your identity securely and meet legal requirements, we need your consent to:
             </div>
-            
+
             <div className="flex flex-col items-start gap-2">
               {[
                 "1. Use your personal details (name, email, phone, address, ID)",
@@ -83,7 +115,7 @@ export function ConsentDialog({ isOpen, onClose, onAgree }: ConsentDialogProps) 
             <div className="text-text-primary font-roboto text-base font-bold">
               Please Confirm
             </div>
-            
+
             <div className="flex flex-col items-start gap-2 self-stretch">
               {/* Individual consent checkboxes */}
               <div className="flex items-center gap-2 self-stretch">

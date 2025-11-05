@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useForm, useController} from "react-hook-form";
+import { useForm, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { makePersonalInfoSchema, PersonalInfoSchema } from "@/validations/personalInfoSchema";
-// import personalInfoSchema, { PersonalInfoSchema } from "@/validations/personalInfoSchema";
 import { FormData } from "@shared/templates";
 import { COUNTRY_PHONE_RULES, digitsOnly } from "@/lib/validation";
 
 interface PersonalInformationFormProps {
   formData: FormData;
   // setFormData: (data: FormData) => void;
-  setFormData: React.Dispatch<React.SetStateAction<FormData>>; 
+  setFormData: React.Dispatch<React.SetStateAction<FormData>>;
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   onSendEmailOTP: () => void;
@@ -39,6 +38,8 @@ interface PersonalInformationFormProps {
       middleName?: boolean;
     };
   };
+  /** ✅ NEW: when true, email field is locked and shown as verified */
+  emailLocked?: boolean; // ✅
 }
 
 export function PersonalInformationForm(props: PersonalInformationFormProps) {
@@ -50,6 +51,7 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     onSendEmailOTP,
     onSendPhoneOTP,
     fieldConfig = {},
+    emailLocked, // ✅ NEW
   } = props;
 
   const rt = fieldConfig?.requiredToggles ?? {};
@@ -101,10 +103,10 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
 
   // Stable defaults on mount
   const initialDefaults = useMemo(() => formData as PersonalInfoSchema, []); // mount-only
-  // ⬇️ NEW: Build schema from toggles
+  // ⬇️ Build schema from toggles
   const schema = useMemo(() => makePersonalInfoSchema(rt), [rt]);
 
-    const REQUIRED_KEYS = useMemo(() => {
+  const REQUIRED_KEYS = useMemo(() => {
     const keys: (keyof PersonalInfoSchema)[] = ["firstName", "lastName", "email"];
     if (rt.dob) keys.push("dateOfBirth");
     if (rt.middleName) keys.push("middleName");
@@ -126,11 +128,11 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     setValue,
     watch,
     getValues,
-    formState: { errors},
+    formState: { errors, touchedFields, dirtyFields },
     reset,
     clearErrors,
     trigger,
-    control, 
+    control,
   } = useForm<PersonalInfoSchema>({
     resolver: zodResolver(schema),
     mode: "onBlur",
@@ -144,7 +146,6 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     control,
   });
 
-
   // ----- Guard to avoid feedback loop -----
   const hydratingRef = useRef(false);
   const debounceTimerRef = useRef<number | null>(null);
@@ -154,8 +155,23 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     hydratingRef.current = true;
     reset(formData as PersonalInfoSchema, { keepDefaultValues: false });
     clearErrors();
-    void trigger(REQUIRED_KEYS); // ⬅️ only required fields gate the next section
-    const t = window.setTimeout(() => { hydratingRef.current = false; }, 0);
+
+    // Only trigger validation on mount for required keys that already have a value.
+    // This prevents showing "Must be at least 2 characters" (or other) errors
+    // for empty fields immediately when the form is mounted.
+    try {
+      const keysToTrigger = REQUIRED_KEYS.filter((k) => {
+        const v = (formData as any)[k];
+        return v !== undefined && v !== null && String(v).trim() !== "";
+      });
+      if (keysToTrigger.length > 0) void trigger(keysToTrigger as any);
+    } catch (err) {
+      // ignore
+    }
+
+    const t = window.setTimeout(() => {
+      hydratingRef.current = false;
+    }, 0);
     return () => window.clearTimeout(t);
   }, [formData, reset, clearErrors, trigger, REQUIRED_KEYS]);
 
@@ -165,7 +181,7 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
       if (hydratingRef.current) return;
       if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = window.setTimeout(() => {
-        setFormData(prev => ({ ...prev, ...(values as Partial<FormData>) }));
+        setFormData((prev) => ({ ...prev, ...(values as Partial<FormData>) }));
       }, 200) as unknown as number;
     });
     return () => {
@@ -209,12 +225,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                     </span>
                   </div>
                 </div>
-                <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.firstName ? "border-destructive" : "border-input-border"} bg-background`}>
+                <div
+                  className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                    errors.firstName ? "border-destructive" : "border-input-border"
+                  } bg-background`}
+                >
                   <div className="flex items-center gap-2 flex-1">
                     <input
                       type="text"
                       placeholder="Enter Name"
-                      // value={formData.firstName}
                       {...register("firstName", {
                         onChange: (e) =>
                           setValue("firstName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
@@ -227,11 +246,16 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                     />
                   </div>
                 </div>
-                {errors.firstName && (
-                  <div id="err-firstName" role="alert" className="text-destructive text-[12px] mt-1">
-                    {errors.firstName.message as string}
-                  </div>
-                )}
+                {(() => {
+                  const hasValue = !!getValues("firstName");
+                  const wasTouched = !!(dirtyFields.firstName || touchedFields.firstName);
+                  const show = !!errors.firstName && (wasTouched || hasValue);
+                  return show ? (
+                    <div id="err-firstName" role="alert" className="text-destructive text-[12px] mt-1">
+                      {errors.firstName.message as string}
+                    </div>
+                  ) : null;
+                })()}
               </div>
             )}
 
@@ -245,12 +269,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                     </span>
                   </div>
                 </div>
-                <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.lastName ? "border-destructive" : "border-input-border"} bg-background`}>
+                <div
+                  className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                    errors.lastName ? "border-destructive" : "border-input-border"
+                  } bg-background`}
+                >
                   <div className="flex items-center gap-2 flex-1">
                     <input
                       type="text"
                       placeholder="Enter Your Full Name"
-                      // value={formData.lastName}
                       {...register("lastName", {
                         onChange: (e) =>
                           setValue("lastName", e.target.value.replace(/[^\p{L}\s]/gu, ""), {
@@ -263,11 +290,16 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                     />
                   </div>
                 </div>
-                {errors.lastName && (
-                  <div id="err-lastName" role="alert" className="text-destructive text-[12px] mt-1">
-                    {errors.lastName.message as string}
-                  </div>
-                )}
+                {(() => {
+                  const hasValue = !!getValues("lastName");
+                  const wasTouched = !!(dirtyFields.lastName || touchedFields.lastName);
+                  const show = !!errors.lastName && (wasTouched || hasValue);
+                  return show ? (
+                    <div id="err-lastName" role="alert" className="text-destructive text-[12px] mt-1">
+                      {errors.lastName.message as string}
+                    </div>
+                  ) : null;
+                })()}
               </div>
             )}
           </div>
@@ -288,7 +320,6 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                     <input
                       type="text"
                       placeholder="Enter Name"
-                      // value={formData.middleName}
                       {...register("middleName")}
                       className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
                     />
@@ -307,15 +338,17 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                   </div>
                 </div>
 
-                <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.dateOfBirth ? "border-destructive" : "border-input-border"} bg-background`}>
+                <div
+                  className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                    errors.dateOfBirth ? "border-destructive" : "border-input-border"
+                  } bg-background`}
+                >
                   <div className="flex items-center gap-2 flex-1">
                     <input
                       type="date"
                       placeholder="DD/MM/YYYY"
-                      value={formatDOBToInput(dob.value)}                 // ⬅️ render DD/MM/YYYY as YYYY-MM-DD
-                      onChange={(e) => dob.onChange(                     // ⬅️ store back as DD/MM/YYYY
-                        parseInputDateToDOB(e.target.value)
-                      )}
+                      value={formatDOBToInput(dob.value)}
+                      onChange={(e) => dob.onChange(parseInputDateToDOB(e.target.value))}
                       onBlur={dob.onBlur}
                       name={dob.name}
                       ref={dob.ref}
@@ -345,36 +378,53 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                       <span className="text-text-primary">
                         Email <span className="text-destructive"> *</span>
                       </span>
+                      {/* removed green verified badge per UX request */}
                     </div>
                   </div>
 
                   <div className="flex flex-col items-start gap-1 self-stretch">
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.email ? "border-destructive" : "border-input-border"} bg-background`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.email ? "border-destructive" : "border-input-border"
+                      } bg-background`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="email"
                           placeholder="Enter Your Email Address"
-                          // value={formData.email}
                           {...register("email", {
-                            onChange: (e) =>
-                              setValue("email", e.target.value.trim(), { shouldValidate: true }),
+                            onChange: (e) => setValue("email", e.target.value.trim(), { shouldValidate: true }),
                           })}
+                          disabled={!!emailLocked || isEmailVerified} // ✅ NEW: lock input
                           aria-invalid={!!errors.email}
                           aria-describedby={errors.email ? "err-email" : undefined}
-                          className="text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted"
+                          className={`text-text-muted font-roboto text-[13px] font-normal leading-5 w-full bg-transparent border-none outline-none placeholder:text-text-muted ${
+                            emailLocked || isEmailVerified ? "opacity-75 cursor-not-allowed" : ""
+                          }`}
                         />
                       </div>
                       <button
                         onClick={onSendEmailOTP}
                         type="button"
-                        disabled={!!errors.email || !getValues("email") || isEmailVerified}
-                        aria-disabled={!!errors.email || !getValues("email") || isEmailVerified}
+                        disabled={!!errors.email || !getValues("email") || isEmailVerified || !!emailLocked} // ✅ NEW: respect emailLocked
+                        aria-disabled={!!errors.email || !getValues("email") || isEmailVerified || !!emailLocked}
                         className={`flex h-7 py-[9px] px-3 justify-center items-center gap-2 rounded bg-background ${
-                          !!errors.email || !getValues("email") || isEmailVerified ? "opacity-50 cursor-not-allowed" : ""
+                          !!errors.email || !getValues("email") || isEmailVerified || !!emailLocked
+                            ? "opacity-50 cursor-not-allowed"
+                            : ""
                         }`}
+                        title={
+                          emailLocked
+                            ? "Email is locked/verified"
+                            : isEmailVerified
+                            ? "Email already verified"
+                            : !getValues("email")
+                            ? "Enter a valid email first"
+                            : "Send verification OTP"
+                        }
                       >
                         <span className="text-primary font-figtree text-[12px] font-normal">
-                          {isEmailVerified ? "Verified" : "Send OTP"}
+                          {emailLocked || isEmailVerified ? "Verified" : "Send OTP"}
                         </span>
                       </button>
                     </div>
@@ -382,11 +432,11 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                       <div id="err-email" role="alert" className="text-destructive text-[12px] mt-1">
                         {errors.email.message as string}
                       </div>
-                    ) : (
-                      !isEmailVerified && (
-                        <div className="text-text-muted text-[12px] mt-1">Email verification is required to continue.</div>
-                      )
-                    )}
+                    ) : !isEmailVerified && !emailLocked ? (
+                      <div className="text-text-muted text-[12px] mt-1">
+                        Email verification is required to continue.
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -403,10 +453,20 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                   </div>
 
                   <div className="flex flex-col items-start gap-1 self-stretch">
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.phoneNumber || errors.countryCode ? "border-destructive" : "border-input-border"} bg-background`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.phoneNumber || errors.countryCode ? "border-destructive" : "border-input-border"
+                      } bg-background`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <select
-                          {...register("countryCode")}
+                          {...register("countryCode", {
+                            onChange: (e) => setValue("countryCode", e.target.value, { shouldValidate: false }),
+                            onBlur: () => {
+                              // validate on blur only
+                              void trigger("countryCode");
+                            },
+                          })}
                           aria-invalid={!!errors.countryCode}
                           aria-describedby={errors.countryCode ? "err-countryCode" : undefined}
                           className="text-text-muted font-roboto text-[13px] font-normal leading-5 bg-transparent outline-none border-r border-input-border pr-2 mr-2 min-w-[70px] max-w-[100px] flex-shrink-0"
@@ -419,10 +479,12 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         <input
                           type="tel"
                           placeholder="Enter Your Mobile Number"
-                          // value={formData.phoneNumber}
                           {...register("phoneNumber", {
-                            onChange: (e) =>
-                              setValue("phoneNumber", digitsOnly(e.target.value), { shouldValidate: true }),
+                            onChange: (e) => setValue("phoneNumber", digitsOnly(e.target.value), { shouldValidate: false, shouldTouch: true }),
+                            onBlur: (e) => {
+                              // validate on blur only
+                              void trigger("phoneNumber");
+                            },
                           })}
                           aria-invalid={!!errors.phoneNumber}
                           aria-describedby={errors.phoneNumber ? "err-phoneNumber" : undefined}
@@ -461,24 +523,39 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </button>
                     </div>
-                    {errors.countryCode ? (
-                      <div id="err-countryCode" role="alert" className="text-destructive text-[12px] mt-1">
-                        {errors.countryCode.message as string}
-                      </div>
-                    ) : errors.phoneNumber ? (
-                      <div id="err-phoneNumber" role="alert" className="text-destructive text-[12px] mt-1">
-                        {errors.phoneNumber.message as string}
-                      </div>
-                    ) : !isPhoneVerified ? (
-                      <div className="text-text-muted text-[12px] mt-1">Phone number verification is required to continue.</div>
-                    ) : null}
+                    {(() => {
+                      const countryTouched = !!touchedFields.countryCode;
+                      const phoneTouched = !!touchedFields.phoneNumber;
+                      const showCountryErr = !!errors.countryCode && countryTouched;
+                      const showPhoneErr = !!errors.phoneNumber && phoneTouched;
+
+                      if (showCountryErr) {
+                        return (
+                          <div id="err-countryCode" role="alert" className="text-destructive text-[12px] mt-1">
+                            {errors.countryCode!.message as string}
+                          </div>
+                        );
+                      }
+
+                      if (showPhoneErr) {
+                        return (
+                          <div id="err-phoneNumber" role="alert" className="text-destructive text-[12px] mt-1">
+                            {errors.phoneNumber!.message as string}
+                          </div>
+                        );
+                      }
+
+                      return !isPhoneVerified ? (
+                        <div className="text-text-muted text-[12px] mt-1"></div>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* ===== Gender (place before addresses) ===== */}
+          {/* ===== Gender ===== */}
           {shouldShowField("gender") && (
             <div className="flex w-full items-start gap-4 lg:gap-6 mt-6">
               <div className="flex w-full lg:w-[458px] h-auto lg:h-14 items-start gap-4 lg:gap-6 flex-shrink-0">
@@ -491,25 +568,18 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
 
                   <div className="flex flex-wrap items-start gap-2 sm:gap-3">
                     {["Male", "Female", "Non-Binary", "Prefer Not To Say"].map((option) => (
-                      <label
-                        key={option}
-                        className="flex h-[38px] py-2 pr-2 items-center gap-2 rounded-full cursor-pointer"
-                      >
+                      <label key={option} className="flex h-[38px] py-2 pr-2 items-center gap-2 rounded-full cursor-pointer">
                         <span className="w-4 h-4 rounded-full border-[0.667px] border-step-inactive-border bg-background relative inline-flex items-center justify-center">
                           <input
                             type="radio"
                             value={option}
                             {...register("gender")}
                             checked={watch("gender") === option}
-                            onChange={() =>
-                              setValue("gender", option, { shouldValidate: true, shouldTouch: true })
-                            }
+                            onChange={() => setValue("gender", option, { shouldValidate: true, shouldTouch: true })}
                             className="absolute inset-0 opacity-0 cursor-pointer"
                             aria-label={option}
                           />
-                          {watch("gender") === option && (
-                            <span className="absolute inset-1 rounded-full bg-primary" />
-                          )}
+                          {watch("gender") === option && <span className="absolute inset-1 rounded-full bg-primary" />}
                         </span>
                         <span className="text-text-muted font-roboto text-[13px] font-normal leading-[22px]">
                           {option}
@@ -544,12 +614,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </div>
                     </div>
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.address ? "border-destructive" : "border-input-border"} bg-background w-full`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.address ? "border-destructive" : "border-input-border"
+                      } bg-background w-full`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 123 MG Road, Shastri Nagar, Near City Park"
-                          // value={formData.address}
                           {...register("address")}
                           aria-invalid={!!errors.address}
                           aria-describedby={errors.address ? "err-address" : undefined}
@@ -575,12 +648,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </div>
                     </div>
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.city ? "border-destructive" : "border-input-border"} bg-background w-full`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.city ? "border-destructive" : "border-input-border"
+                      } bg-background w-full`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g Mumbai"
-                          // value={formData.city}
                           {...register("city")}
                           aria-invalid={!!errors.city}
                           aria-describedby={errors.city ? "err-city" : undefined}
@@ -603,12 +679,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </div>
                     </div>
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.postalCode ? "border-destructive" : "border-input-border"} bg-background w-full`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.postalCode ? "border-destructive" : "border-input-border"
+                      } bg-background w-full`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 432001"
-                          // value={formData.postalCode}
                           {...register("postalCode")}
                           aria-invalid={!!errors.postalCode}
                           aria-describedby={errors.postalCode ? "err-postalCode" : undefined}
@@ -649,12 +728,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </div>
                     </div>
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentAddress ? "border-destructive" : "border-input-border"} bg-background w-full`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.permanentAddress ? "border-destructive" : "border-input-border"
+                      } bg-background w-full`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 456 Park Street, Gandhi Nagar, Near Mall"
-                          // value={formData.permanentAddress}
                           {...register("permanentAddress")}
                           aria-invalid={!!errors.permanentAddress}
                           aria-describedby={errors.permanentAddress ? "err-permanentAddress" : undefined}
@@ -679,12 +761,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </div>
                     </div>
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentCity ? "border-destructive" : "border-input-border"} bg-background w-full`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.permanentCity ? "border-destructive" : "border-input-border"
+                      } bg-background w-full`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g Delhi"
-                          // value={formData.permanentCity}
                           {...register("permanentCity")}
                           aria-invalid={!!errors.permanentCity}
                           aria-describedby={errors.permanentCity ? "err-permanentCity" : undefined}
@@ -707,12 +792,15 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
                         </span>
                       </div>
                     </div>
-                    <div className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${errors.permanentPostalCode ? "border-destructive" : "border-input-border"} bg-background w-full`}>
+                    <div
+                      className={`flex h-[38px] py-[15px] px-3 justify-between items-center self-stretch rounded border ${
+                        errors.permanentPostalCode ? "border-destructive" : "border-input-border"
+                      } bg-background w-full`}
+                    >
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="text"
                           placeholder="e.g 110001"
-                          // value={formData.permanentPostalCode}
                           {...register("permanentPostalCode")}
                           aria-invalid={!!errors.permanentPostalCode}
                           aria-describedby={errors.permanentPostalCode ? "err-permanentPostalCode" : undefined}

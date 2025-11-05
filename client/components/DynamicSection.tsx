@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { TemplateVersionSection } from "@shared/api";
 import { PersonalInformationForm } from "./PersonalInformationForm";
 import { IdentityDocumentForm } from "./IdentityDocumentForm";
@@ -17,6 +16,7 @@ interface DynamicSectionProps {
   formData?: FormData;
   setFormData?: (data: FormData) => void;
   isEmailVerified?: boolean;
+  emailLocked?: boolean; // ✅ keep this here
   isPhoneVerified?: boolean;
   onSendEmailOTP?: () => void;
   onSendPhoneOTP?: () => void;
@@ -34,7 +34,7 @@ interface DynamicSectionProps {
     country: string;
     selectedDocument: string;
     uploadedDocuments: string[];
-    uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
+    uploadedFiles: Array<{ id: string; name: string; size: string; type: string }>;
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
@@ -56,7 +56,6 @@ interface DynamicSectionProps {
   setBiometricFormState?: (state: any) => void;
 }
 
-
 export function DynamicSection({
   section,
   sectionIndex,
@@ -67,6 +66,7 @@ export function DynamicSection({
   formData,
   setFormData,
   isEmailVerified,
+  emailLocked,
   isPhoneVerified,
   onSendEmailOTP,
   onSendPhoneOTP,
@@ -83,7 +83,6 @@ export function DynamicSection({
   biometricFormState,
   setBiometricFormState,
 }: DynamicSectionProps) {
-  
   const renderSectionContent = () => {
     // Future steps are locked
     if (sectionIndex > currentStep) {
@@ -114,6 +113,7 @@ export function DynamicSection({
               onSendEmailOTP={onSendEmailOTP || (() => {})}
               onSendPhoneOTP={onSendPhoneOTP || (() => {})}
               fieldConfig={fieldConfig}
+              emailLocked={!!emailLocked} /* ✅ NEW */
             />
           </div>
         );
@@ -232,20 +232,14 @@ export function DynamicSection({
     }
   };
 
-
   return (
     <div className="flex flex-col items-start gap-4 bg-background rounded border border-[#DEDEDD]">
       <div className="flex p-0.5 flex-col items-start self-stretch rounded-t border border-[#DEDEDD]">
         <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
           <div className="flex pb-1 items-center gap-2 self-stretch">
-            <button
-              onClick={() => onToggle(sectionIndex)}
-              className="flex items-center gap-2"
-            >
+            <button onClick={() => onToggle(sectionIndex)} className="flex items-center gap-2">
               <svg
-                className={`w-[18px] h-[18px] transform transition-transform ${
-                  isExpanded ? "rotate-0" : "rotate-180"
-                }`}
+                className={`w-[18px] h-[18px] transform transition-transform ${isExpanded ? "rotate-0" : "rotate-180"}`}
                 viewBox="0 0 18 19"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
@@ -258,9 +252,7 @@ export function DynamicSection({
                   strokeLinejoin="round"
                 />
               </svg>
-              <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                {section.name}
-              </div>
+              <div className="text-text-primary font-roboto text-base font-bold leading-3">{section.name}</div>
             </button>
           </div>
           <div className="flex pl-6 justify-center items-center gap-2.5 self-stretch">
@@ -268,17 +260,13 @@ export function DynamicSection({
               {!isExpanded && isFilled ? (
                 <span className="text-green-600 font-medium">This section has been filled</span>
               ) : (
-                section.description ||
-                `Complete the ${section.name.toLowerCase()} section.`
+                section.description || `Complete the ${section.name.toLowerCase()} section.`
               )}
             </div>
           </div>
         </div>
         {isExpanded && (
-          <div 
-            onClick={() => onSectionFocus?.(sectionIndex)}
-            onFocus={() => onSectionFocus?.(sectionIndex)}
-          >
+          <div onClick={() => onSectionFocus?.(sectionIndex)} onFocus={() => onSectionFocus?.(sectionIndex)}>
             {renderSectionContent()}
           </div>
         )}

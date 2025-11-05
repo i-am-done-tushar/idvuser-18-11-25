@@ -14,6 +14,7 @@ interface DesktopDynamicSectionProps {
   formData?: FormData;
   setFormData?: (data: FormData) => void;
   isEmailVerified?: boolean;
+  emailLocked?: boolean; // ✅ NEW
   isPhoneVerified?: boolean;
   onSendEmailOTP?: () => void;
   onSendPhoneOTP?: () => void;
@@ -33,7 +34,7 @@ interface DesktopDynamicSectionProps {
     country: string;
     selectedDocument: string;
     uploadedDocuments: string[];
-    uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
+    uploadedFiles: Array<{ id: string; name: string; size: string; type: string }>;
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
@@ -63,6 +64,7 @@ export function DesktopDynamicSection({
   formData,
   setFormData,
   isEmailVerified,
+  emailLocked, // ✅ NEW
   isPhoneVerified,
   onSendEmailOTP,
   onSendPhoneOTP,
@@ -84,14 +86,9 @@ export function DesktopDynamicSection({
   const renderSectionHeader = () => (
     <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
       <div className="flex pb-1 items-center gap-2 self-stretch">
-        <button
-          onClick={() => onToggle?.(sectionIndex)}
-          className="flex items-center gap-2"
-        >
+        <button onClick={() => onToggle?.(sectionIndex)} className="flex items-center gap-2">
           <svg
-            className={`w-[18px] h-[18px] transform transition-transform ${
-              isExpanded ? "rotate-0" : "rotate-180"
-            }`}
+            className={`w-[18px] h-[18px] transform transition-transform ${isExpanded ? "rotate-0" : "rotate-180"}`}
             viewBox="0 0 18 19"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
@@ -104,9 +101,7 @@ export function DesktopDynamicSection({
               strokeLinejoin="round"
             />
           </svg>
-          <div className="text-text-primary font-roboto text-base font-bold leading-3">
-            {section.name}
-          </div>
+          <div className="text-text-primary font-roboto text-base font-bold leading-3">{section.name}</div>
         </button>
       </div>
       <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
@@ -114,8 +109,7 @@ export function DesktopDynamicSection({
           {!isExpanded && isFilled ? (
             <span className="text-green-600 font-medium">This section has been filled</span>
           ) : (
-            section.description ||
-            `Complete the ${section.name.toLowerCase()} section.`
+            section.description || `Complete the ${section.name.toLowerCase()} section.`
           )}
         </div>
       </div>
@@ -156,7 +150,7 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div 
+                <div
                   className="flex py-5 px-[34px] flex-col items-start self-stretch border-t border-border bg-background"
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}
@@ -169,6 +163,7 @@ export function DesktopDynamicSection({
                     onSendEmailOTP={onSendEmailOTP || (() => {})}
                     onSendPhoneOTP={onSendPhoneOTP || (() => {})}
                     fieldConfig={fieldConfig}
+                    emailLocked={!!emailLocked} /* ✅ NEW */
                   />
                 </div>
               )}
@@ -178,8 +173,7 @@ export function DesktopDynamicSection({
       }
 
       case "documents": {
-        const legacy =
-          section.fieldMappings?.[0]?.structure?.documentVerification ?? {};
+        const legacy = section.fieldMappings?.[0]?.structure?.documentVerification ?? {};
 
         const documentConfig = {
           allowUploadFromDevice: !!legacy.allowUploadFromDevice,
@@ -187,21 +181,13 @@ export function DesktopDynamicSection({
           documentHandling: legacy.documentHandlingRejectImmediately
             ? "reject"
             : legacy.documentHandlingAllowRetries
-              ? "retry"
-              : "",
+            ? "retry"
+            : "",
           retryAttempts: Number(legacy.retryAttempts) || 0,
-          allowedFileTypes: Array.isArray(legacy.allowedFileTypes)
-            ? legacy.allowedFileTypes
-            : [],
-          supportedCountries: Array.isArray(legacy.supportedCountries)
-            ? legacy.supportedCountries
-            : [],
-          selectedCountries: Array.isArray(legacy.selectedCountries)
-            ? legacy.selectedCountries
-            : [],
-          selectedDocuments: Array.isArray(legacy.selectedDocuments)
-            ? legacy.selectedDocuments
-            : [],
+          allowedFileTypes: Array.isArray(legacy.allowedFileTypes) ? legacy.allowedFileTypes : [],
+          supportedCountries: Array.isArray(legacy.supportedCountries) ? legacy.supportedCountries : [],
+          selectedCountries: Array.isArray(legacy.selectedCountries) ? legacy.selectedCountries : [],
+          selectedDocuments: Array.isArray(legacy.selectedDocuments) ? legacy.selectedDocuments : [],
         };
 
         return (
@@ -209,7 +195,7 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-[#DEDEDD] bg-white">
               {renderSectionHeader()}
               {isExpanded && (
-                <div 
+                <div
                   className="flex py-4 px-[34px] flex-col items-start self-stretch border-t border-[#DEDEDD] bg-white"
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}
@@ -226,9 +212,7 @@ export function DesktopDynamicSection({
                       Handling: {documentConfig.documentHandling || "—"}
                     </span>
                     {documentConfig.documentHandling === "retry" && (
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Retries: {documentConfig.retryAttempts}
-                      </span>
+                      <span className="px-2 py-1 rounded-full border bg-white">Retries: {documentConfig.retryAttempts}</span>
                     )}
                     {!!documentConfig.allowedFileTypes.length && (
                       <span className="px-2 py-1 rounded-full border bg-white">
@@ -256,8 +240,7 @@ export function DesktopDynamicSection({
       }
 
       case "biometrics": {
-        const legacy =
-          section.fieldMappings?.[0]?.structure?.biometricVerification ?? {};
+        const legacy = section.fieldMappings?.[0]?.structure?.biometricVerification ?? {};
 
         const bioCfg = {
           maxRetries: Number(legacy.maxRetries) || 0,
@@ -273,39 +256,25 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div
-                  onClick={() => onSectionFocus?.(sectionIndex)}
-                  onFocus={() => onSectionFocus?.(sectionIndex)}
-                >
+                <div onClick={() => onSectionFocus?.(sectionIndex)} onFocus={() => onSectionFocus?.(sectionIndex)}>
                   {/* summary chips */}
                   <div className="flex w-full py-3 px-[34px] border-t border-border bg-background">
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Max retries: {bioCfg.maxRetries}
-                      </span>
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Liveness ≥ {bioCfg.livenessThreshold}%
-                      </span>
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Face match ≥ {bioCfg.faceMatchThreshold}%
-                      </span>
+                      <span className="px-2 py-1 rounded-full border bg-white">Max retries: {bioCfg.maxRetries}</span>
+                      <span className="px-2 py-1 rounded-full border bg-white">Liveness ≥ {bioCfg.livenessThreshold}%</span>
+                      <span className="px-2 py-1 rounded-full border bg-white">Face match ≥ {bioCfg.faceMatchThreshold}%</span>
                       <span className="px-2 py-1 rounded-full border bg-white">
                         On low score: {bioCfg.askUserRetry ? "Ask to retry" : bioCfg.blockAfterRetries ? "Block after retries" : "—"}
                       </span>
                       {bioCfg.dataRetention && (
-                        <span className="px-2 py-1 rounded-full border bg-white">
-                          Retention: {bioCfg.dataRetention}
-                        </span>
+                        <span className="px-2 py-1 rounded-full border bg-white">Retention: {bioCfg.dataRetention}</span>
                       )}
                     </div>
                   </div>
 
                   <div className="flex p-3 flex-col justify-center items-center self-stretch bg-background">
                     <div className="flex w-full flex-col items-center gap-2">
-                      <CameraSelfieStep
-                        onComplete={onSelfieComplete || (() => {})}
-                        submissionId={submissionId}
-                      />
+                      <CameraSelfieStep onComplete={onSelfieComplete || (() => {})} submissionId={submissionId} />
                     </div>
                   </div>
                 </div>
@@ -321,7 +290,7 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div 
+                <div
                   className="flex p-4 flex-col items-start self-stretch border-t border-border bg-background"
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}
