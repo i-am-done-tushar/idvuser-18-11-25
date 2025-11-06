@@ -669,16 +669,36 @@ export function IdentityVerificationPage({
     }
   }
 
-  async function validateEmailOtp(email: string, versionId: number, otp: string) {
+  async function validateEmailOtp(
+    email: string,
+    versionId: number,
+    otp: string,
+    submissionId: number | null,
+    accessTokenLifetime = "10:00:00"
+  ) {
     const token = getToken();
-    const res = await fetch(`${API_BASE}/api/Otp/validate`, {
+
+    // ensure we have a submissionId and versionId - the backend requires both
+    if (submissionId == null || versionId == null) {
+      const err: any = new Error("Missing submissionId or versionId for email verification");
+      err.status = 400;
+      throw err;
+    }
+
+    const res = await fetch(`${API_BASE}/api/Otp/email/verify-and-issue`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ email, versionId, otp }),
+      body: JSON.stringify({
+        email,
+        otp,
+        submissionId,
+        versionId,
+        accessTokenLifetime,
+      }),
     });
 
     if (!res.ok) {
@@ -687,6 +707,70 @@ export function IdentityVerificationPage({
       const err: any = new Error(text || `Invalid OTP`);
       err.status = status;
       throw err;
+    }
+
+    // return parsed JSON if needed by caller (e.g., issued token information)
+    const bodyText = await res.text().catch(() => "");
+    try {
+      return bodyText ? JSON.parse(bodyText) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Send a session heartbeat to backend. Uses stored access token and a per-device
+  // fingerprint header. The fingerprint is persisted to localStorage as
+  // 'device_fingerprint' so it remains stable per device/session.
+  async function sendSessionHeartbeat() {
+    const token = getToken();
+
+    // get or create device fingerprint
+    let fingerprint: string | null = null;
+    try {
+      fingerprint = localStorage.getItem("device_fingerprint");
+    } catch (e) {
+      fingerprint = null;
+    }
+
+    if (!fingerprint) {
+      // prefer crypto.randomUUID when available
+      try {
+        const gen = typeof crypto !== "undefined" && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `dev-${Math.random().toString(36).slice(2)}`;
+        fingerprint = gen;
+        try {
+          localStorage.setItem("device_fingerprint", fingerprint);
+        } catch (e) {
+          // ignore storage errors
+        }
+      } catch (e) {
+        fingerprint = `dev-${Math.random().toString(36).slice(2)}`;
+      }
+    }
+
+    const res = await fetch(`${API_BASE}/api/session/heartbeat`, {
+      method: "POST",
+      headers: {
+        Accept: "*/*",
+        "X-Device-Fingerprint": fingerprint || "",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: "",
+    });
+
+    if (!res.ok) {
+      const status = res.status;
+      const text = await res.text().catch(() => "");
+      const err: any = new Error(text || `Failed to send heartbeat`);
+      err.status = status;
+      throw err;
+    }
+
+    // return parsed body if any
+    const bodyText = await res.text().catch(() => "");
+    try {
+      return bodyText ? JSON.parse(bodyText) : null;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -1111,8 +1195,35 @@ export function IdentityVerificationPage({
       if (!email || versionId == null) return;
 
       try {
+        if (!submissionId) {
+          toast({ title: "Missing submission", description: "Submission ID not found. Please try again.", variant: "destructive" });
+          return;
+        }
+
         setOtpValidating(true);
-        await validateEmailOtp(email, versionId, otp);
+        const resp = await validateEmailOtp(email, versionId, otp, submissionId, "10:00:00");
+
+        // If backend issued an access token, persist it so getToken() can use it later
+        try {
+          if (resp && typeof resp.accessToken === "string") {
+            localStorage.setItem("access", resp.accessToken);
+          }
+        } catch (e) {
+          // ignore storage errors
+        }
+
+        // attempt to start session heartbeat using the newly issued token
+        try {
+          await sendSessionHeartbeat();
+          toast({ title: "Session started", description: "Session heartbeat sent." });
+        } catch (hbErr: any) {
+          toast({
+            title: "Heartbeat Failed",
+            description: `${hbErr?.status ?? "Unknown"} – Error from backend`,
+            variant: "destructive",
+          });
+        }
+
         // success
         setIsEmailVerified(true);
         setEmailLocked(true);

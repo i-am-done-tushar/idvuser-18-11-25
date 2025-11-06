@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       '/api': {
-        target: 'http://10.10.2.133:8080',
+        target: 'http://10.10.5.231:5027',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path
