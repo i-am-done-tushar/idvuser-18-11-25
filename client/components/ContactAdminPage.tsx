@@ -434,7 +434,7 @@ export function ContactAdminPage() {
 
                       <button
                         type="button"
-                        onClick={() => exec("redo")}
+                        onClick={() => execWithUpdate("redo")}
                         className="p-1 rounded hover:bg-gray-100"
                       >
                         <svg
