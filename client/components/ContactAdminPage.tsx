@@ -537,7 +537,7 @@ export function ContactAdminPage() {
 
                 <button
                   type="submit"
-                  disabled={submitting || !subject.trim() || !message.trim()}
+                  disabled={submitting || !subject.trim() || !plainText.trim()}
                   className="flex h-[38px] px-4 py-[11px] justify-center items-center gap-2.5 rounded bg-[#0073EA] text-white font-roboto text-[13px] font-medium leading-normal disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#0062C6] transition-colors"
                 >
                   {submitting ? "Sending..." : "Send Message"}
