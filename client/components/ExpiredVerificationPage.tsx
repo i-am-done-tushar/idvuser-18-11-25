@@ -172,7 +172,7 @@ export function ExpiredVerificationPage() {
           />
         </svg>
       ),
-      onClick: () => {},
+      onClick: () => navigate("/contact-admin"),
     },
   ];
 

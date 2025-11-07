@@ -186,7 +186,7 @@ export function VerifiedCredentialsPage() {
           />
         </svg>
       ),
-      onClick: () => {},
+      onClick: () => navigate("/contact-admin"),
     },
   ];
 

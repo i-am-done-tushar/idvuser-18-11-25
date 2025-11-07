@@ -205,7 +205,7 @@ export function OngoingVerificationPage() {
           />
         </svg>
       ),
-      onClick: () => {},
+      onClick: () => navigate("/contact-admin"),
     },
   ];
 
