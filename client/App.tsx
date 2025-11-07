@@ -13,6 +13,7 @@ import { VerificationSuccessPage } from "./components/VerificationSuccessPage";
 import { AuthLoginPage } from "./components/AuthLoginPage";
 import { AuthOtpPage } from "./components/AuthOtpPage";
 import { Dashboard } from "./components/Dashboard";
+import HandoffPage from "./pages/HandoffPage";
 
 import { createBrowserRouter } from "react-router-dom";
 
@@ -38,6 +39,7 @@ const App = () => (
           <Route path="/auth/login" element={<AuthLoginPage />} />
           <Route path="/auth/otp" element={<AuthOtpPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/HandoffPage/:joincode" element={<HandoffPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

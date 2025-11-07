@@ -266,6 +266,8 @@ export function IdentityVerificationPage({
           if (checkData.items && checkData.items.length > 0) {
             const existingSubmission = checkData.items[0];
             setSubmissionId(existingSubmission.id);
+            // Store submissionId in localStorage
+            localStorage.setItem('submissionId', existingSubmission.id.toString());
             return;
           }
         }
@@ -292,6 +294,8 @@ export function IdentityVerificationPage({
 
         const submissionData = await submissionResponse.json();
         setSubmissionId(submissionData.id);
+        // Store submissionId in localStorage
+        localStorage.setItem('submissionId', submissionData.id.toString());
       } catch (error) {
         console.error("Error with UserTemplateSubmission:", error);
         toast({

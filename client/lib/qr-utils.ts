@@ -13,30 +13,12 @@ export interface QRCodeOptions {
  */
 export async function generateQRCodeDataURL(options: QRCodeOptions): Promise<string> {
   try {
-    // Use environment variable for base URL or fallback to window.location.origin
-    const envBaseUrl = import.meta.env.VITE_QR_BASE_URL || import.meta.env.VITE_FRONTEND_URL;
-    const baseUrl = envBaseUrl || window.location.origin;
-    // Build verification URL using query parameter for shortcode to avoid long path segment limits
-    // /form?code={shortCode}
-    const baseFormPath = `${baseUrl}/form`;
-
-    const urlParams = new URLSearchParams();
-    // Put shortcode as first param
-    urlParams.set('code', options.shortCode);
-    if (options.templateVersionId) {
-      urlParams.set('templateVersionId', options.templateVersionId.toString());
-    }
-    if (options.userId) {
-      urlParams.set('userId', options.userId.toString());
-    }
-    if (options.sessionId) {
-      urlParams.set('sessionId', options.sessionId);
-    }
-    if (options.currentStep) {
-      urlParams.set('step', options.currentStep);
-    }
-
-    const finalUrl = `${baseFormPath}?${urlParams.toString()}`;
+    // For join codes, use the baseUrl from the options or fallback
+    const baseUrl = 'http://localhost:4200';
+    
+    // If shortCode looks like a join code (contains underscores or special chars), 
+    // use the joincode route directly
+    const finalUrl = `${baseUrl}/HandoffPage/${options.shortCode}`;
 
     // Generate QR code with options for better mobile scanning
     const qrCodeDataUrl = await QRCode.toDataURL(finalUrl, {
