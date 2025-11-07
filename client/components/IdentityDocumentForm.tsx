@@ -3,14 +3,18 @@ import { CameraDialog } from "./CameraDialog";
 import { UploadDialog } from "./UploadDialog";
 import { DocumentConfig } from "@shared/templates";
 import { getDocumentDefinitionId } from "@/lib/document-definitions";
+import { useToast } from "@/hooks/use-toast";
 import { QRCodeDisplay } from "./QRCodeDisplay";
 import { useSessionSync } from "@/hooks/useSessionSync";
 import { extractSessionFromURL } from "@/lib/qr-utils";
+import { CloseIcon, Spinner } from "./SVG_Files";
 
-// const API_BASE = "https://idvapi-test.arconnet.com:1019";
-const API_BASE = "http://10.10.2.133:8080";
+// read API base from env; avoid hardcoding
+const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
-  // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+// base for IdentityVerification service (uses port 8086 in some environments)
+const IDV_VERIFICATION_BASE =
+  import.meta.env.VITE_IDV_VERIFICATION_BASE || import.meta.env.VITE_IDV_API_BASE || import.meta.env.VITE_API_BASE || "";
 
 interface UploadedFile {
   id: string;
@@ -59,6 +63,8 @@ interface IdentityDocumentFormProps {
   }>>;
   // Callback to trigger auto-save after document upload
   onDocumentUploaded?: () => void;
+  // Added prop to control identity document completion state
+  setIsIdentityDocumentCompleted?: (completed: boolean) => void;
 }
 
 export function IdentityDocumentForm({
@@ -71,13 +77,13 @@ export function IdentityDocumentForm({
   documentFormState,
   setDocumentFormState,
   onDocumentUploaded,
+  setIsIdentityDocumentCompleted,
 }: IdentityDocumentFormProps) {
   // Use lifted state directly if available, otherwise local state
   const [localCountry, setLocalCountry] = useState("");
   const [localSelectedDocument, setLocalSelectedDocument] = useState("");
   const [showCameraDialog, setShowCameraDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [showQRModal, setShowQRModal] = useState(false);
   const [localUploadedDocuments, setLocalUploadedDocuments] = useState<string[]>([]);
   const [localUploadedFiles, setLocalUploadedFiles] = useState<UploadedFile[]>([]);
   const [localDocumentUploadIds, setLocalDocumentUploadIds] = useState<
@@ -97,11 +103,11 @@ export function IdentityDocumentForm({
     try {
       setIsDigilockerLoading(true);
 
-      const res = await fetch(
-        `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(getBackString)}`,
-        // `http://localhost:62435/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(getBackString)}`,
-        { method: "GET", headers: { accept: "*/*" } }
-      );
+      const authUrl = `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
+        getBackString,
+      )}`;
+
+      const res = await fetch(authUrl, { method: "GET", headers: { accept: "*/*" } });
 
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -113,7 +119,9 @@ export function IdentityDocumentForm({
       // Persist the PKCE code_verifier + state so we can use it after redirect
       sessionStorage.setItem("digilocker_code_verifier", codeVerifier || "");
       sessionStorage.setItem("digilocker_state", getBackString);
-
+      // persist user choice so the callback knows what to mark as uploaded
+      sessionStorage.setItem("digilocker_selected_document", selectedDocument || "");
+      sessionStorage.setItem("digilocker_country", country || "");
       // Hard redirect to DigiLocker consent page
       window.location.href = url;
     } catch (err) {
@@ -305,6 +313,8 @@ export function IdentityDocumentForm({
     });
   }, [uploadedDocuments, country, selectedDocument]); // Removed updateSession from dependencies since it's now memoized
 
+  const { toast } = useToast();
+
   useEffect(() => {
     // Check if we're returning from DigiLocker
     const authCode = sessionStorage.getItem("digilocker_auth_code");
@@ -338,9 +348,9 @@ export function IdentityDocumentForm({
       // e.g. "aadhaar_card" -> "Aadhaar card"
       const toRequestedDocType = (id: string) => {
         const map: Record<string, string> = {
-          aadhaar_card: "Aadhar card",
+          aadhaar_card: "Aadhar Card",
           passport: "Passport",
-          pan_card: "Pan card",
+          pan_card: "Pan Card",
           driving_license: "Driving License",
           voter_id: "Voter ID",
           // add others as needed
@@ -348,22 +358,48 @@ export function IdentityDocumentForm({
         return map[id] ?? id.replace(/_/g, " ");
       };
 
-      // You may already know these from your form context
-      // const requestedDocType = toRequestedDocType(selectedDocument || "Pan Card");
-      const requestedDocType = toRequestedDocType("PAN Verification Record");
+      // Pull what the user had picked before redirect
+      const storedDocId = sessionStorage.getItem("digilocker_selected_document") || selectedDocument || "";
+      const storedCountry = sessionStorage.getItem("digilocker_country") || country || "";
 
-      const email = "pranathi.narsupalli@arconnet.com";         // or from logged-in user context
-      const documentId = 3;                     // your internal doc def id
-      const templateName = "template p";        // current template name
+      // Ensure country is set (so downstream helpers work)
+      if (storedCountry && !country) setCountry(storedCountry);
+
+      // Normalize and derive display name
+      // const docId = (storedDocId || "pan_card").toLowerCase().trim(); // e.g. "pan_card"
+      const docId ="pan_card"; // e.g. "pan_card"
+
+      const docsForCountry = getDocumentsForCountry(storedCountry || country || "");
+      const displayName =
+        docsForCountry
+          .map(d => (typeof d === "string" ? d : d.title))
+          .find(title => toDocId(title) === docId) ||
+        docId.replace(/_/g, " ").replace(/\b\w/g, m => m.toUpperCase());
+
+      // Map to DigiLocker’s label
+      const requestedDocType = toRequestedDocType(docId);
+
+      // Derive DocumentDefinitionId from config or fallback helper
+      let documentDefinitionIdStr =
+        getDocumentDefinitionIdFromConfig(storedCountry || country || "", displayName) || "";
+      if (!documentDefinitionIdStr) {
+        documentDefinitionIdStr = String(getDocumentDefinitionId(storedCountry || country || "", displayName));
+      }
+      // const documentDefinitionId = parseInt(documentDefinitionIdStr, 10) || 3;
+      const documentDefinitionId = 3;
+
+      // (Keep these placeholders or wire to your real context)
+      const email = "siddhi.tawde@arconnet.com";
+      const templateName = "Test Template";
 
       const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
-      // const url = new URL(`http://localhost:62435/api/IdentityVerification/fetch-document`);
 
       url.searchParams.set("AuthCode", authCode);
       url.searchParams.set("CodeVerifier", codeVerifier);
       url.searchParams.set("RequestedDocType", requestedDocType);
       url.searchParams.set("EmailID", email);
-      url.searchParams.set("DocumentID", String(documentId));
+      // url.searchParams.set("DocumentID", String(documentId));
+      url.searchParams.set("DocumentID", String(documentDefinitionId));
       url.searchParams.set("TemplateName", templateName);
 
       try {
@@ -375,18 +411,62 @@ export function IdentityDocumentForm({
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          throw new Error(`fetch-document failed: ${res.status} ${text}`);
+          console.error("❌ DigiLocker document fetch failed:", {
+            status: res.status,
+            statusText: res.statusText,
+            text
+          });
+          throw new Error(`Failed to fetch document: ${res.status} ${text}`);
         }
 
-        const data = await res.json().catch(() => ({}));
-        console.log("✅ DigiLocker document fetched successfully:", data);
-        
-        // TODO: use `data` to mark the document as uploaded, store files, etc.
-        // setUploadedDocuments([...]); setUploadedFiles([...]);
+        const data = await res.json().catch((err) => {
+          console.error("❌ Failed to parse DigiLocker response:", err);
+          throw new Error("Invalid response from DigiLocker service");
+        });
+
+        console.log("📝 DigiLocker response:", data);
+
+        // Only check for success flag, not data.id
+        if (!data || typeof data.success !== "boolean") {
+          throw new Error("Invalid document data received from DigiLocker");
+        }
+
+        if (data.success === true) {
+          // Make sure markDocUploaded can compute the definition id (it reads selectedDocument)
+          setSelectedDocument(docId);
+
+          const maybeFileId = Number.isFinite(data.id) ? Number(data.id) : undefined;
+
+          // Single source of truth: flips the tile tick, shows the card, stores fileIds, updates lifted details (if any), advances flow
+          markDocUploaded({
+            docId,
+            displayName,
+            fileId: maybeFileId,
+            source: "DigiLocker",
+          });
+
+          toast({
+            title: `${displayName} Uploaded`,
+            description: data.message || "Document saved successfully.",
+            duration: 5000,
+          });
+        } else {
+          toast({
+            title: "Document Fetch Failed",
+            description: data.message || "Failed to fetch document from DigiLocker",
+            duration: 5000,
+            variant: "destructive",
+          });
+        }
 
       } catch (e) {
         console.error("❌ Error fetching DigiLocker document:", e);
-        alert("Could not fetch DigiLocker document. Please try again.");
+        toast({
+          title: "Error",
+          description: "Could not fetch DigiLocker document. Please try again.",
+          duration: 5000,
+          variant: "destructive",
+        });
       } finally {
         // Clean up DigiLocker session data after processing
         sessionStorage.removeItem("digilocker_auth_code");
@@ -394,12 +474,29 @@ export function IdentityDocumentForm({
         sessionStorage.removeItem("digilocker_callback_timestamp");
         sessionStorage.removeItem("digilocker_code_verifier");
         sessionStorage.removeItem("digilocker_state");
+        sessionStorage.removeItem("digilocker_skip_consent");
+        sessionStorage.removeItem("digilocker_selected_document");
+        sessionStorage.removeItem("digilocker_country");
+
         console.log("🧹 DigiLocker session data cleaned up");
       }
     };
 
-    run();
-  }, [selectedDocument]); // Re-run if selectedDocument changes
+    // Only run if we have DigiLocker callback data
+    const handleDigilockerCallback = async () => {
+      if (authCode && callbackState) {
+        try {
+          await run();
+          // After successful document fetch, set identity document as completed
+          setIsIdentityDocumentCompleted?.(true);
+        } catch (error) {
+          console.error("Failed to process DigiLocker callback:", error);
+        }
+      }
+    };
+
+    handleDigilockerCallback();
+  }, []); // Only run once on mount to check for DigiLocker callback
   
   // Load session state from URL if coming from QR scan
   useEffect(() => {
@@ -408,7 +505,9 @@ export function IdentityDocumentForm({
       // User scanned QR code - restore session state
       console.log('Loading session from QR scan:', urlSession);
     }
-  }, []);  // Function to get file icon based on file type
+  }, []);
+
+  // Function to get file icon based on file type
   const getFileIcon = () => (
     <svg
       width="16"
@@ -417,6 +516,7 @@ export function IdentityDocumentForm({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
+      {/* ... keeping your SVG unchanged ... */}
       <g clipPath="url(#clip0_2641_20024)">
         <path
           d="M10.0463 7.62797L3.7207 6.51172V14.7598C3.7207 15.1364 4.02602 15.442 4.40289 15.442H15.3179C15.6945 15.442 16.0001 15.1367 16.0001 14.7598V11.7211L10.0463 7.62797Z"
@@ -458,21 +558,11 @@ export function IdentityDocumentForm({
           d="M2.1123 10.2173L3.54699 7.99414L2.2323 5.7832H3.2898L4.0073 7.19727C4.07355 7.33164 4.11887 7.43133 4.14355 7.49727H4.15293C4.20012 7.39008 4.2498 7.28602 4.30168 7.18508L5.06855 5.78414H6.03949L4.69137 7.98195L6.07355 10.2176H5.04043L4.21168 8.6657C4.17262 8.59977 4.13949 8.53039 4.11262 8.45852H4.10043C4.07605 8.52883 4.04387 8.59633 4.00449 8.65945L3.15137 10.2179L2.1123 10.2173Z"
           fill="white"
         />
-        <path
-          d="M15.3181 0.558594H10.0469V4.27953H16.0003V1.24078C16.0003 0.863906 15.695 0.558594 15.3181 0.558594Z"
-          fill="#33C481"
-        />
+        <path d="M15.3181 0.558594H10.0469V4.27953H16.0003V1.24078C16.0003 0.863906 15.695 0.558594 15.3181 0.558594Z" fill="#33C481" />
         <path d="M10.0469 8H16.0003V11.7209H10.0469V8Z" fill="#107C41" />
       </g>
       <defs>
-        <linearGradient
-          id="paint0_linear_2641_20024"
-          x1="1.42208"
-          y1="3.37341"
-          x2="6.76396"
-          y2="12.6253"
-          gradientUnits="userSpaceOnUse"
-        >
+        <linearGradient id="paint0_linear_2641_20024" x1="1.42208" y1="3.37341" x2="6.76396" y2="12.6253" gradientUnits="userSpaceOnUse">
           <stop stopColor="#18884F" />
           <stop offset="0.5" stopColor="#117E43" />
           <stop offset="1" stopColor="#0B6631" />
@@ -662,6 +752,83 @@ export function IdentityDocumentForm({
     }
   };
 
+  // Normalize a document label into our internal id: "PAN Card" -> "pan_card"
+  const toDocId = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "_");
+
+  // (Only if you need to map "id" -> DigiLocker label)
+  const toRequestedDocType = (id: string) => {
+    const map: Record<string, string> = {
+      aadhaar_card: "Aadhar card",
+      passport: "Passport",
+      pan_card: "Pan card",
+      driving_license: "Driving License",
+      voter_id: "Voter ID",
+    };
+    return map[id] ?? id.replace(/_/g, " ");
+  };
+
+  /**
+   * Marks a document as uploaded in *all* the right places and advances the flow.
+   * - Adds to uploadedDocuments (drives the green tick on the tile)
+   * - Adds/updates uploadedFiles (so it appears in "Documents Uploaded")
+   * - Adds/updates documentUploadIds (to support download)
+   * - Optionally appends documentsDetails (when using lifted state and fileId present)
+   * - Triggers next-section enabling via setIsIdentityDocumentCompleted / onComplete
+   */
+  const markDocUploaded = ({
+    docId,
+    displayName,
+    fileId,
+    source = "DigiLocker",
+  }: {
+    docId: string;
+    displayName: string;
+    fileId?: number; // may be undefined; we still show as uploaded
+    source?: string;
+  }) => {
+    // 1) Green tick + tile state
+    setUploadedDocuments((prev) => (prev.includes(docId) ? prev : [...prev, docId]));
+
+    // 2) Card in "Documents Uploaded" (show even if fileId missing)
+    setUploadedFiles((prev) => {
+      const filtered = prev.filter((f) => !f.id.startsWith(`${docId}-`));
+      return [
+        ...filtered,
+        {
+          id: `${docId}-${fileId ?? "remote"}`,
+          name: `${displayName} (${source})`,
+          size: source === "DigiLocker" ? "Fetched remotely" : "Uploaded",
+          type: "application/pdf",
+        },
+      ];
+    });
+
+    // 3) For download flows, store fileId if we got one
+    setDocumentUploadIds((prev) => ({
+      ...prev,
+      [docId]: {
+        ...(prev[docId] || {}),
+        ...(typeof fileId === "number" ? { front: fileId } : {}),
+      },
+    }));
+
+    // 4) If using lifted state and we got a fileId, add to documentsDetails too
+    if (isUsingLiftedState) {
+      const documentDefinitionId = getCurrentDocumentDefinitionId();
+      if (documentDefinitionId && typeof fileId === "number") {
+        addDocumentDetail(displayName, documentDefinitionId, fileId);
+      }
+    }
+
+    // 5) Advance flow
+    setIsIdentityDocumentCompleted?.(true);
+    onDocumentUploaded?.();
+    onComplete?.();
+
+    // Collapse the upload methods panel
+    setSelectedDocument("");
+  };
+
   // Function to delete a file from server
   const deleteFileFromServer = async (fileId: number) => {
     try {
@@ -845,7 +1012,7 @@ export function IdentityDocumentForm({
     ? getDocumentsForCountry(country).map(d => typeof d === 'string' ? d : d.title)
     : [];
 
-  // Default document colors and icons
+  // Default document colors and icons (unchanged)
   const getDocumentStyle = (docName: string) => {
     const styles: Record<string, { color: string; icon: JSX.Element }> = {
       Passport: {
@@ -987,11 +1154,11 @@ export function IdentityDocumentForm({
               Select the ID you'd like to use for verification.
             </div>
           </div>
-          {/* 1st change */}
+
           {/* Document Options Grid */}
           <div className="flex flex-col items-start gap-4 self-stretch">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 w-full">
-              {currentDocuments.map((docName, index) => {
+              {currentDocuments.map((docName) => {
                 const docId = docName.toLowerCase().replace(/\s+/g, "_");
                 const isSelected = selectedDocument === docId;
                 const isUploaded = uploadedDocuments.includes(docId);
@@ -999,9 +1166,9 @@ export function IdentityDocumentForm({
 
                 return (
                   <div
-                  key={docId}
-                  className="flex flex-col"
-                >
+                    key={docId}
+                    className="flex flex-col"
+                  >
                     {/* Document Button */}
                     <button
                       onClick={() => {
@@ -1051,6 +1218,11 @@ export function IdentityDocumentForm({
                             />
                           </svg>
                         </div>
+                      )}
+                      {isUploaded && (
+                        <span className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded bg-[#EEF2FF] text-[#4F46E5] border border-[#E0E7FF]">
+                          Uploaded
+                        </span>
                       )}
                     </button>
                   </div>
@@ -1171,99 +1343,57 @@ export function IdentityDocumentForm({
                   </div>
 
                   {/* Right Section - DigiLocker */}
-                  {/* <div className="flex flex-col gap-4">
-                    <div className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer">
+                  <div className="flex flex-col gap-4">
+                    <button
+                      onClick={handleDigilockerClick}
+                      disabled={isDigilockerLoading}
+                      className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer disabled:opacity-60"
+                    >
                       <div className="flex flex-col justify-center items-center gap-3">
                         <div className="flex w-[48px] h-[48px] p-2 justify-center items-center rounded-xl bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]">
-                          <svg
-                            width="24"
-                            height="24"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d="M6 10V8C6 6.93913 6.42143 5.92172 7.17157 5.17157C7.92172 4.42143 8.93913 4 10 4H14C15.0609 4 16.0783 4.42143 16.8284 5.17157C17.5786 5.92172 18 6.93913 18 8V10M5 10H19C19.5523 10 20 10.4477 20 11V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V11C4 10.4477 4.44772 10 5 10Z"
-                              stroke="white"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <circle
-                              cx="12"
-                              cy="15"
-                              r="1.5"
-                              fill="white"
-                            />
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 10V8C6 6.93913 6.42143 5.92172 7.17157 5.17157C7.92172 4.42143 8.93913 4 10 4H14C15.0609 4 16.0783 4.42143 16.8284 5.17157C17.5786 5.92172 18 6.93913 18 8V10M5 10H19C19.5523 10 20 10.4477 20 11V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V11C4 10.4477 4.44772 10 5 10Z"
+                              stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="12" cy="15" r="1.5" fill="white"/>
                           </svg>
                         </div>
                         <div className="flex flex-col items-center gap-1">
                           <div className="text-[#6366F1] text-center font-figtree text-[14px] font-semibold">
-                            DigiLocker
+                            {isDigilockerLoading ? "Opening DigiLocker…" : "DigiLocker"}
                           </div>
                           <div className="text-[#676879] text-center font-roboto text-[11px] font-normal leading-4">
                             Your documents anytime, anywhere
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div> */}
-                  <div className="flex flex-col gap-4">
-                  <button
-                    onClick={handleDigilockerClick}
-                    disabled={isDigilockerLoading}
-                    className="flex flex-col justify-center items-center border-2 border-dashed border-[#6366F1] rounded-lg h-[120px] bg-gradient-to-br from-[#6366F1]/5 to-[#8B5CF6]/5 hover:from-[#6366F1]/10 hover:to-[#8B5CF6]/10 transition-all cursor-pointer disabled:opacity-60"
-                  >
-                    <div className="flex flex-col justify-center items-center gap-3">
-                      <div className="flex w-[48px] h-[48px] p-2 justify-center items-center rounded-xl bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]">
-                        {/* lock icon (unchanged) */}
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                          xmlns="http://www.w3.org/2000/svg">
-                          <path d="M6 10V8C6 6.93913 6.42143 5.92172 7.17157 5.17157C7.92172 4.42143 8.93913 4 10 4H14C15.0609 4 16.0783 4.42143 16.8284 5.17157C17.5786 5.92172 18 6.93913 18 8V10M5 10H19C19.5523 10 20 10.4477 20 11V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V11C4 10.4477 4.44772 10 5 10Z"
-                            stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <circle cx="12" cy="15" r="1.5" fill="white"/>
-                        </svg>
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="text-[#6366F1] text-center font-figtree text-[14px] font-semibold">
-                          {isDigilockerLoading ? "Opening DigiLocker…" : "DigiLocker"}
-                        </div>
-                        <div className="text-[#676879] text-center font-roboto text-[11px] font-normal leading-4">
-                          Your documents anytime, anywhere
-                        </div>
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+                  </div>
                 </div>
 
-                </div>
-
-                {/* QR Code Upload - Dynamic QR Code */}
-                <div className="flex flex-col items-center gap-4 self-stretch border-2 border-dashed border-[#C3C6D4] rounded-lg bg-white p-6">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="flex flex-col items-center gap-2">
-                      <div 
-                        className="cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => setShowQRModal(true)}
-                        title="Click to view larger QR code"
-                      >
+                {/* QR Code Upload - Dynamic QR Code - Only show if shortCode is provided */}
+                {shortCode && (
+                  <div className="flex flex-col items-center gap-4 self-stretch border-2 border-dashed border-[#C3C6D4] rounded-lg bg-white p-6">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex flex-col items-center gap-2">
+                        {/* Directly render QRCodeDisplay (enlarge handled inside component) */}
                         <QRCodeDisplay
                           shortCode={shortCode}
                           templateVersionId={templateVersionId}
                           userId={userId}
                           sessionId={sessionState?.sessionId || 'default-session'}
                           currentStep="document-upload"
+                          submissionId={submissionId}
                           size="large"
                           showUrl={false}
                         />
-                      </div>
-                      <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
-                        Scan this QR code with your other device to continue verification.
+                        <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
+                          Scan this QR code with your other device to continue verification.
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="w-full flex justify-end items-center">
-                    <div className="flex items-center gap-1">
+                    <div className="w-full flex justify-end items-center">
+                      <div className="flex items-center gap-1">
                       <svg
                         width="16"
                         height="16"
@@ -1285,6 +1415,7 @@ export function IdentityDocumentForm({
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -1293,13 +1424,14 @@ export function IdentityDocumentForm({
 
       {/* Files Uploaded Section */}
       {(() => {
-        console.log('🔍 Checking Documents Uploaded section visibility:', {
-          uploadedFilesLength: uploadedFiles.length,
-          uploadedDocumentsLength: uploadedDocuments.length,
+        const hasUploadedDocs = uploadedDocuments && uploadedDocuments.length > 0;
+        console.log('🔍 Documents Uploaded section:', {
           uploadedFiles,
-          uploadedDocuments
+          uploadedDocuments,
+          hasUploadedDocs,
+          documentUploadIds
         });
-        return (uploadedFiles.length > 0 || uploadedDocuments.length > 0);
+        return hasUploadedDocs;
       })() && (
         <div className="flex flex-col items-start gap-4 self-stretch">
           {/* Section Header */}
@@ -1557,35 +1689,6 @@ export function IdentityDocumentForm({
         }}
       />
 
-      {/* QR Code Modal */}
-      {showQRModal && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowQRModal(false);
-            }
-          }}
-        >
-          <div className="flex flex-col items-center gap-6 p-10 rounded-xl bg-black/40 backdrop-blur-sm">
-            <div className="scale-[2.5] transform p-4 bg-white rounded-lg shadow-2xl">
-              <QRCodeDisplay
-                shortCode={shortCode}
-                templateVersionId={templateVersionId}
-                userId={userId}
-                sessionId={sessionState?.sessionId || 'default-session'}
-                currentStep="document-upload"
-                size="large"
-                showUrl={false}
-              />
-            </div>
-            <p className="text-center text-base font-medium text-white/90 mt-4">
-              Scan this QR code with your mobile device
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && documentToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1610,9 +1713,7 @@ export function IdentityDocumentForm({
                 disabled={isDeleting}
                 className="flex w-8 h-8 justify-center items-center gap-2.5 rounded-full bg-white hover:bg-gray-50 disabled:opacity-50"
               >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M15 5L5 15M5 5L15 15" stroke="#676879" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <CloseIcon width={20} height={20} />
               </button>
             </div>
 
@@ -1653,10 +1754,7 @@ export function IdentityDocumentForm({
               >
                 {isDeleting ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                    <Spinner className="animate-spin h-4 w-4 text-white" />
                     <span className="text-white font-roboto text-[13px] font-medium">
                       Deleting...
                     </span>
