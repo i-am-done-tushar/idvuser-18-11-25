@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -7,10 +8,51 @@ export function ContactAdminPage() {
   const { toast } = useToast();
   const [activeNav, setActiveNav] = useState("contact");
   const [subject, setSubject] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(""); // html
+  const [plainText, setPlainText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  const editorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // keep message/plainText in sync if programmatically changed
+    if (editorRef.current && message && editorRef.current.innerHTML !== message) {
+      editorRef.current.innerHTML = message;
+      setPlainText(editorRef.current.innerText || "");
+    }
+  }, [message]);
+
+  const exec = (command: string, value?: string) => {
+    try {
+      document.execCommand(command, false, value || undefined);
+      // update state
+      const html = editorRef.current?.innerHTML || "";
+      const text = editorRef.current?.innerText || "";
+      setMessage(html);
+      setPlainText(text);
+      // keep focus on editor
+      editorRef.current?.focus();
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const insertInlineCode = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const selected = range.toString();
+    const codeHtml = `<code style="background:#f6f8fa;padding:2px 4px;border-radius:4px;font-family:monospace">${selected}</code>`;
+    document.execCommand("insertHTML", false, codeHtml);
+    const html = editorRef.current?.innerHTML || "";
+    const text = editorRef.current?.innerText || "";
+    setMessage(html);
+    setPlainText(text);
+    editorRef.current?.focus();
+  };
+
 
   const navItems = [
     {
