@@ -74,7 +74,7 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         localStorage.setItem('submissionId', submissionId.toString());
         
         // Call the handoff API to get join code
-        const handoffResponse = await fetch('http://10.10.5.231:5027/api/handoff/start', {
+        const handoffResponse = await fetch('https://idvapi-test.arconnet.com:1019/api/handoff/start', {
           method: 'POST',
           headers: {
             'accept': 'text/plain',

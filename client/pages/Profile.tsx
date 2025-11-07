@@ -6,6 +6,7 @@ import {
   DialogClose,
   DialogTitle,
 } from "@/components/ui/dialog";
+import EnableMfaModal from "@/components/EnableMfaModal";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -17,6 +18,9 @@ export default function ProfilePage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // MFA modal state
+  const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
 
   const navItems: Array<{
     id: string;
@@ -343,7 +347,10 @@ export default function ProfilePage() {
                     to your account
                   </p>
                 </div>
-                <button className="flex h-8 px-3 py-2 justify-center items-center gap-2 rounded bg-[#0073EA]">
+                <button
+                  onClick={() => setIsMfaModalOpen(true)}
+                  className="flex h-8 px-3 py-2 justify-center items-center gap-2 rounded bg-[#0073EA]"
+                >
                   <span className="text-white font-roboto text-[13px] font-medium leading-4">
                     Enable MFA
                   </span>
@@ -700,6 +707,13 @@ export default function ProfilePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* MFA Modal */}
+      <EnableMfaModal
+        isOpen={isMfaModalOpen}
+        onClose={() => setIsMfaModalOpen(false)}
+        userEmail="Opinder.singh@company.com"
+      />
     </div>
   );
 }

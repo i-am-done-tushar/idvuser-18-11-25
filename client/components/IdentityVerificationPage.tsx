@@ -23,7 +23,7 @@ import { truncate } from "fs";
 
 // ---- single source of truth for API base ----
 // const API_BASE = "https://idvapi-test.arconnet.com:1019";
-const API_BASE = "http://10.10.5.231:5027";
+const API_BASE = "https://idvapi-test.arconnet.com:1019";
 
   // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
