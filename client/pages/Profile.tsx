@@ -639,9 +639,7 @@ export default function ProfilePage() {
                   />
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowConfirmPassword(!showConfirmPassword)
-                    }
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="flex justify-end items-center"
                   >
                     <svg
