@@ -69,7 +69,11 @@ export function ContactAdminPage() {
   const updateToolbarState = () => {
     if (!editorRef.current) return;
     const sel = window.getSelection();
-    if (!sel || !sel.anchorNode || !editorRef.current.contains(sel.anchorNode)) {
+    if (
+      !sel ||
+      !sel.anchorNode ||
+      !editorRef.current.contains(sel.anchorNode)
+    ) {
       setIsBold(false);
       setIsItalic(false);
       setIsUnderline(false);
@@ -79,19 +83,20 @@ export function ContactAdminPage() {
       return;
     }
     try {
-      setIsBold(document.queryCommandState('bold'));
-      setIsItalic(document.queryCommandState('italic'));
-      setIsUnderline(document.queryCommandState('underline'));
-      setIsStrike(document.queryCommandState('strikeThrough'));
-      setIsJustifyLeft(document.queryCommandState('justifyLeft'));
-      const col = document.queryCommandValue('foreColor');
+      setIsBold(document.queryCommandState("bold"));
+      setIsItalic(document.queryCommandState("italic"));
+      setIsUnderline(document.queryCommandState("underline"));
+      setIsStrike(document.queryCommandState("strikeThrough"));
+      setIsJustifyLeft(document.queryCommandState("justifyLeft"));
+      const col = document.queryCommandValue("foreColor");
       setCurrentColor(col || null);
     } catch (err) {}
   };
 
   useEffect(() => {
-    document.addEventListener('selectionchange', updateToolbarState);
-    return () => document.removeEventListener('selectionchange', updateToolbarState);
+    document.addEventListener("selectionchange", updateToolbarState);
+    return () =>
+      document.removeEventListener("selectionchange", updateToolbarState);
   }, []);
 
   const execWithUpdate = (command: string, value?: string) => {
@@ -481,14 +486,19 @@ export function ContactAdminPage() {
                         ref={colorRef}
                         type="color"
                         className="hidden"
-                        onChange={(e) => execWithUpdate("foreColor", e.target.value)}
+                        onChange={(e) =>
+                          execWithUpdate("foreColor", e.target.value)
+                        }
                       />
                       <button
                         type="button"
                         onClick={() => colorRef.current?.click()}
                         className={`p-1 rounded hover:bg-gray-100 ${currentColor ? "bg-[#E6F1FD]" : ""}`}
                       >
-                        <div className="w-4 h-4 rounded-sm" style={{ background: currentColor || '#212529' }} />
+                        <div
+                          className="w-4 h-4 rounded-sm"
+                          style={{ background: currentColor || "#212529" }}
+                        />
                       </button>
 
                       <div className="ml-2 w-px h-6 bg-[#E9ECEF] mr-1" />
