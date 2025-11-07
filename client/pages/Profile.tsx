@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogContent,
   DialogClose,
+  DialogTitle,
 } from "@/components/ui/dialog";
 
 export default function ProfilePage() {
@@ -503,9 +504,9 @@ export default function ProfilePage() {
       <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
         <DialogContent className="max-w-[420px] p-0 gap-0 rounded-lg overflow-hidden">
           <div className="flex h-[52px] px-5 py-2.5 justify-between items-center border-b border-[#D0D4E4] bg-white">
-            <h2 className="text-[#172B4D] font-roboto text-lg font-bold leading-[26px]">
+            <DialogTitle className="text-[#172B4D] font-roboto text-lg font-bold leading-[26px]">
               Change Password
-            </h2>
+            </DialogTitle>
             <DialogClose className="flex w-7 h-7 p-2 flex-col justify-center items-center rounded-full bg-white hover:bg-gray-100">
               <svg
                 className="w-4 h-4"
