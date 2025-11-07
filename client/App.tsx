@@ -12,15 +12,8 @@ import { VerificationProgressPage } from "./components/VerificationProgressPage"
 import { VerificationSuccessPage } from "./components/VerificationSuccessPage";
 import { AuthLoginPage } from "./components/AuthLoginPage";
 import { AuthOtpPage } from "./components/AuthOtpPage";
-import { Dashboard } from "./components/Dashboard";
-import Profile from "./pages/Profile";
-import { PasswordSetupPage } from "./components/PasswordSetupPage";
-import { OngoingVerificationPage } from "./components/OngoingVerificationPage";
-import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
-import { VerifiedCredentialsPage } from "./components/VerifiedCredentialsPage";
-import { ContactAdminPage } from "./components/ContactAdminPage";
-
-//1st change
+//import { Dashboard } from "./components/Dashboard";
+import HandoffPage from "./pages/HandoffPage";
 
 import { createBrowserRouter } from "react-router-dom";
 
@@ -43,24 +36,10 @@ const App = () => (
             path="/verification-success"
             element={<VerificationSuccessPage />}
           />
-          <Route path="/password-setup" element={<PasswordSetupPage />} />
           <Route path="/auth/login" element={<AuthLoginPage />} />
           <Route path="/auth/otp" element={<AuthOtpPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route
-            path="/ongoing-verification"
-            element={<OngoingVerificationPage />}
-          />
-          <Route
-            path="/expired-verification"
-            element={<ExpiredVerificationPage />}
-          />
-          <Route
-            path="/verified-credentials"
-            element={<VerifiedCredentialsPage />}
-          />
-          <Route path="/contact-admin" element={<ContactAdminPage />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/HandoffPage/:joincode" element={<HandoffPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -1,7 +1,4 @@
 {
-  "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "*"
-  },
   "name": "fusion-starter",
   "private": true,
   "type": "module",
@@ -27,13 +24,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "^4.17.0",
-    "@tensorflow/tfjs-backend-cpu": "^4.22.0",
-    "@tensorflow/tfjs-backend-webgl": "^4.22.0",
     "@types/qrcode": "^1.5.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "face-api.js": "^0.22.2",
     "qrcode": "^1.5.4",
     "zod": "^3.25.76"
   },
