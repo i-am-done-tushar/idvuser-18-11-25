@@ -320,6 +320,7 @@ export function Dashboard() {
           />
         </svg>
       ),
+      onClick: () => navigate("/contact-admin"),
     },
   ];
 
