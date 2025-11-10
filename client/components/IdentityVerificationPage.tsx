@@ -11,22 +11,26 @@ import { OTPVerificationDialog } from "./OTPVerificationDialog";
 import { FormData } from "@shared/templates";
 import { TemplateVersionResponse } from "@shared/api";
 import { useToast } from "@/hooks/use-toast";
-// Minimal imports for basic email/phone format checks before sending OTP
-import { isValidEmail, isValidPhoneForCountry } from "@/lib/validation";
+import {
+  isValidName,
+  isValidEmail,
+  isValidPhoneForCountry,
+  isValidDOB,
+  isValidAddress,
+  isValidPostalCode,
+} from "@/lib/validation";
+import { truncate } from "fs";
 
-// ============================================================================
-// API CONFIGURATION
-// ============================================================================
-// Single source of truth for backend API base URL
+// ---- single source of truth for API base ----
+// const API_BASE = "https://idvapi-test.arconnet.com:1019";
 const API_BASE = "https://idvapi-test.arconnet.com:1019";
 
-// 🚀 DEVELOPMENT FLAG - Set to false to enable full OTP verification flow
+  // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+
+// 🚀 DEVELOPMENT FLAG - Set to false to enable OTP verification
 const BYPASS_OTP_FOR_DEVELOPMENT = true;
 
-/**
- * Retrieves the JWT access token from localStorage
- * Used for authenticated API requests to the backend
- */
+// token helper (kept minimal)
 const getToken = () =>
   (typeof window !== "undefined" && localStorage.getItem("access")) || null;
 
@@ -630,7 +634,7 @@ export function IdentityVerificationPage({
         // Move to next section after personal info completion
         setTimeout(() => {
           const nextSectionIndex = sectionIndex + 1;
-          if (nextSectionIndex <= activeSections.length && canAccessSection(nextSectionIndex)) {
+          if (nextSectionIndex <= activeSections.length) {
             setCurrentStep(nextSectionIndex);
             // Keep previous sections expanded and expand the next section
             setExpandedSections(prev => ({ ...prev, [nextSectionIndex]: true }));
@@ -660,7 +664,7 @@ export function IdentityVerificationPage({
         // Move to next section
         setTimeout(() => {
           const nextSectionIndex = sectionIndex + 1;
-          if (nextSectionIndex <= activeSections.length && canAccessSection(nextSectionIndex)) {
+          if (nextSectionIndex <= activeSections.length) {
             setCurrentStep(nextSectionIndex);
             // Keep previous sections expanded and expand the next section
             setExpandedSections(prev => ({ ...prev, [nextSectionIndex]: true }));
@@ -678,16 +682,7 @@ export function IdentityVerificationPage({
     // Don't auto-collapse - let the step advancement logic handle UI transitions
   };
 
-  // ============================================================================
-  // EMAIL OTP API FUNCTIONS
-  // ============================================================================
-  
-  /**
-   * Generates and sends an email OTP to the specified email address
-   * @param email - User's email address to send OTP to
-   * @param versionId - Template version ID for tracking
-   * @throws Error if API request fails
-   */
+  // ---- OTP API calls (server-backed) ----
   async function generateEmailOtp(email: string, versionId: number) {
     const token = getToken();
     const res = await fetch(`${API_BASE}/api/Otp/generate`, {
@@ -705,13 +700,6 @@ export function IdentityVerificationPage({
     }
   }
 
-  /**
-   * Validates an email OTP code entered by the user
-   * @param email - User's email address
-   * @param versionId - Template version ID
-   * @param otp - 6-digit OTP code entered by user
-   * @throws Error if OTP is invalid or expired
-   */
   async function validateEmailOtp(
     email: string,
     versionId: number,
@@ -733,19 +721,7 @@ export function IdentityVerificationPage({
     }
   }
 
-  // ============================================================================
-  // PHONE OTP API FUNCTIONS
-  // ============================================================================
-  
-  /**
-   * Initiates phone number OTP verification via SMS or WhatsApp
-   * @param phoneCountryCode - Country dial code (e.g., "+91", "+1")
-   * @param phoneNationalNumber - Phone number without country code (digits only)
-   * @param versionId - Template version ID
-   * @param channel - Delivery method: "whatsapp" or "sms"
-   * @param purpose - Purpose of OTP (e.g., "phoneVerification", "login_verification")
-   * @returns Promise with otpId and expiration time
-   */
+  // ---- PHONE OTP API calls ----
   async function startPhoneOtp(
     phoneCountryCode: string,
     phoneNationalNumber: string,
@@ -775,16 +751,10 @@ export function IdentityVerificationPage({
       throw new Error(text || `Failed to start phone OTP (HTTP ${res.status})`);
     }
 
+    // { success: true, otpId: number, expiresAt: string }
     return res.json() as Promise<{ success: boolean; otpId: number; expiresAt: string }>;
   }
 
-  /**
-   * Verifies a phone OTP code using the otpId from startPhoneOtp
-   * @param otpId - Unique ID returned from startPhoneOtp
-   * @param code - 6-digit OTP code entered by user
-   * @returns Promise with success status
-   * @throws Error if OTP is invalid, expired, or already used
-   */
   async function verifyPhoneOtp(otpId: number, code: string) {
     const token = getToken();
     const res = await fetch(`${API_BASE}/api/Otp/phone/verify`, {
@@ -797,85 +767,119 @@ export function IdentityVerificationPage({
       body: JSON.stringify({ otpId, code: String(code).trim() }),
     });
 
-    // API may respond with text/plain instead of JSON
+    // read body as text first (API may respond text/plain)
     const bodyText = await res.text().catch(() => "");
     let json: any = null;
     try { json = bodyText ? JSON.parse(bodyText) : null; } catch {}
 
-    // Handle both HTTP errors and success:false in response
+    // Throw on HTTP error OR success:false
     if (!res.ok || (json && json.success === false)) {
       const msg = (json?.message || bodyText || `Invalid OTP (HTTP ${res.status})`).toString();
       throw new Error(msg);
     }
 
+    // treat missing payload as success only if HTTP was 2xx
     return (json ?? { success: true }) as { success: boolean };
   }
 
-  /**
-   * Helper function to get the active template version ID
-   * @returns versionId number or null if template not loaded
-   */
+  // ---- versionId resolver (new page only deals with TemplateVersionResponse) ----
   const getActiveVersionId = () => templateVersion?.versionId ?? null;
 
-  /**
-   * ============================================================================
-   * PERSONAL INFORMATION SECTION COMPLETION VALIDATOR
-   * ============================================================================
-   * Checks if Step 1 (Personal Information) is complete based on:
-   * - Required fields from API configuration (firstName, lastName, email always required)
-   * - Conditional fields based on requiredToggles (middleName, DOB, phone, etc.)
-   * - OTP verification status for email/phone (can be bypassed in development)
-   * 
-   * NOTE: Detailed validation (format, length, etc.) is handled by Zod schema
-   * in PersonalInformationForm.tsx. This function only checks presence and verification status.
-   */
+  // ---- Step 1 validator (dynamic by API config) ----
   const isStep1Complete = () => {
     if (!templateVersion) return false;
     const personalInfo: any = getPersonalInfoConfig();
     const requiredToggles = personalInfo?.requiredToggles || {};
     const checks: boolean[] = [];
 
-    // Always required fields - just check presence (Zod handles format validation)
-    if (personalInfo.firstName) checks.push(!!formData.firstName?.trim());
-    if (personalInfo.lastName) checks.push(!!formData.lastName?.trim());
-    
-    // Email is always required + needs OTP verification
-    if (personalInfo.email) {
-      checks.push(!!formData.email?.trim());
-      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified);
-    }
+    // Required fields - always validated
+    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
+    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
     
     // Conditionally required fields based on requiredToggles
-    if (personalInfo.middleName && requiredToggles.middleName) {
-      checks.push(!!formData.middleName?.trim());
+    if (personalInfo.middleName) {
+      if (requiredToggles.middleName) {
+        checks.push(isValidName(formData.middleName));
+      } else if (formData.middleName.trim()) {
+        // If field is shown but not required, only validate if user entered something
+        checks.push(isValidName(formData.middleName));
+      }
     }
     
-    if (personalInfo.dateOfBirth && requiredToggles.dob) {
-      checks.push(!!formData.dateOfBirth?.trim());
+    if (personalInfo.dateOfBirth) {
+      if (requiredToggles.dob) {
+        checks.push(isValidDOB(formData.dateOfBirth));
+      } else if (formData.dateOfBirth) {
+        checks.push(isValidDOB(formData.dateOfBirth));
+      }
     }
     
-    if (personalInfo.phoneNumber && requiredToggles.phoneNumber) {
-      checks.push(!!formData.countryCode?.trim());
-      checks.push(!!formData.phoneNumber?.trim());
-      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+    if (personalInfo.email) {
+      checks.push(isValidEmail(formData.email));
+      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified); // 🚀 Bypass OTP in dev
+    }
+    
+    if (personalInfo.phoneNumber) {
+      if (requiredToggles.phoneNumber) {
+        checks.push(!!formData.countryCode);
+        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
+        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified); // 🚀 Bypass OTP in dev
+      } else if (formData.phoneNumber) {
+        // If phone is shown but not required, validate only if entered
+        checks.push(!!formData.countryCode);
+        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
+        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+      }
     }
     
     if (personalInfo.gender && requiredToggles.gender) {
-      checks.push(!!formData.gender?.trim());
+      checks.push(!!formData.gender);
     }
     
-    // Current address fields
     if (personalInfo.currentAddress) {
-      if (requiredToggles.currentAddress) checks.push(!!formData.address?.trim());
-      if (requiredToggles.currentCity) checks.push(!!formData.city?.trim());
-      if (requiredToggles.currentPostal) checks.push(!!formData.postalCode?.trim());
+      // Check address line required toggle
+      if (requiredToggles.currentAddress) {
+        checks.push(isValidAddress(formData.address));
+      } else if (formData.address) {
+        checks.push(isValidAddress(formData.address));
+      }
+      
+      // Check city required toggle
+      if (requiredToggles.currentCity) {
+        checks.push(!!formData.city && formData.city.trim().length >= 2);
+      } else if (formData.city) {
+        checks.push(formData.city.trim().length >= 2);
+      }
+      
+      // Check postal code required toggle
+      if (requiredToggles.currentPostal) {
+        checks.push(isValidPostalCode(formData.postalCode));
+      } else if (formData.postalCode) {
+        checks.push(isValidPostalCode(formData.postalCode));
+      }
     }
     
-    // Permanent address fields
     if (personalInfo.permanentAddress) {
-      if (requiredToggles.permanentAddress) checks.push(!!formData.permanentAddress?.trim());
-      if (requiredToggles.permanentCity) checks.push(!!formData.permanentCity?.trim());
-      if (requiredToggles.permanentPostal) checks.push(!!formData.permanentPostalCode?.trim());
+      // Check permanent address line required toggle
+      if (requiredToggles.permanentAddress) {
+        checks.push(isValidAddress(formData.permanentAddress));
+      } else if (formData.permanentAddress) {
+        checks.push(isValidAddress(formData.permanentAddress));
+      }
+      
+      // Check permanent city required toggle
+      if (requiredToggles.permanentCity) {
+        checks.push(!!formData.permanentCity && formData.permanentCity.trim().length >= 2);
+      } else if (formData.permanentCity) {
+        checks.push(formData.permanentCity.trim().length >= 2);
+      }
+      
+      // Check permanent postal code required toggle
+      if (requiredToggles.permanentPostal) {
+        checks.push(isValidPostalCode(formData.permanentPostalCode));
+      } else if (formData.permanentPostalCode) {
+        checks.push(isValidPostalCode(formData.permanentPostalCode));
+      }
     }
     
     return checks.length > 0 && checks.every(Boolean);
@@ -917,19 +921,17 @@ export function IdentityVerificationPage({
           
           // Auto-advance to next section after a short delay
           setTimeout(() => {
-            if (canAccessSection(2)) {
-              setCurrentStep(2);
-              // Keep previous section expanded and also expand the next section
-              setExpandedSections(prev => ({ ...prev, 2: true }));
-              
-              // Show next section toast
-              if (nextSection) {
-                toast({
-                  title: `📋 ${nextSection.name}`,
-                  description: `Please complete the ${nextSection.name.toLowerCase()}.`,
-                  duration: 4000,
-                });
-              }
+            setCurrentStep(2);
+            // Keep previous section expanded and also expand the next section
+            setExpandedSections(prev => ({ ...prev, 2: true }));
+            
+            // Show next section toast
+            if (nextSection) {
+              toast({
+                title: `📋 ${nextSection.name}`,
+                description: `Please complete the ${nextSection.name.toLowerCase()}.`,
+                duration: 4000,
+              });
             }
           }, 2000);
         }
@@ -993,20 +995,18 @@ export function IdentityVerificationPage({
         
         // Auto-advance to next section
         setTimeout(() => {
-          if (canAccessSection(3)) {
-            setCurrentStep(3);
-            // Keep previous sections expanded and also expand the next section
-            setExpandedSections(prev => ({ ...prev, 3: true }));
-            setShowMobileMenu(false);
-            
-            // Show next section toast
-            if (nextSection) {
-              toast({
-                title: `📋 ${nextSection.name}`,
-                description: `Please complete the ${nextSection.name.toLowerCase()}.`,
-                duration: 4000,
-              });
-            }
+          setCurrentStep(3);
+          // Keep previous sections expanded and also expand the next section
+          setExpandedSections(prev => ({ ...prev, 3: true }));
+          setShowMobileMenu(false);
+          
+          // Show next section toast
+          if (nextSection) {
+            toast({
+              title: `📋 ${nextSection.name}`,
+              description: `Please complete the ${nextSection.name.toLowerCase()}.`,
+              duration: 4000,
+            });
           }
         }, 2000);
       }
@@ -1504,43 +1504,13 @@ export function IdentityVerificationPage({
     }
   };
 
-  /**
-   * Checks if a specific section can be accessed
-   * A section can be accessed if all previous sections are completed
-   */
-  const canAccessSection = (sectionIndex: number): boolean => {
-    // Always allow access to the first section
-    if (sectionIndex === 1) return true;
-    
-    // Check if all previous sections are completed
-    for (let i = 1; i < sectionIndex; i++) {
-      if (!completedSections[i]) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  /**
-   * Toggle section: expand/collapse with validation
-   * Only allows expanding sections that are unlocked (previous sections completed)
-   */
+  // Toggle section: expand/collapse, send POST if closing a filled section
   const toggleSection = async (idx: number) => {
-    // Check if trying to access a locked section
-    if (!canAccessSection(idx)) {
-      const sections = activeSections;
-      const previousSection = sections[idx - 2]; // Get the previous uncompleted section
-      const previousSectionName = previousSection?.sectionType === "personalInformation" 
-        ? "Personal Information"
-        : previousSection?.sectionType === "documents"
-        ? "Document Verification"
-        : previousSection?.sectionType === "biometrics"
-        ? "Selfie Verification"
-        : "previous section";
-      
+    if (idx > currentStep) {
       toast({
-        title: "Section Locked",
-        description: `Please complete the ${previousSectionName} section before accessing this step.`,
+        title: "Step locked",
+        description:
+          "You can only access unlocked steps. Complete the current step to continue.",
         variant: "destructive",
       });
       return;
@@ -1570,59 +1540,76 @@ export function IdentityVerificationPage({
     .filter((s) => s.isActive)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 
-  /**
-   * Checks if the entire form is valid and ready for final submission
-   * NOTE: Detailed validation is handled by Zod in PersonalInformationForm
-   * This only checks presence of data and section completion status
-   */
   const isFormValid = () => {
     if (!templateVersion) return false;
     const personalInfo: any = getPersonalInfoConfig();
     const requiredToggles = personalInfo?.requiredToggles || {};
     const checks: boolean[] = [];
 
-    // Check presence of required fields (Zod validates format in the form)
-    if (personalInfo.firstName) checks.push(!!formData.firstName?.trim());
-    if (personalInfo.lastName) checks.push(!!formData.lastName?.trim());
+    // Required fields - always validated if shown
+    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
+    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
     
-    // Conditionally required fields
+    // Conditionally required fields based on requiredToggles
     if (personalInfo.middleName && requiredToggles.middleName) {
-      checks.push(!!formData.middleName?.trim());
+      checks.push(isValidName(formData.middleName));
     }
     
     if (personalInfo.dateOfBirth && requiredToggles.dob) {
-      checks.push(!!formData.dateOfBirth?.trim());
+      checks.push(isValidDOB(formData.dateOfBirth));
     }
     
     if (personalInfo.email) {
-      checks.push(!!formData.email?.trim());
+      checks.push(isValidEmail(formData.email));
+      // Skip email verification for development
       if (!BYPASS_OTP_FOR_DEVELOPMENT) {
         checks.push(isEmailVerified);
       }
     }
     
     if (personalInfo.phoneNumber && requiredToggles.phoneNumber) {
-      checks.push(!!formData.countryCode?.trim());
-      checks.push(!!formData.phoneNumber?.trim());
+      checks.push(!!formData.countryCode);
+      checks.push(
+        isValidPhoneForCountry(formData.countryCode, formData.phoneNumber),
+      );
+      // Skip phone verification for development
       if (!BYPASS_OTP_FOR_DEVELOPMENT) {
         checks.push(isPhoneVerified);
       }
     }
     
     if (personalInfo.gender && requiredToggles.gender) {
-      checks.push(!!formData.gender?.trim());
+      checks.push(!!formData.gender);
     }
     
     if (personalInfo.currentAddress) {
-      if (requiredToggles.currentAddress) checks.push(!!formData.address?.trim());
-      if (requiredToggles.currentCity) checks.push(!!formData.city?.trim());
-      if (requiredToggles.currentPostal) checks.push(!!formData.postalCode?.trim());
+      // Check address line if required
+      if (requiredToggles.currentAddress) {
+        checks.push(isValidAddress(formData.address));
+      }
+      // Check city if required
+      if (requiredToggles.currentCity) {
+        checks.push(!!formData.city && formData.city.trim().length >= 2);
+      }
+      // Check postal code if required
+      if (requiredToggles.currentPostal) {
+        checks.push(isValidPostalCode(formData.postalCode));
+      }
     }
     
     if (personalInfo.permanentAddress) {
-      if (requiredToggles.permanentAddress) checks.push(!!formData.permanentAddress?.trim());
-      if (requiredToggles.permanentCity) checks.push(!!formData.permanentCity?.trim());
-      if (requiredToggles.permanentPostal) checks.push(!!formData.permanentPostalCode?.trim());
+      // Check permanent address line if required
+      if (requiredToggles.permanentAddress) {
+        checks.push(isValidAddress(formData.permanentAddress));
+      }
+      // Check permanent city if required
+      if (requiredToggles.permanentCity) {
+        checks.push(!!formData.permanentCity && formData.permanentCity.trim().length >= 2);
+      }
+      // Check permanent postal code if required
+      if (requiredToggles.permanentPostal) {
+        checks.push(isValidPostalCode(formData.permanentPostalCode));
+      }
     }
 
     const personalOk = checks.length > 0 && checks.every(Boolean);
@@ -1643,11 +1630,6 @@ export function IdentityVerificationPage({
     );
   };
 
-  /**
-   * Returns a list of missing or incomplete required fields
-   * Used for error messaging when user tries to submit incomplete form
-   * NOTE: Format validation is handled by Zod, this only checks presence
-   */
   const getMissingFields = () => {
     if (!templateVersion) return ["Template data not loaded"];
 
@@ -1655,65 +1637,67 @@ export function IdentityVerificationPage({
     const requiredToggles = personalInfo?.requiredToggles || {};
     const missing: string[] = [];
 
-    // Check presence of required fields
-    if (personalInfo.firstName && !formData.firstName?.trim()) {
+    // Check personal information fields - required fields only
+    if (personalInfo.firstName && !isValidName(formData.firstName)) {
       missing.push("First Name");
     }
-    if (personalInfo.lastName && !formData.lastName?.trim()) {
+    if (personalInfo.lastName && !isValidName(formData.lastName)) {
       missing.push("Last Name");
     }
     
-    // Conditionally required fields
-    if (personalInfo.middleName && requiredToggles.middleName && !formData.middleName?.trim()) {
+    // Conditionally required fields based on requiredToggles
+    if (personalInfo.middleName && requiredToggles.middleName && !isValidName(formData.middleName)) {
       missing.push("Middle Name");
     }
     
-    if (personalInfo.dateOfBirth && requiredToggles.dob && !formData.dateOfBirth?.trim()) {
+    if (personalInfo.dateOfBirth && requiredToggles.dob && !isValidDOB(formData.dateOfBirth)) {
       missing.push("Date of Birth");
     }
     
     if (personalInfo.email) {
-      if (!formData.email?.trim()) {
-        missing.push("Email");
+      if (!isValidEmail(formData.email)) {
+        missing.push("Valid Email");
       } else if (!isEmailVerified && !BYPASS_OTP_FOR_DEVELOPMENT) {
         missing.push("Email Verification (OTP)");
       }
     }
     
     if (personalInfo.phoneNumber && requiredToggles.phoneNumber) {
-      if (!formData.countryCode?.trim()) {
+      if (!formData.countryCode) {
         missing.push("Country Code");
-      } else if (!formData.phoneNumber?.trim()) {
-        missing.push("Phone Number");
+      } else if (
+        !isValidPhoneForCountry(formData.countryCode, formData.phoneNumber)
+      ) {
+        missing.push("Valid Phone Number");
       } else if (!isPhoneVerified && !BYPASS_OTP_FOR_DEVELOPMENT) {
         missing.push("Phone Verification (OTP)");
       }
     }
     
-    if (personalInfo.gender && requiredToggles.gender && !formData.gender?.trim()) {
+    if (personalInfo.gender && requiredToggles.gender && !formData.gender) {
       missing.push("Gender");
     }
     
     if (personalInfo.currentAddress) {
-      if (requiredToggles.currentAddress && !formData.address?.trim()) {
+      if (requiredToggles.currentAddress && !isValidAddress(formData.address)) {
         missing.push("Current Address");
       }
-      if (requiredToggles.currentCity && !formData.city?.trim()) {
+      if (requiredToggles.currentCity && (!formData.city || formData.city.trim().length < 2)) {
         missing.push("Current City");
       }
-      if (requiredToggles.currentPostal && !formData.postalCode?.trim()) {
+      if (requiredToggles.currentPostal && !isValidPostalCode(formData.postalCode)) {
         missing.push("Current Postal Code");
       }
     }
     
     if (personalInfo.permanentAddress) {
-      if (requiredToggles.permanentAddress && !formData.permanentAddress?.trim()) {
+      if (requiredToggles.permanentAddress && !isValidAddress(formData.permanentAddress)) {
         missing.push("Permanent Address");
       }
-      if (requiredToggles.permanentCity && !formData.permanentCity?.trim()) {
+      if (requiredToggles.permanentCity && (!formData.permanentCity || formData.permanentCity.trim().length < 2)) {
         missing.push("Permanent City");
       }
-      if (requiredToggles.permanentPostal && !formData.permanentPostalCode?.trim()) {
+      if (requiredToggles.permanentPostal && !isValidPostalCode(formData.permanentPostalCode)) {
         missing.push("Permanent Postal Code");
       }
     }
