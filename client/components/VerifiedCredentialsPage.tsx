@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { VerifiedCredentialCard } from "./VerifiedCredentialCard";
 
 interface VerifiedCredentialItem {
@@ -64,7 +64,17 @@ const verifiedCredentials: VerifiedCredentialItem[] = [
 
 export function VerifiedCredentialsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeNav, setActiveNav] = useState("verified");
+
+  useEffect(() => {
+    const path = location.pathname || "";
+    if (path.startsWith("/ongoing")) setActiveNav("ongoing");
+    else if (path.startsWith("/expired")) setActiveNav("expired");
+    else if (path.startsWith("/verified")) setActiveNav("verified");
+    else if (path.startsWith("/contact")) setActiveNav("contact");
+    else setActiveNav("home");
+  }, [location.pathname]);
 
   const navItems = [
     {
