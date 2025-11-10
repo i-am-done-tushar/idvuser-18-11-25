@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { getDocumentDefinitionId } from "@/lib/document-definitions";
 import { DocumentConfig } from "@shared/templates";
+import { getDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 interface CameraDialogProps {
   isOpen: boolean;
@@ -227,7 +228,14 @@ export function CameraDialog({
 
       // Always use POST for uploads, never PUT
       const url = `${API_BASE}/api/Files/upload`;
-      const response = await fetch(url, { method: "POST", body: formData });
+      const deviceFingerprint = getDeviceFingerprint(); // Auto-detects Desktop vs Mobile
+      const response = await fetch(url, { 
+        method: "POST", 
+        body: formData,
+        headers: {
+          'X-Device-Fingerprint': deviceFingerprint
+        }
+      });
 
       if (response.ok) {
         const result = await response.json().catch(() => ({}));

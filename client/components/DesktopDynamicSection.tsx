@@ -38,7 +38,7 @@ interface DesktopDynamicSectionProps {
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
       status: "uploaded" | "pending";

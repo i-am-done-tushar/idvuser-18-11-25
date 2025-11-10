@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "./Header";
 import { StepSidebar } from "./StepSidebar";
@@ -7,6 +7,7 @@ import { HowItWorksDialog } from "./HowItWorksDialog";
 import { DynamicSection } from "./DynamicSection";
 import { DesktopDynamicSection } from "./DesktopDynamicSection";
 import { OTPVerificationDialog } from "./OTPVerificationDialog";
+import { QRCodeDisplay } from "./QRCodeDisplay";
 import { FormData } from "@shared/templates";
 import { TemplateVersionResponse } from "@shared/api";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +19,7 @@ import {
   isValidAddress,
   isValidPostalCode,
 } from "@/lib/validation";
+import { getDesktopDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 // ---- single source of truth for API base ----
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
@@ -88,6 +90,10 @@ export function IdentityVerificationPage({
 
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [submissionId, setSubmissionId] = useState<number | null>(null);
+
+  // Ref to control SignalR connection lifecycle
+  const signalRConnectionRef = useRef<any>(null);
+  const shouldMaintainConnection = useRef(true);
 
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
@@ -728,28 +734,8 @@ export function IdentityVerificationPage({
   async function sendSessionHeartbeat() {
     const token = getToken();
 
-    // get or create device fingerprint
-    let fingerprint: string | null = null;
-    try {
-      fingerprint = localStorage.getItem("device_fingerprint");
-    } catch (e) {
-      fingerprint = null;
-    }
-
-    if (!fingerprint) {
-      // prefer crypto.randomUUID when available
-      try {
-        const gen = typeof crypto !== "undefined" && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `dev-${Math.random().toString(36).slice(2)}`;
-        fingerprint = gen;
-        try {
-          localStorage.setItem("device_fingerprint", fingerprint);
-        } catch (e) {
-          // ignore storage errors
-        }
-      } catch (e) {
-        fingerprint = `dev-${Math.random().toString(36).slice(2)}`;
-      }
-    }
+    // Get desktop device fingerprint (Device 1)
+    const fingerprint = getDesktopDeviceFingerprint();
 
     const res = await fetch(`${API_BASE}/api/session/heartbeat`, {
       method: "POST",
@@ -1501,6 +1487,18 @@ export function IdentityVerificationPage({
     }
 
     try {
+      // Close SignalR connection before submitting
+      shouldMaintainConnection.current = false;
+      if (signalRConnectionRef.current) {
+        console.log('🔌 Closing SignalR connection on form submission');
+        try {
+          await signalRConnectionRef.current.stop();
+          console.log('✅ SignalR connection closed successfully');
+        } catch (err) {
+          console.error('❌ Error closing SignalR:', err);
+        }
+      }
+
       toast({
         title: "Submitting Form",
         description: "Please wait while we submit your information...",

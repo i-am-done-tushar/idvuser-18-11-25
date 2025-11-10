@@ -8,6 +8,7 @@ import { QRCodeDisplay } from "./QRCodeDisplay";
 import { useSessionSync } from "@/hooks/useSessionSync";
 import { extractSessionFromURL } from "@/lib/qr-utils";
 import { CloseIcon, Spinner } from "./SVG_Files";
+import { getDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 // read API base from env; avoid hardcoding
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
@@ -39,7 +40,7 @@ interface IdentityDocumentFormProps {
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
       status: "uploaded" | "pending";
@@ -54,7 +55,7 @@ interface IdentityDocumentFormProps {
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
       status: "uploaded" | "pending";
@@ -135,13 +136,13 @@ export function IdentityDocumentForm({
   // Determine if we're using lifted state or local state
   const isUsingLiftedState = !!(documentFormState && setDocumentFormState);
   
-  console.log('🏗️ IdentityDocumentForm render:', {
-    isUsingLiftedState,
-    hasDocumentFormState: !!documentFormState,
-    hasSetDocumentFormState: !!setDocumentFormState,
-    currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
-    currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
-  });
+  // console.log('🏗️ IdentityDocumentForm render:', {
+  //   isUsingLiftedState,
+  //   hasDocumentFormState: !!documentFormState,
+  //   hasSetDocumentFormState: !!setDocumentFormState,
+  //   currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
+  //   currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
+  // });
 
   // Get current state values
   const country = isUsingLiftedState ? documentFormState!.country : localCountry;
@@ -174,10 +175,10 @@ export function IdentityDocumentForm({
   };
 
   const setUploadedDocuments = (value: string[] | ((prev: string[]) => string[])) => {
-    console.log('🔧 setUploadedDocuments called, isUsingLiftedState:', isUsingLiftedState);
+    // console.log('🔧 setUploadedDocuments called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedDocuments) : value;
-      console.log('🔧 Setting lifted uploadedDocuments:', newValue);
+      // console.log('🔧 Setting lifted uploadedDocuments:', newValue);
       setDocumentFormState!((prevState) => ({
         ...prevState,
         uploadedDocuments: newValue,
@@ -188,15 +189,15 @@ export function IdentityDocumentForm({
       } else {
         setLocalUploadedDocuments(value);
       }
-      console.log('🔧 Setting local uploadedDocuments');
+      // console.log('🔧 Setting local uploadedDocuments');
     }
   };
 
   const setUploadedFiles = (value: UploadedFile[] | ((prev: UploadedFile[]) => UploadedFile[])) => {
-    console.log('🔧 setUploadedFiles called, isUsingLiftedState:', isUsingLiftedState);
+    // console.log('🔧 setUploadedFiles called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedFiles) : value;
-      console.log('🔧 Setting lifted uploadedFiles:', newValue);
+      // console.log('🔧 Setting lifted uploadedFiles:', newValue);
       setDocumentFormState!((prevState) => ({
         ...prevState,
         uploadedFiles: newValue,
@@ -230,7 +231,7 @@ export function IdentityDocumentForm({
   // Helper to add/update document details after upload
   const addDocumentDetail = (
     documentName: string,
-    documentDefinitionId: number,
+    documentDefinitionId: number | string,
     frontFileId: number,
     backFileId?: number
   ) => {
@@ -279,20 +280,20 @@ export function IdentityDocumentForm({
     
     // Only trigger if length increased (new document added)
     if (currentLength > previousDocsLength && currentLength > 0) {
-      console.log('🔔 documentsDetails changed! Length:', currentLength);
-      console.log('📋 Current documentsDetails:', documentFormState.documentsDetails);
+      // console.log('🔔 documentsDetails changed! Length:', currentLength);
+      // console.log('📋 Current documentsDetails:', documentFormState.documentsDetails);
+      
+      // Update previous length BEFORE triggering callback
+      setPreviousDocsLength(currentLength);
       
       // Trigger POST request in background after short delay
       setTimeout(() => {
-        console.log('⏰ Triggering auto-save after document upload...');
-        console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
+        // console.log('⏰ Triggering auto-save after document upload...');
+        // console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
         onDocumentUploaded?.();
       }, 200);
     }
-    
-    // Update previous length
-    setPreviousDocsLength(currentLength);
-  }, [documentFormState?.documentsDetails, isUsingLiftedState, onDocumentUploaded, previousDocsLength]);
+  }, [documentFormState?.documentsDetails, isUsingLiftedState, onDocumentUploaded]);
 
   // Initialize session sync for cross-device functionality
   const { sessionState, updateSession } = useSessionSync({
@@ -623,16 +624,16 @@ export function IdentityDocumentForm({
     formData.append("DocumentDefinitionId", documentDefinitionId);
     formData.append("Bucket", "string");
     const submissionIdToUse = submissionId?.toString() || "1";
-    console.log(
-      "IdentityDocumentForm: Using UserTemplateSubmissionId:",
-      submissionIdToUse,
-    );
-    console.log(
-      "IdentityDocumentForm: Using DocumentDefinitionId:",
-      documentDefinitionId,
-      "for document:",
-      selectedDocumentName,
-    );
+    // console.log(
+    //   "IdentityDocumentForm: Using UserTemplateSubmissionId:",
+    //   submissionIdToUse,
+    // );
+    // console.log(
+    //   "IdentityDocumentForm: Using DocumentDefinitionId:",
+    //   documentDefinitionId,
+    //   "for document:",
+    //   selectedDocumentName,
+    // );
     formData.append("UserTemplateSubmissionId", submissionIdToUse);
     return formData;
   };
@@ -645,7 +646,14 @@ export function IdentityDocumentForm({
     // Always use POST for uploads, never PUT
     const url = `${API_BASE}/api/Files/upload`;
     const formData = buildFormData(file, filename);
-    const res = await fetch(url, { method: "POST", body: formData });
+    const deviceFingerprint = getDeviceFingerprint(); // Auto-detects Desktop vs Mobile
+    const res = await fetch(url, { 
+      method: "POST", 
+      body: formData,
+      headers: {
+        'X-Device-Fingerprint': deviceFingerprint
+      }
+    });
 
     // Check for 201 Created or 200 OK
     if (!res.ok && res.status !== 201) {
@@ -986,25 +994,54 @@ export function IdentityDocumentForm({
   };
 
   // Helper to get documentDefinitionId for current selected document
-  const getCurrentDocumentDefinitionId = (): number | null => {
-    if (!country || !selectedDocument) return null;
+  const getCurrentDocumentDefinitionId = (): string | number | null => {
+    // console.log('🔍 getCurrentDocumentDefinitionId called:', {
+    //   country,
+    //   selectedDocument,
+    // });
+    
+    if (!country || !selectedDocument) {
+      // console.log('❌ Missing country or selectedDocument');
+      return null;
+    }
     
     // Get the human-readable document name
     const documentName = currentDocuments.find(
       (docName) => docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
     );
     
+    // console.log('🔍 Found document name:', documentName);
+    
     if (!documentName) return null;
     
     // Try to get from config first
     let documentDefinitionId = getDocumentDefinitionIdFromConfig(country, documentName);
     
+    // console.log('🔍 From config:', documentDefinitionId);
+    
     // Fallback to hardcoded IDs if not in config
     if (!documentDefinitionId) {
       documentDefinitionId = getDocumentDefinitionId(country, documentName);
+      // console.log('🔍 From hardcoded:', documentDefinitionId);
     }
     
-    return documentDefinitionId ? parseInt(documentDefinitionId, 10) : null;
+    // Return as-is if it's a UUID string, or parse as int if it's numeric
+    if (!documentDefinitionId) {
+      // console.log('🔍 No documentDefinitionId found');
+      return null;
+    }
+    
+    // Check if it's a UUID (contains hyphens and hex characters)
+    if (typeof documentDefinitionId === 'string' && documentDefinitionId.includes('-')) {
+      // console.log('🔍 Returning UUID as-is:', documentDefinitionId);
+      return documentDefinitionId;
+    }
+    
+    // Otherwise parse as integer
+    const result = parseInt(documentDefinitionId, 10);
+    // console.log('🔍 Final documentDefinitionId (parsed as int):', result);
+    
+    return result;
   };
 
   // Get current documents to display (titles only)
@@ -1425,12 +1462,12 @@ export function IdentityDocumentForm({
       {/* Files Uploaded Section */}
       {(() => {
         const hasUploadedDocs = uploadedDocuments && uploadedDocuments.length > 0;
-        console.log('🔍 Documents Uploaded section:', {
-          uploadedFiles,
-          uploadedDocuments,
-          hasUploadedDocs,
-          documentUploadIds
-        });
+        // console.log('🔍 Documents Uploaded section:', {
+        //   uploadedFiles,
+        //   uploadedDocuments,
+        //   hasUploadedDocs,
+        //   documentUploadIds
+        // });
         return hasUploadedDocs;
       })() && (
         <div className="flex flex-col items-start gap-4 self-stretch">
@@ -1572,6 +1609,13 @@ export function IdentityDocumentForm({
             // Add document details for backend storage (if using lifted state)
             // Use the fileIds passed from CameraDialog to ensure we have the correct uploaded IDs
             const documentDefinitionId = getCurrentDocumentDefinitionId();
+            console.log('🔍 Camera Dialog - Checking addDocumentDetail conditions:', {
+              documentDefinitionId,
+              frontFileId: uploadedFileIds?.front,
+              backFileId: uploadedFileIds?.back,
+              isUsingLiftedState,
+              shouldAdd: !!(documentDefinitionId && uploadedFileIds?.front),
+            });
             if (documentDefinitionId && uploadedFileIds?.front) {
               const documentName = currentDocuments.find(
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
@@ -1589,6 +1633,8 @@ export function IdentityDocumentForm({
                 frontFileId: uploadedFileIds.front,
                 backFileId: uploadedFileIds.back,
               });
+            } else {
+              console.log('❌ Skipping addDocumentDetail (Camera) - conditions not met');
             }
 
             setSelectedDocument("");
@@ -1612,6 +1658,10 @@ export function IdentityDocumentForm({
           const docId = selectedDocument;
 
           try {
+            // Get documentDefinitionId BEFORE clearing selectedDocument
+            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            // console.log('🔍 Upload Dialog - Got documentDefinitionId:', documentDefinitionId);
+
             const prevIds = documentUploadIds[docId];
 
             const [frontId, backId] = await Promise.all([
@@ -1627,6 +1677,8 @@ export function IdentityDocumentForm({
               ),
             ]);
 
+            // console.log('🔍 Upload Dialog - File IDs:', { frontId, backId });
+
             setDocumentUploadIds((prev) => ({
               ...prev,
               [docId]: { front: frontId, back: backId },
@@ -1634,7 +1686,7 @@ export function IdentityDocumentForm({
 
             setUploadedDocuments((prevDocs) => {
               const newDocs = prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId];
-              console.log('📄 Updated uploadedDocuments:', newDocs);
+              // console.log('📄 Updated uploadedDocuments:', newDocs);
               return newDocs;
             });
 
@@ -1649,12 +1701,19 @@ export function IdentityDocumentForm({
                 (f) => f.id.replace(/-\d+$/, "") !== docId,
               );
               const newFiles = [...filtered, newFile];
-              console.log('📁 Updated uploadedFiles:', newFiles);
+              // console.log('📁 Updated uploadedFiles:', newFiles);
               return newFiles;
             });
 
             // Add document details for backend storage (if using lifted state)
-            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            // Use the documentDefinitionId we got earlier (before any state changes)
+            // console.log('🔍 Upload Dialog - Checking addDocumentDetail conditions:', {
+            //   documentDefinitionId,
+            //   frontId,
+            //   backId,
+            //   isUsingLiftedState,
+            //   shouldAdd: !!(documentDefinitionId && frontId),
+            // });
             if (documentDefinitionId && frontId) {
               const documentName = currentDocuments.find(
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
@@ -1666,12 +1725,14 @@ export function IdentityDocumentForm({
                 frontId,
                 backId
               );
-              console.log('✅ Added document detail (Upload Dialog):', {
-                documentName,
-                documentDefinitionId,
-                frontFileId: frontId,
-                backFileId: backId,
-              });
+              // console.log('✅ Added document detail (Upload Dialog):', {
+              //   documentName,
+              //   documentDefinitionId,
+              //   frontFileId: frontId,
+              //   backFileId: backId,
+              // });
+            } else {
+              // console.log('❌ Skipping addDocumentDetail - conditions not met');
             }
 
             setSelectedDocument("");

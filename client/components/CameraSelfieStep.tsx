@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { HowItWorksDialog } from "./HowItWorksDialog";
 import { useToast } from "@/hooks/use-toast";
+import { getDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
@@ -93,7 +94,14 @@ export function CameraSelfieStep({ onComplete, submissionId }: CameraSelfieStepP
 
       // Always use POST for uploads, never PUT
       const url = `${API_BASE}/api/Files/upload`;
-      const uploadResponse = await fetch(url, { method: "POST", body: formData });
+      const deviceFingerprint = getDeviceFingerprint(); // Auto-detects Desktop vs Mobile
+      const uploadResponse = await fetch(url, { 
+        method: "POST", 
+        body: formData,
+        headers: {
+          'X-Device-Fingerprint': deviceFingerprint
+        }
+      });
 
       if (uploadResponse.ok) {
         const result = await uploadResponse.json().catch(() => ({}));

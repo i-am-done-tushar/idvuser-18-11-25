@@ -24,6 +24,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@microsoft/signalr": "^9.0.6",
     "@types/qrcode": "^1.5.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
