@@ -354,7 +354,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="flex h-full bg-white overflow-hidden">
+      <div className="flex h-full bg-white overflow-visible">
         <div className="flex w-[248px] px-2 py-2 flex-col items-start gap-1 border-r border-[#D0D4E4] bg-white overflow-y-auto">
           {navItems.map((item) => {
             const isActive = activeNav === item.id;
