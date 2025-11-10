@@ -402,23 +402,20 @@ export function Dashboard() {
         <main className="flex flex-1 flex-col items-start bg-white overflow-y-auto">
           {/* Banner - independent element inside main */}
           <section className="w-full">
-            <div className="relative flex w-full items-center gap-2.5 rounded-b-2xl overflow-hidden h-[138px] bg-gradient-to-br from-[#003d82] via-[#1e5ba8] to-[#0073EA] shadow-sm" style={{ zIndex: 1 }}>
-              <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
-                <img
-                  src="https://api.builder.io/api/v1/image/assets/TEMP/38b9840b8e157e2e4686f0512b46f97b9e7cb4c5?width=2700"
-                  alt=""
-                  className="absolute"
-                  style={{
-                    width: "1350px",
-                    height: "224.865px",
-                    left: "-135px",
-                    top: "-43.437px",
-                    opacity: 0.22,
-                  }}
-                />
-              </div>
+            <div className="relative flex w-full items-center gap-2.5 rounded-b-2xl overflow-hidden h-[138px] bg-black shadow-sm" style={{ zIndex: 1 }}>
+              <img
+                src="https://api.builder.io/api/v1/image/assets/TEMP/38b9840b8e157e2e4686f0512b46f97b9e7cb4c5?width=2700"
+                alt=""
+                className="absolute"
+                style={{
+                  width: "1350px",
+                  height: "224.865px",
+                  left: "-135px",
+                  top: "-43.437px",
+                }}
+              />
 
-              <div className="flex px-4 flex-col justify-center items-start gap-0.5 flex-1 relative z-10">
+              <div className="flex px-4 flex-col justify-center items-start gap-[2px] flex-1 relative z-10">
                 <h1 className="text-white font-roboto text-2xl font-semibold leading-[30px]">
                   Welcome, Opinder Singh !
                 </h1>
