@@ -401,7 +401,7 @@ export function Dashboard() {
 
         <main className="flex flex-1 flex-col items-start bg-white overflow-y-auto">
           {/* Banner - independent element inside main */}
-          <section className="w-full px-4">
+          <section className="w-full">
             <div className="relative flex w-full items-center gap-2.5 rounded-b-2xl overflow-hidden h-[138px] bg-gradient-to-br from-[#003d82] via-[#1e5ba8] to-[#0073EA] shadow-sm" style={{ zIndex: 1 }}>
               <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
                 <img
