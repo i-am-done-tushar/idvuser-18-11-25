@@ -4,11 +4,15 @@ import { useLocation, useNavigate } from "react-router-dom";
 export function AuthOtpPage() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isResending, setIsResending] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
 
   const emailOrPhone = location.state?.emailOrPhone || "amritemail.com";
+  const mode = location.state?.mode || "email";
+  const otpId = location.state?.otpId || null;
 
   useEffect(() => {
     // Focus first input on mount
@@ -51,16 +55,144 @@ export function AuthOtpPage() {
 
   const handleResend = async () => {
     setIsResending(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsResending(false);
+    setError("");
+
+    try {
+      if (mode === "email") {
+        // Resend email OTP
+        const response = await fetch("/api/Otp/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: emailOrPhone,
+            versionId: 0,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to resend OTP");
+        }
+
+        console.log("Email OTP resent successfully");
+      } else {
+        // Resend phone OTP
+        // Extract country code and phone number
+        const match = emailOrPhone.match(/^(\+\d+)(\d+)$/);
+        if (!match) {
+          throw new Error("Invalid phone number format");
+        }
+        const [, countryCode, phoneNumber] = match;
+
+        const response = await fetch("/api/Otp/phone/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            phoneCountryCode: countryCode,
+            phoneNationalNumber: phoneNumber,
+            channel: "sms",
+            purpose: "login_verification",
+            versionId: 0,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to resend OTP");
+        }
+
+        const data = await response.json();
+        // Update otpId if phone mode
+        if (data.otpId) {
+          // Store new otpId in location state
+          navigate("/auth/otp", {
+            state: {
+              emailOrPhone,
+              mode,
+              otpId: data.otpId,
+            },
+            replace: true,
+          });
+        }
+        console.log("Phone OTP resent successfully");
+      }
+    } catch (err: any) {
+      console.error("Error resending OTP:", err);
+      setError(err.message || "Failed to resend OTP. Please try again.");
+    } finally {
+      setIsResending(false);
+    }
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const otpValue = otp.join("");
-    if (otpValue.length === 6) {
-      // Simulate login - for demo purposes just navigate to a success page
-      navigate("/dashboard");
+    if (otpValue.length !== 6) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      if (mode === "email") {
+        // Verify email OTP
+        const response = await fetch("/api/Otp/validate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: emailOrPhone,
+            otp: otpValue,
+            versionId: 0,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Invalid OTP");
+        }
+
+        const data = await response.json();
+        console.log("Email OTP verified:", data);
+
+        // Navigate to dashboard on success
+        navigate("/dashboard");
+      } else {
+        // Verify phone OTP
+        if (!otpId) {
+          throw new Error("OTP ID not found. Please request a new code.");
+        }
+
+        const response = await fetch("/api/Otp/phone/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            otpId: otpId,
+            code: otpValue,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Invalid OTP");
+        }
+
+        const data = await response.json();
+        console.log("Phone OTP verified:", data);
+
+        // Navigate to dashboard on success
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      console.error("Error verifying OTP:", err);
+      setError(err.message || "Invalid OTP. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -182,11 +314,19 @@ export function AuthOtpPage() {
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
-                    className="w-12 h-[54px] text-center border border-[#C3C6D4] rounded bg-white text-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    disabled={loading}
+                    className="w-12 h-[54px] text-center border border-[#C3C6D4] rounded bg-white text-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                     maxLength={1}
                   />
                 ))}
               </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-3 rounded-lg bg-[#FEE2E2] border border-[#FCA5A5]">
+                  <p className="text-sm text-[#DC2626] text-center">{error}</p>
+                </div>
+              )}
 
               {/* Resend Link */}
               <div className="text-center">
@@ -211,14 +351,40 @@ export function AuthOtpPage() {
               {/* Login Button */}
               <button
                 onClick={handleLogin}
-                disabled={!isComplete}
+                disabled={!isComplete || loading}
                 className={`w-full h-12 px-4 py-3 rounded font-roboto text-base font-bold transition-colors ${
-                  isComplete
+                  isComplete && !loading
                     ? "bg-primary hover:bg-primary/90 text-white"
                     : "bg-primary/50 text-white cursor-not-allowed"
                 }`}
               >
-                Log In
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <svg
+                      className="animate-spin h-5 w-5 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    <span>Verifying...</span>
+                  </div>
+                ) : (
+                  "Log In"
+                )}
               </button>
             </div>
           </div>

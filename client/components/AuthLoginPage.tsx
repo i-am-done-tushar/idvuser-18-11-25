@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { emailLoginSchema, phoneLoginSchema } from "@/validations/authLoginSchema";
+import { ZodError } from "zod";
 
 type Country = {
   code: string;
@@ -26,60 +28,127 @@ export function AuthLoginPage() {
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [countryError, setCountryError] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
   const navigate = useNavigate();
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     const trimmed = emailOrPhone.trim();
+    setLoading(true);
+    setApiError("");
 
-    if (mode === "email") {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!trimmed || !emailRegex.test(trimmed)) {
-        setEmailError("Please enter a valid email address.");
+    try {
+      if (mode === "email") {
+        // Validate email using Zod schema
+        const emailValidation = emailLoginSchema.safeParse({ email: trimmed });
+        
+        if (!emailValidation.success) {
+          const errors = emailValidation.error.errors;
+          setEmailError(errors[0]?.message || "Please enter a valid email address.");
+          setLoading(false);
+          return;
+        }
+
+        setEmailError("");
+
+        // Call email OTP generation API
+        const response = await fetch("/api/Otp/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: trimmed,
+            versionId: 0,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to send OTP");
+        }
+
+        const data = await response.json();
+        console.log("Email OTP sent:", data);
+
+        // Navigate to OTP page with email
+        navigate("/auth/otp", { 
+          state: { 
+            emailOrPhone: trimmed, 
+            mode: "email" 
+          } 
+        });
         return;
       }
-      navigate("/auth/otp", { state: { emailOrPhone: trimmed } });
-      return;
-    }
 
-    // phone mode validations
-    if (!selectedCountry) {
-      setCountryError("Please select a country code.");
-      return;
-    }
-    setCountryError("");
+      // phone mode validations
+      if (!selectedCountry) {
+        setCountryError("Please select a country code.");
+        setLoading(false);
+        return;
+      }
+      setCountryError("");
 
-    if (!trimmed) {
-      setPhoneError("Please enter a valid phone number.");
-      return;
-    }
-
-    const country = COUNTRIES.find((c) => c.code === selectedCountry);
-    const digits = trimmed.replace(/\D/g, "");
-
-    if (!digits) {
-      setPhoneError("Please enter a valid phone number.");
-      return;
-    }
-
-    // length validation
-    if (country && country.length !== undefined) {
-      if (digits.length !== country.length) {
+      if (!trimmed) {
         setPhoneError("Please enter a valid phone number.");
+        setLoading(false);
         return;
       }
-    } else {
-      // fallback: accept 7-15 digits
-      if (digits.length < 7 || digits.length > 15) {
-        setPhoneError("Please enter a valid phone number.");
-        return;
-      }
-    }
 
-    setPhoneError("");
-    // send with country code prefixed
-    navigate("/auth/otp", {
-      state: { emailOrPhone: `${selectedCountry}${digits}` },
-    });
+      const digits = trimmed.replace(/\D/g, "");
+
+      // Validate phone using Zod schema
+      const phoneValidation = phoneLoginSchema.safeParse({
+        dialCode: selectedCountry,
+        phoneNumber: digits,
+      });
+
+      if (!phoneValidation.success) {
+        const errors = phoneValidation.error.errors;
+        setPhoneError(errors[0]?.message || "Please enter a valid phone number.");
+        setLoading(false);
+        return;
+      }
+
+      setPhoneError("");
+
+      // Call phone OTP generation API
+      const response = await fetch("/api/Otp/phone/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phoneCountryCode: selectedCountry,
+          phoneNationalNumber: digits,
+          channel: "sms",
+          purpose: "login_verification",
+          versionId: 0,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to send OTP");
+      }
+
+      const data = await response.json();
+      console.log("Phone OTP sent:", data);
+
+      // Navigate to OTP page with phone number and otpId
+      navigate("/auth/otp", {
+        state: { 
+          emailOrPhone: `${selectedCountry}${digits}`,
+          mode: "phone",
+          otpId: data.otpId || null
+        },
+      });
+    } catch (err: any) {
+      console.error("Error sending OTP:", err);
+      setApiError(err.message || "Failed to send OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -353,21 +422,55 @@ export function AuthLoginPage() {
                   )}
                 </div>
 
+                {/* API Error Message */}
+                {apiError && (
+                  <div className="p-3 rounded-lg bg-[#FEE2E2] border border-[#FCA5A5]">
+                    <p className="text-sm text-[#DC2626]">{apiError}</p>
+                  </div>
+                )}
+
                 {/* Send OTP Button */}
                 <button
                   onClick={handleSendOTP}
                   disabled={
-                    mode === "email"
+                    loading ||
+                    (mode === "email"
                       ? !emailOrPhone.trim() || !!emailError
-                      : !selectedCountry || !emailOrPhone.trim() || !!phoneError
+                      : !selectedCountry || !emailOrPhone.trim() || !!phoneError)
                   }
                   className={`w-full h-12 px-4 py-3 rounded font-roboto text-base font-bold transition-colors ${
-                    emailOrPhone.trim()
+                    emailOrPhone.trim() && !loading
                       ? "bg-primary hover:bg-primary/90 text-white"
                       : "bg-primary/50 text-white cursor-not-allowed"
                   }`}
                 >
-                  Send OTP
+                  {loading ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <svg
+                        className="animate-spin h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      <span>Sending...</span>
+                    </div>
+                  ) : (
+                    "Send OTP"
+                  )}
                 </button>
               </div>
             </div>

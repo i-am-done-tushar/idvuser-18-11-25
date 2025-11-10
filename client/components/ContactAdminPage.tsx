@@ -264,26 +264,109 @@ export function ContactAdminPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject.trim() || !plainText.trim()) return;
+
+    if (!subject.trim()) {
+      toast({
+        title: "Subject is required",
+        description: "Please enter a subject for your message.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Ensure message has visible text content
+    const textOnly = plainText.trim();
+    if (!textOnly) {
+      toast({
+        title: "Message is required",
+        description: "Please enter a message.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get token from localStorage
+    const token = localStorage.getItem("access");
+    if (!token) {
+      toast({
+        title: "Authentication required",
+        description: "You're not signed in. Please log in and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file if present
+    if (file) {
+      const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/svg+xml", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
+      const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
+
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Only JPG, JPEG, PNG, SVG, and .XLS files are supported.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (file.size > MAX_SIZE) {
+        toast({
+          title: "File too large",
+          description: "File must be ≤ 25 MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     setSubmitting(true);
     try {
-      await new Promise((res) => setTimeout(res, 600));
+      const API_BASE = import.meta.env.VITE_API_URL ?? "https://idvapi-test.arconnet.com:1019";
+      
+      const fd = new FormData();
+      fd.append("Subject", subject);
+      fd.append("Message", message); // HTML body
+      if (file) fd.append("file", file);
+
+      const res = await fetch(`${API_BASE}/api/sendemailtoarconadmin`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: fd,
+      });
+
+      const raw = await res.text().catch(() => "");
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        /* non-JSON */
+      }
+
+      if (!res.ok || data?.success === false) {
+        const msg = data?.message || raw || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
 
       toast({
         title: "Message sent successfully",
-        description: "Admin will respond shortly.",
+        description: "Your request has been sent. Client admin will respond shortly.",
       });
 
+      // Reset form
       setSubject("");
       setMessage("");
       setPlainText("");
       if (editorRef.current) editorRef.current.innerHTML = "";
       setFile(null);
-    } catch (err) {
+    } catch (err: any) {
+      console.error(err);
       toast({
         title: "Failed to send message",
-        description: "Please try again later.",
+        description: err?.message || "Please try again later.",
         variant: "destructive",
       });
     } finally {
