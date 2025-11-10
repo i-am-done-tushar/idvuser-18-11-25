@@ -407,11 +407,13 @@ export function Dashboard() {
               minHeight: "138px",
               backgroundColor: "#003d82",
               backgroundImage:
-                "linear-gradient(135deg, rgba(0,61,130,0.85) 0%, rgba(30,91,168,0.85) 50%, rgba(0,115,234,0.85) 100%), url('https://api.builder.io/api/v1/image/assets/TEMP/38b9840b8e157e2e4686f0512b46f97b9e7cb4c5?width=2700')",
+                "linear-gradient(135deg, rgba(0,61,130,0.95) 0%, rgba(30,91,168,0.95) 50%, rgba(0,115,234,0.95) 100%), url('https://api.builder.io/api/v1/image/assets/TEMP/38b9840b8e157e2e4686f0512b46f97b9e7cb4c5?width=2700')",
               backgroundSize: "cover",
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
-              zIndex: 1,
+              zIndex: 50,
+              position: "sticky",
+              top: 44,
             }}
           >
             <div className="flex px-4 flex-col justify-center items-start gap-0.5 flex-1 relative z-20">
