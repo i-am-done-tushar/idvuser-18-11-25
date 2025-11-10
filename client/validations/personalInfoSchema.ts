@@ -1,19 +1,43 @@
-// personalInfoSchema.ts
+/**
+ * ============================================================================
+ * PERSONAL INFORMATION VALIDATION SCHEMA
+ * ============================================================================
+ * Zod schema for validating personal information form fields in the identity
+ * verification flow. Supports dynamic field requirements based on API configuration.
+ * 
+ * Features:
+ * - Dynamic validation based on requiredToggles from backend
+ * - Country-specific phone number validation
+ * - DOB validation with 18+ age requirement (DD/MM/YYYY format)
+ * - Optional vs required field handling
+ * 
+ * Usage:
+ *   const schema = makePersonalInfoSchema(requiredToggles);
+ *   schema.parse(formData); // Throws ZodError if invalid
+ */
 import { z } from "zod";
 
+/**
+ * Phone number length rules by country dial code
+ * Maps country codes to expected phone number lengths (min/max digits)
+ */
 export const PHONE_LENGTH_BY_DIAL: Record<string, { min: number; max: number }> = {
-  "+91":  { min: 10, max: 10 },
-  "+1":   { min: 10, max: 10 },
-  "+44":  { min: 10, max: 10 },
-  "+61":  { min:  9, max:  9 },
-  "+49":  { min: 10, max: 11 },
-  "+33":  { min:  9, max:  9 },
-  "+65":  { min:  8, max:  8 },
-  "+971": { min:  9, max:  9 },
-  "+55":  { min: 10, max: 11 },
-  "+81":  { min:  9, max: 10 },
+  "+91":  { min: 10, max: 10 }, // India
+  "+1":   { min: 10, max: 10 }, // USA/Canada
+  "+44":  { min: 10, max: 10 }, // UK
+  "+61":  { min:  9, max:  9 }, // Australia
+  "+49":  { min: 10, max: 11 }, // Germany
+  "+33":  { min:  9, max:  9 }, // France
+  "+65":  { min:  8, max:  8 }, // Singapore
+  "+971": { min:  9, max:  9 }, // UAE
+  "+55":  { min: 10, max: 11 }, // Brazil
+  "+81":  { min:  9, max: 10 }, // Japan
 };
 
+/**
+ * Configuration object defining which fields are required
+ * Received from backend API based on template configuration
+ */
 export type RequiredToggles = {
   phoneNumber?: boolean;
   gender?: boolean;
@@ -27,15 +51,27 @@ export type RequiredToggles = {
   middleName?: boolean;
 };
 
+/**
+ * Base validation rule for name fields (firstName, lastName, middleName)
+ * Requires: 2+ characters, letters and spaces only, supports Unicode letters
+ */
 const nameRule = z
   .string()
   .min(2, "Must be at least 2 characters")
   .regex(/^[A-Za-z\s]+$/, "Only letters and spaces are allowed");
 
-// --- Helpers ---
+/**
+ * Helper function to make a field conditionally required
+ * @param enabled - Whether the field is required
+ * @param base - The base Zod type for the field
+ * @param emptyOk - Whether empty string is acceptable when not required
+ */
 const req = (enabled: boolean, base: z.ZodTypeAny, emptyOk = true) =>
   enabled ? base : (emptyOk ? z.union([z.literal(""), base.optional()]) : base.optional());
 
+/**
+ * Zod validator for phone numbers - ensures only digits are present
+ */
 const digitsOnly = z.string().regex(/^\d+$/, "Phone number must only contain digits");
 
 // --- DOB helpers (DD/MM/YYYY) ---
@@ -68,10 +104,19 @@ function isAtLeastYearsUTC(dobUtc: Date, years: number): boolean {
     dobUtc.getUTCMonth(),
     dobUtc.getUTCDate()
   ));
-  return threshold <= todayUtc; // true if already had the birthday
+  return threshold <= todayUtc;
 }
 
-
+/**
+ * ============================================================================
+ * DYNAMIC SCHEMA FACTORY
+ * ============================================================================
+ * Creates a Zod validation schema based on dynamic field requirements from the backend.
+ * Handles conditional validation for optional vs required fields.
+ * 
+ * @param rt - RequiredToggles object defining which fields are mandatory
+ * @returns Zod schema for PersonalInfoSchema validation with custom phone number validation
+ */
 export const makePersonalInfoSchema = (rt: RequiredToggles) => {
   const emailRequired = z
     .string()
@@ -134,13 +179,18 @@ export const makePersonalInfoSchema = (rt: RequiredToggles) => {
       countryCode: req(!!rt.phoneNumber, z.string().min(1, "Please select a country code.")),
       phoneNumber: req(!!rt.phoneNumber, digitsOnly.min(1, "Please enter a valid phone number")),
     })
+    /**
+     * Custom validation: Phone number length must match country-specific rules
+     * Uses superRefine to validate phoneNumber length based on selected countryCode
+     * Skips validation if phone is optional and empty
+     */
     .superRefine(({ countryCode, phoneNumber }, ctx) => {
       const phoneIsEmpty = !phoneNumber || phoneNumber === "";
-      if (!rt.phoneNumber && phoneIsEmpty) return;
-      if (!countryCode || !phoneNumber) return;
+      if (!rt.phoneNumber && phoneIsEmpty) return; // Skip if optional and empty
+      if (!countryCode || !phoneNumber) return; // Skip if incomplete
 
       const rule = PHONE_LENGTH_BY_DIAL[countryCode as keyof typeof PHONE_LENGTH_BY_DIAL];
-      if (!rule) return;
+      if (!rule) return; // No rule for this country code
 
       const len = phoneNumber.length;
       if (len < rule.min || len > rule.max) {
@@ -158,8 +208,21 @@ export const makePersonalInfoSchema = (rt: RequiredToggles) => {
   return schema;
 };
 
-// types/default
+// ============================================================================
+// TYPE EXPORTS & DEFAULT SCHEMA
+// ============================================================================
+
+/**
+ * TypeScript type inferred from the dynamic schema
+ * Represents the shape of validated personal information data
+ */
 export type PersonalInfoSchema = z.infer<ReturnType<typeof makePersonalInfoSchema>>;
+
+/**
+ * Default schema instance with typical required fields
+ * Used as a fallback or for testing purposes
+ * In production, schema is dynamically generated from backend RequiredToggles
+ */
 const personalInfoSchema = makePersonalInfoSchema({
   phoneNumber: true,
   gender: false,
@@ -172,4 +235,5 @@ const personalInfoSchema = makePersonalInfoSchema({
   dob: true,
   middleName: false,
 });
+
 export default personalInfoSchema;

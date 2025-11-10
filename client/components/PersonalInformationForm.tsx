@@ -1,3 +1,27 @@
+/**
+ * ============================================================================
+ * PERSONAL INFORMATION FORM COMPONENT
+ * ============================================================================
+ * 
+ * A comprehensive form for collecting user personal information with:
+ * - React Hook Form (RHF) for form state management
+ * - Zod schema validation for type-safe validation rules
+ * - Dynamic field requirements based on backend API configuration
+ * - Real-time OTP verification for email and phone
+ * - Debounced updates to parent component
+ * 
+ * VALIDATION APPROACH:
+ * - All field format validation is handled by Zod schema (personalInfoSchema.ts)
+ * - Validation triggers on blur (mode: "onBlur")
+ * - Errors display only after user interaction (touchedFields check)
+ * - Parent component only needs to check data presence, not format
+ * 
+ * KEY FEATURES:
+ * - Country-specific phone number validation
+ * - DOB validation with 18+ age requirement (DD/MM/YYYY format)
+ * - Conditional required fields based on requiredToggles prop
+ * - Email/phone locking after verification
+ */
 import { useEffect, useMemo, useRef } from "react";
 import { useForm, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,6 +98,12 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
   const RequiredMark = ({ show }: { show: boolean }) =>
     show ? <span className="text-destructive">*</span> : null;
 
+  /**
+   * Determines if a field should be shown based on API configuration
+   * Maps field names to their configuration keys
+   * @param fieldName - The form field name to check
+   * @returns true if field should be displayed
+   */
   const shouldShowField = (fieldName: string): boolean => {
     if (!fieldConfig || Object.keys(fieldConfig).length === 0) {
       return ["firstName", "lastName", "email"].includes(fieldName);
@@ -101,9 +131,10 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     return fieldConfig[key as keyof typeof fieldConfig] === true;
   };
 
-  // Stable defaults on mount
-  const initialDefaults = useMemo(() => formData as PersonalInfoSchema, []); // mount-only
-  // ⬇️ Build schema from toggles
+  // Stable initial values captured on mount - prevents re-rendering loops
+  const initialDefaults = useMemo(() => formData as PersonalInfoSchema, []);
+  
+  // Build Zod schema dynamically based on required field toggles from backend
   const schema = useMemo(() => makePersonalInfoSchema(rt), [rt]);
 
   const REQUIRED_KEYS = useMemo(() => {
@@ -121,7 +152,9 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     return keys;
   }, [rt]);
 
-  // ---- RHF + Zod ----
+  // ============================================================================
+  // REACT HOOK FORM SETUP WITH ZOD VALIDATION
+  // ============================================================================
   const {
     register,
     handleSubmit,
@@ -134,31 +167,41 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
     trigger,
     control,
   } = useForm<PersonalInfoSchema>({
-    resolver: zodResolver(schema),
-    mode: "onBlur",
-    reValidateMode: "onChange",
-    shouldUnregister: false,
+    resolver: zodResolver(schema), // Zod schema for validation
+    mode: "onBlur", // Validate on blur (not while typing)
+    reValidateMode: "onChange", // Re-validate on change after first blur
+    shouldUnregister: false, // Keep field data when unmounted
     defaultValues: initialDefaults,
   });
 
+  /**
+   * Controlled field for Date of Birth with custom format handling
+   * Converts between DD/MM/YYYY (display) and YYYY-MM-DD (input type="date")
+   */
   const { field: dob } = useController({
     name: "dateOfBirth",
     control,
   });
 
-  // ----- Guard to avoid feedback loop -----
+  // ============================================================================
+  // HYDRATION & DEBOUNCING LOGIC
+  // ============================================================================
+  
+  // Guards to prevent infinite update loops between parent and child
   const hydratingRef = useRef(false);
   const debounceTimerRef = useRef<number | null>(null);
 
-  // Hydrate form and validate only required fields
+  /**
+   * Hydrates form with parent data when it changes
+   * Only triggers validation for fields that already have values
+   * Prevents showing errors for empty required fields on mount
+   */
   useEffect(() => {
     hydratingRef.current = true;
     reset(formData as PersonalInfoSchema, { keepDefaultValues: false });
     clearErrors();
 
-    // Only trigger validation on mount for required keys that already have a value.
-    // This prevents showing "Must be at least 2 characters" (or other) errors
-    // for empty fields immediately when the form is mounted.
+    // Validate only non-empty required fields to avoid premature error display
     try {
       const keysToTrigger = REQUIRED_KEYS.filter((k) => {
         const v = (formData as any)[k];
@@ -166,7 +209,7 @@ export function PersonalInformationForm(props: PersonalInformationFormProps) {
       });
       if (keysToTrigger.length > 0) void trigger(keysToTrigger as any);
     } catch (err) {
-      // ignore
+      // Silently ignore validation errors during hydration
     }
 
     const t = window.setTimeout(() => {
