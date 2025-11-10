@@ -4,6 +4,7 @@ import {
   DialogTrigger,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RevokeConsentDialog } from "./RevokeConsentDialog";
 
 interface DocumentDetailsModalProps {
   trigger: React.ReactNode;
@@ -277,9 +278,16 @@ export function DocumentDetailsModal({ trigger, data }: DocumentDetailsModalProp
                 You've shared your details for identity verification. Do you wish to
                 revoke your consent?
               </p>
-              <button className="flex h-8 px-2 py-2.5 justify-center items-center rounded text-[#0073EA] font-roboto text-[13px] font-medium hover:bg-[#0073EA]/10 transition-colors whitespace-nowrap">
-                Revoke Consent
-              </button>
+              <RevokeConsentDialog
+                trigger={
+                  <button className="flex h-8 px-2 py-2.5 justify-center items-center rounded text-[#0073EA] font-roboto text-[13px] font-medium hover:bg-[#0073EA]/10 transition-colors whitespace-nowrap">
+                    Revoke Consent
+                  </button>
+                }
+                onConfirm={() => {
+                  console.log("Consent revoked");
+                }}
+              />
             </div>
           </div>
         </div>
