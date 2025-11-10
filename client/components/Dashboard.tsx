@@ -194,7 +194,17 @@ const VerifiedCredentialsSection = ({ cards }: { cards: VerifiedCard[] }) => {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeNav, setActiveNav] = useState("home");
+
+  useEffect(() => {
+    const path = location.pathname || "";
+    if (path.startsWith("/ongoing")) setActiveNav("ongoing");
+    else if (path.startsWith("/expired")) setActiveNav("expired");
+    else if (path.startsWith("/verified")) setActiveNav("verified");
+    else if (path.startsWith("/contact")) setActiveNav("contact");
+    else setActiveNav("home");
+  }, [location.pathname]);
 
   const navItems: Array<{
     id: string;
