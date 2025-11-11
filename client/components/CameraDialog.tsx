@@ -250,9 +250,18 @@ export function CameraDialog({
             typeof result.mapping.fileId === "number" &&
             result.mapping.fileId) ||
           null;
+        
+        // Extract eTag from response
+        const returnedETag = result?.file?.eTag || null;
+        
         if (returnedId) {
           setUploadedFileIds((prev) => ({ ...prev, [side]: returnedId }));
           onUploaded?.(side, returnedId);
+          
+          // Save eTag to localStorage
+          if (returnedETag && submissionId) {
+            localStorage.setItem(`cameraUpload_${submissionId}_${side}_eTag`, returnedETag);
+          }
         }
 
         setUploadedFiles((prev) => ({ ...prev, [side]: true }));

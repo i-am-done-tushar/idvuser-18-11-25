@@ -37,12 +37,14 @@ interface IdentityDocumentFormProps {
     selectedDocument: string;
     uploadedDocuments: string[];
     uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
-    documentUploadIds: Record<string, { front?: number; back?: number }>;
+    documentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>;
     documentsDetails: Array<{
       documentName: string;
       documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
+      frontETag?: string;
+      backETag?: string;
       status: "uploaded" | "pending";
       uploadedAt: string;
     }>;
@@ -52,12 +54,14 @@ interface IdentityDocumentFormProps {
     selectedDocument: string;
     uploadedDocuments: string[];
     uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
-    documentUploadIds: Record<string, { front?: number; back?: number }>;
+    documentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>;
     documentsDetails: Array<{
       documentName: string;
       documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
+      frontETag?: string;
+      backETag?: string;
       status: "uploaded" | "pending";
       uploadedAt: string;
     }>;
@@ -88,7 +92,7 @@ export function IdentityDocumentForm({
   const [localUploadedDocuments, setLocalUploadedDocuments] = useState<string[]>([]);
   const [localUploadedFiles, setLocalUploadedFiles] = useState<UploadedFile[]>([]);
   const [localDocumentUploadIds, setLocalDocumentUploadIds] = useState<
-    Record<string, { front?: number; back?: number }>
+    Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>
   >({});
   const [isDigilockerLoading, setIsDigilockerLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -212,7 +216,7 @@ export function IdentityDocumentForm({
     }
   };
 
-  const setDocumentUploadIds = (value: Record<string, { front?: number; back?: number }> | ((prev: Record<string, { front?: number; back?: number }>) => Record<string, { front?: number; back?: number }>)) => {
+  const setDocumentUploadIds = (value: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }> | ((prev: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>) => Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>)) => {
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.documentUploadIds) : value;
       setDocumentFormState!((prevState) => ({
@@ -233,7 +237,9 @@ export function IdentityDocumentForm({
     documentName: string,
     documentDefinitionId: number | string,
     frontFileId: number,
-    backFileId?: number
+    backFileId?: number,
+    frontETag?: string,
+    backETag?: string
   ) => {
     if (!isUsingLiftedState) return; // Only use this with lifted state
     
@@ -247,6 +253,8 @@ export function IdentityDocumentForm({
         documentDefinitionId,
         frontFileId,
         backFileId,
+        frontETag,
+        backETag,
         status: "uploaded" as const,
         uploadedAt: new Date().toISOString(),
       };
@@ -642,7 +650,7 @@ export function IdentityDocumentForm({
     file: Blob,
     filename: string,
     existingId?: number,
-  ) => {
+  ): Promise<{ id: number; eTag: string | null }> => {
     // Always use POST for uploads, never PUT
     const url = `${API_BASE}/api/Files/upload`;
     const formData = buildFormData(file, filename);
@@ -673,7 +681,11 @@ export function IdentityDocumentForm({
         result.mapping.fileId) ||
       null;
     if (!returnedId) throw new Error("Upload did not return an id");
-    return returnedId as number;
+    
+    // Extract eTag from response
+    const returnedETag = result?.file?.eTag || null;
+    
+    return { id: returnedId as number, eTag: returnedETag as string | null };
   };
 
   const uploadFileToServer = async (file: Blob, filename: string) => {
@@ -838,17 +850,27 @@ export function IdentityDocumentForm({
   };
 
   // Function to delete a file from server
-  const deleteFileFromServer = async (fileId: number) => {
+  const deleteFileFromServer = async (fileId: number, eTag?: string) => {
     try {
-      console.log('🗑️ Deleting file ID:', fileId);
+      console.log('🗑️ Deleting file ID:', fileId, 'with eTag:', eTag);
       const deleteUrl = `${API_BASE}/api/Files/${fileId}`;
       console.log('🗑️ Delete URL:', deleteUrl);
       
+      const headers: Record<string, string> = {
+        Accept: '*/*',
+      };
+      
+      // Add If-Match header with eTag if available (for optimistic concurrency control)
+      if (eTag) {
+        // Clean eTag format: remove W/"" wrapper if present
+        const cleanETag = eTag.replace(/^W\/"|"$/g, '');
+        headers['If-Match'] = cleanETag;
+        console.log('🔒 Using If-Match header:', cleanETag);
+      }
+      
       const response = await fetch(deleteUrl, {
         method: 'DELETE',
-        headers: {
-          Accept: '*/*',
-        },
+        headers,
       });
 
       console.log('🗑️ Delete response status:', response.status);
@@ -884,14 +906,14 @@ export function IdentityDocumentForm({
 
       // Delete front side if exists
       if (fileIds.front) {
-        console.log('🗑️ Deleting front file, ID:', fileIds.front);
-        deletePromises.push(deleteFileFromServer(fileIds.front));
+        console.log('🗑️ Deleting front file, ID:', fileIds.front, 'eTag:', fileIds.frontETag);
+        deletePromises.push(deleteFileFromServer(fileIds.front, fileIds.frontETag));
       }
 
       // Delete back side if exists
       if (fileIds.back) {
-        console.log('🗑️ Deleting back file, ID:', fileIds.back);
-        deletePromises.push(deleteFileFromServer(fileIds.back));
+        console.log('🗑️ Deleting back file, ID:', fileIds.back, 'eTag:', fileIds.backETag);
+        deletePromises.push(deleteFileFromServer(fileIds.back, fileIds.backETag));
       }
 
       // Wait for all deletions to complete
@@ -910,6 +932,12 @@ export function IdentityDocumentForm({
       setDocumentUploadIds((prev) => {
         const newIds = { ...prev };
         delete newIds[docId];
+        
+        // Update localStorage to remove the deleted document's IDs and eTags
+        if (submissionId) {
+          localStorage.setItem(`documentUploadIds_${submissionId}`, JSON.stringify(newIds));
+        }
+        
         return newIds;
       });
 
@@ -1664,7 +1692,7 @@ export function IdentityDocumentForm({
 
             const prevIds = documentUploadIds[docId];
 
-            const [frontId, backId] = await Promise.all([
+            const [frontResult, backResult] = await Promise.all([
               uploadOrUpdateFile(
                 frontFile,
                 `${docId}-front.${frontFile.type.includes("pdf") ? "pdf" : "jpg"}`,
@@ -1677,11 +1705,35 @@ export function IdentityDocumentForm({
               ),
             ]);
 
-            // console.log('🔍 Upload Dialog - File IDs:', { frontId, backId });
+            const frontId = frontResult.id;
+            const backId = backResult.id;
+            const frontETag = frontResult.eTag;
+            const backETag = backResult.eTag;
+
+            // console.log('🔍 Upload Dialog - File IDs:', { frontId, backId, frontETag, backETag });
+
+            // Save eTags to localStorage
+            if (submissionId) {
+              const uploadData = {
+                ...documentUploadIds,
+                [docId]: { 
+                  front: frontId, 
+                  back: backId,
+                  frontETag: frontETag || undefined,
+                  backETag: backETag || undefined
+                },
+              };
+              localStorage.setItem(`documentUploadIds_${submissionId}`, JSON.stringify(uploadData));
+            }
 
             setDocumentUploadIds((prev) => ({
               ...prev,
-              [docId]: { front: frontId, back: backId },
+              [docId]: { 
+                front: frontId, 
+                back: backId,
+                frontETag: frontETag || undefined,
+                backETag: backETag || undefined
+              },
             }));
 
             setUploadedDocuments((prevDocs) => {
@@ -1723,7 +1775,9 @@ export function IdentityDocumentForm({
                 documentName,
                 documentDefinitionId,
                 frontId,
-                backId
+                backId,
+                frontETag || undefined,
+                backETag || undefined
               );
               // console.log('✅ Added document detail (Upload Dialog):', {
               //   documentName,

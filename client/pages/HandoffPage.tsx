@@ -88,6 +88,9 @@ export default function HandoffPage() {
   const [submissionId, setSubmissionId] = useState<number | null>(null);
   const [userId, setUserId] = useState<number | null>(null);
 
+  // eTag for Personal Information section (for optimistic concurrency control with PUT)
+  const [personalInfoETag, setPersonalInfoETag] = useState<string>("AAAAAAAAAAAAAAAAAAAAAA==");
+
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -1234,6 +1237,17 @@ export default function HandoffPage() {
     };
   }, []);
 
+  // Load Personal Information eTag from localStorage when submissionId is available
+  useEffect(() => {
+    if (submissionId) {
+      const savedETag = localStorage.getItem(`personalInfoETag_${submissionId}`);
+      if (savedETag) {
+        console.log('📦 Loaded Personal Info eTag from localStorage:', savedETag);
+        setPersonalInfoETag(savedETag);
+      }
+    }
+  }, [submissionId]);
+
   // Fetch submission values (documents, etc.)
   useEffect(() => {
     if (!submissionId || !templateVersion) return;
@@ -1263,6 +1277,15 @@ export default function HandoffPage() {
 
           try {
             const parsedValue = JSON.parse(submission.fieldValue);
+
+            // Extract and store eTag for Personal Information section
+            if (section.sectionType === "personalInformation" && submission.eTag) {
+              const cleanedETag = submission.eTag.replace(/^W\/"|"$/g, '');
+              console.log('📦 Extracted Personal Info eTag from GET:', submission.eTag);
+              console.log('📦 Cleaned eTag:', cleanedETag);
+              setPersonalInfoETag(cleanedETag);
+              localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+            }
 
             if (section.sectionType === "documents" && parsedValue) {
               const documentsArray = parsedValue.documents || [];
@@ -1519,8 +1542,8 @@ export default function HandoffPage() {
 
   const postSectionData = async (section: any) => {
     if (!templateVersion || !userId || !submissionId) return;
-    let fieldValue = "";
     
+    // Special handling for Personal Information section - use PUT with eTag
     if (section.sectionType === "personalInformation") {
       const personalInfo = getPersonalInfoConfig();
       const mappedData: any = {};
@@ -1544,8 +1567,75 @@ export default function HandoffPage() {
         mappedData.permanentCity = formData.permanentCity;
         mappedData.permanentPostalCode = formData.permanentPostalCode;
       }
-      fieldValue = JSON.stringify(mappedData);
-    } else if (section.sectionType === "documents") {
+      
+      const fieldValueJson = JSON.stringify(mappedData);
+      const deviceFingerprint = getMobileDeviceFingerprint();
+      const token = getToken();
+      
+      try {
+        console.log('🔄 PUT Personal Information with eTag:', personalInfoETag);
+        const response = await fetch(
+          `${API_BASE}/api/personal-info/${submissionId}/${section.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "text/plain",
+              "If-Match": personalInfoETag,
+              "X-Device-Fingerprint": deviceFingerprint,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ fieldValueJson }),
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`PUT failed: ${response.statusText}`);
+        }
+        
+        // Extract new eTag from response headers or body
+        let newETag: string | null = null;
+        
+        // First try to get eTag from response headers
+        const eTagHeader = response.headers.get('etag') || response.headers.get('ETag');
+        if (eTagHeader) {
+          newETag = eTagHeader;
+          console.log('📥 Received eTag from headers:', eTagHeader);
+        } else {
+          // Fallback: try to parse from response body
+          try {
+            const responseText = await response.text();
+            const responseData = JSON.parse(responseText);
+            newETag = responseData?.eTag || null;
+            console.log('📥 Received eTag from body:', newETag);
+          } catch (e) {
+            console.warn('Could not parse PUT response:', e);
+          }
+        }
+        
+        // Update eTag if we got a new one
+        if (newETag) {
+          // Clean eTag format: remove W/"" wrapper if present
+          // Example: W/"+NPEw6bCX0e4AGuC/u8s8g==" becomes +NPEw6bCX0e4AGuC/u8s8g==
+          const cleanedETag = newETag.replace(/^W\/"|"$/g, '');
+          console.log('✅ Cleaned eTag for storage/next request:', cleanedETag);
+          setPersonalInfoETag(cleanedETag);
+          // Save cleaned eTag to localStorage for persistence
+          if (submissionId) {
+            localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+          }
+        }
+        
+        console.log('✅ Personal Information saved successfully');
+      } catch (err) {
+        console.error("Failed to PUT personal information section", err);
+      }
+      return;
+    }
+    
+    // For other sections (documents, biometrics) - use POST as before
+    let fieldValue = "";
+    if (section.sectionType === "documents") {
       console.log('📤 Posting documents data:', {
         country: documentFormState.country,
         documentsDetails: documentFormState.documentsDetails,
