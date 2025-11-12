@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { OngoingVerificationCard } from "./OngoingVerificationCard";
 import { ExpiredVerificationCard } from "./ExpiredVerificationCard";
 import { VerifiedCredentialCard } from "./VerifiedCredentialCard";
@@ -194,7 +194,17 @@ const VerifiedCredentialsSection = ({ cards }: { cards: VerifiedCard[] }) => {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeNav, setActiveNav] = useState("home");
+
+  useEffect(() => {
+    const path = location.pathname || "";
+    if (path.startsWith("/ongoing")) setActiveNav("ongoing");
+    else if (path.startsWith("/expired")) setActiveNav("expired");
+    else if (path.startsWith("/verified")) setActiveNav("verified");
+    else if (path.startsWith("/contact")) setActiveNav("contact");
+    else setActiveNav("home");
+  }, [location.pathname]);
 
   const navItems: Array<{
     id: string;
@@ -344,7 +354,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="flex h-full bg-white overflow-hidden">
+      <div className="flex flex-1 h-[calc(100vh-44px)] bg-white">
         <div className="flex w-[248px] px-2 py-2 flex-col items-start gap-1 border-r border-[#D0D4E4] bg-white overflow-y-auto">
           {navItems.map((item) => {
             const isActive = activeNav === item.id;
@@ -389,30 +399,39 @@ export function Dashboard() {
           })}
         </div>
 
-        <div className="flex flex-1 flex-col items-start bg-white overflow-y-auto">
-          <div className="flex w-full items-center gap-2.5 rounded-b-2xl bg-black relative overflow-hidden h-[138px]">
-            <img
-              src="https://api.builder.io/api/v1/image/assets/TEMP/38b9840b8e157e2e4686f0512b46f97b9e7cb4c5?width=2700"
-              alt=""
-              className="absolute w-full h-full object-cover"
-            />
-            <div className="flex px-4 flex-col justify-center items-start gap-0.5 flex-1 relative z-10">
-              <h1 className="text-white font-roboto text-2xl font-semibold leading-[30px]">
-                Welcome, Opinder Singh !
-              </h1>
-              <p className="text-white font-roboto text-[13px] font-normal leading-[30px]">
-                Contrary to popular belief, Lorem Ipsum is not simply random
-                text. It has roots in a piece of classical Latin
-              </p>
+        <main className="flex flex-1 flex-col items-start bg-white overflow-y-auto">
+          {/* Banner - independent element inside main */}
+          <section className="w-full">
+            <div
+              className="relative flex w-full items-center gap-2.5 rounded-b-2xl overflow-hidden h-[138px] bg-gradient-to-br from-[#02294e] via-[#084c85] to-[#0049c1] shadow-sm"
+              style={{ zIndex: 1 }}
+            >
+              <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
+                <img
+                  src="https://api.builder.io/api/v1/image/assets/TEMP/38b9840b8e157e2e4686f0512b46f97b9e7cb4c5?width=2700"
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover opacity-20"
+                />
+              </div>
+
+              <div className="flex px-4 flex-col justify-center items-start gap-[2px] flex-1 relative z-10">
+                <h1 className="text-white font-roboto text-2xl font-semibold leading-[30px]">
+                  Welcome, Opinder Singh !
+                </h1>
+                <p className="text-white font-roboto text-[13px] font-normal leading-[30px]">
+                  Contrary to popular belief, Lorem Ipsum is not simply random
+                  text. It has roots in a piece of classical Latin
+                </p>
+              </div>
             </div>
-          </div>
+          </section>
 
           <div className="flex px-4 py-5 flex-col items-start gap-6 self-stretch">
             <OngoingVerificationSection cards={ongoingVerifications} />
             <VerifiedCredentialsSection cards={verifiedCredentials} />
             <ExpiredVerificationSection cards={expiredVerifications} />
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
