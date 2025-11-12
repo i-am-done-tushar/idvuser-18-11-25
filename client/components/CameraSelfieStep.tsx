@@ -1547,33 +1547,33 @@ const downloadAllBlobs = useCallback(() => {
     }, delay);
   });
 
-  // Download partial blobs with proper time ranges
-  Object.keys(partialSegmentBlobsPerSegment || {}).forEach(segmentNum => {
-    const partials = partialSegmentBlobsPerSegment[parseInt(segmentNum)];
-    partials.forEach((partial: any, partialIdx) => {
-      let filename;
-      
-      if (partial && typeof partial === 'object' && partial.startTime !== undefined && partial.endTime !== undefined) {
-        // New format with time tracking
-        const startSec = Math.floor(partial.startTime);
-        const endSec = Math.floor(partial.endTime);
-        filename = `segment_${segmentNum}_${startSec}-${endSec}_(${partialIdx + 1}).webm`;
-      } else {
-        // Fallback for old format or if partial is just a Blob
-        filename = `segment_${segmentNum}_partial_${partialIdx + 1}.webm`;
-      }
-      
-      const blob = (partial && partial.blob) ? partial.blob : partial; // Handle both old and new formats
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      
-      logServiceRef.current?.log('info', `Downloaded: ${filename}`);
-    });
-  });
+  // Do not download partial segment blobs (pause/resume chunks) - only download final complete segments
+  // Object.keys(partialSegmentBlobsPerSegment || {}).forEach(segmentNum => {
+  //   const partials = partialSegmentBlobsPerSegment[parseInt(segmentNum)];
+  //   partials.forEach((partial: any, partialIdx) => {
+  //     let filename;
+  //     
+  //     if (partial && typeof partial === 'object' && partial.startTime !== undefined && partial.endTime !== undefined) {
+  //       // New format with time tracking
+  //       const startSec = Math.floor(partial.startTime);
+  //       const endSec = Math.floor(partial.endTime);
+  //       filename = `segment_${segmentNum}_${startSec}-${endSec}_(${partialIdx + 1}).webm`;
+  //     } else {
+  //       // Fallback for old format or if partial is just a Blob
+  //       filename = `segment_${segmentNum}_partial_${partialIdx + 1}.webm`;
+  //     }
+  //     
+  //     const blob = (partial && partial.blob) ? partial.blob : partial; // Handle both old and new formats
+  //     const url = URL.createObjectURL(blob);
+  //     const a = document.createElement('a');
+  //     a.href = url;
+  //     a.download = filename;
+  //     a.click();
+  //     URL.revokeObjectURL(url);
+  //     
+  //     logServiceRef.current?.log('info', `Downloaded: ${filename}`);
+  //   });
+  // });
 
   // Do not download head verification clips separately per requirement
 
