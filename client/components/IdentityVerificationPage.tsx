@@ -747,7 +747,7 @@ export function IdentityVerificationPage({
   }, [completedSections, templateVersion, hasShownWelcomeBackToast, toast]);
 
   // POST section data helper
-  const postSectionData = async (section: any) => {
+  const postSectionData = async (section: any, updatedDocuments?: any[]) => {
     if (!templateVersion || !userId || !submissionId) return;
     
     // Special handling for Personal Information section - use PUT with eTag
@@ -871,7 +871,7 @@ export function IdentityVerificationPage({
     if (section.sectionType === "documents") {
       const documentData = {
         country: documentFormState.country,
-        documents: documentFormState.documentsDetails,
+        documents: updatedDocuments || documentFormState.documentsDetails,
       };
       fieldValue = JSON.stringify(documentData);
     } else if (section.sectionType === "biometrics") {
@@ -1786,10 +1786,21 @@ export function IdentityVerificationPage({
   };
 
   // Auto-save documents right after upload/add
-  const handleDocumentUploaded = async () => {
+  const handleDocumentUploaded = async (updatedDocuments?: any[]) => {
     const documentsSection = activeSections.find(s => s.sectionType === "documents");
     if (documentsSection) {
-      await postSectionData(documentsSection);
+      // If updatedDocuments is provided, permanently update the state
+      if (updatedDocuments) {
+        console.log('📤 handleDocumentUploaded called with updated documents:', updatedDocuments);
+        setDocumentFormState(prev => ({
+          ...prev,
+          documentsDetails: updatedDocuments
+        }));
+      } else {
+        console.log('📤 handleDocumentUploaded called without updated documents, using current state');
+      }
+
+      await postSectionData(documentsSection, updatedDocuments);
     }
   };
 

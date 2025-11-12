@@ -340,6 +340,7 @@ export default function HandoffPage() {
           skipNegotiation: true,
           transport: signalR.HttpTransportType.WebSockets,
           timeout: 60000000, // 60 seconds timeout
+          keepAliveIntervalInMilliseconds: 30000, // Send keep-alive every 30 seconds
           // Add custom headers including device fingerprint
           headers: {
             'X-Device-Fingerprint': deviceFingerprint
@@ -1707,7 +1708,7 @@ export default function HandoffPage() {
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
 
-  const postSectionData = async (section: any) => {
+  const postSectionData = async (section: any, updatedDocuments?: any[]) => {
     if (!templateVersion || !userId || !submissionId) return;
     
     // Special handling for Personal Information section - use PUT with eTag
@@ -1805,11 +1806,11 @@ export default function HandoffPage() {
     if (section.sectionType === "documents") {
       console.log('📤 Posting documents data:', {
         country: documentFormState.country,
-        documentsDetails: documentFormState.documentsDetails,
+        documentsDetails: updatedDocuments || documentFormState.documentsDetails,
       });
       const documentData = {
         country: documentFormState.country,
-        documents: documentFormState.documentsDetails,
+        documents: updatedDocuments || documentFormState.documentsDetails,
       };
       fieldValue = JSON.stringify(documentData);
       console.log('📤 Documents fieldValue:', fieldValue);
@@ -1991,13 +1992,13 @@ export default function HandoffPage() {
     }
   };
 
-  const handleDocumentUploaded = async () => {
+  const handleDocumentUploaded = async (updatedDocuments?: any[]) => {
     console.log('🔔 handleDocumentUploaded called!');
     console.log('📋 Current documentFormState:', documentFormState);
     const documentsSection = activeSections.find(s => s.sectionType === "documents");
     if (documentsSection) {
       console.log('📄 Found documents section, calling postSectionData...');
-      await postSectionData(documentsSection);
+      await postSectionData(documentsSection, updatedDocuments);
     } else {
       console.log('❌ No documents section found!');
     }

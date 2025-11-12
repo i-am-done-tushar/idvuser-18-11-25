@@ -67,7 +67,16 @@ interface IdentityDocumentFormProps {
     }>;
   }>>;
   // Callback to trigger auto-save after document upload
-  onDocumentUploaded?: () => void;
+  onDocumentUploaded?: (updatedDocuments?: Array<{
+    documentName: string;
+    documentDefinitionId: number | string;
+    frontFileId: number;
+    backFileId?: number;
+    frontETag?: string;
+    backETag?: string;
+    status: "uploaded" | "pending";
+    uploadedAt: string;
+  }>) => void;
   // Added prop to control identity document completion state
   setIsIdentityDocumentCompleted?: (completed: boolean) => void;
   // SignalR/QR connection props
@@ -305,7 +314,7 @@ export function IdentityDocumentForm({
       setTimeout(() => {
         // console.log('⏰ Triggering auto-save after document upload...');
         // console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
-        onDocumentUploaded?.();
+        onDocumentUploaded?.(documentFormState.documentsDetails);
       }, 200);
     }
   }, [documentFormState?.documentsDetails, isUsingLiftedState, onDocumentUploaded]);
@@ -843,13 +852,46 @@ export function IdentityDocumentForm({
     if (isUsingLiftedState) {
       const documentDefinitionId = getCurrentDocumentDefinitionId();
       if (documentDefinitionId && typeof fileId === "number") {
+        // Calculate the new document detail
+        const newDetail = {
+          documentName: displayName,
+          documentDefinitionId: typeof documentDefinitionId === 'string' ? documentDefinitionId : documentDefinitionId,
+          frontFileId: fileId,
+          backFileId: undefined,
+          frontETag: undefined,
+          backETag: undefined,
+          status: 'uploaded' as const,
+          uploadedAt: new Date().toISOString(),
+        };
+
+        // Get current state and calculate new documents array
+        const currentDetails = documentFormState?.documentsDetails || [];
+        const newDetails = [...currentDetails, newDetail];
+        
+        // Update state
         addDocumentDetail(displayName, documentDefinitionId, fileId);
+        
+        // Schedule POST request with updated documents
+        queueMicrotask(() => {
+          setTimeout(() => {
+            if (onDocumentUploaded) {
+              console.log('📤 POST request triggered after DigiLocker upload:', displayName);
+              console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
+              onDocumentUploaded(newDetails);
+            }
+          }, 200);
+        });
+      } else {
+        // Still call onDocumentUploaded even if no document details added
+        onDocumentUploaded?.();
       }
+    } else {
+      // Still call onDocumentUploaded even if not using lifted state
+      onDocumentUploaded?.();
     }
 
     // 5) Advance flow
     setIsIdentityDocumentCompleted?.(true);
-    onDocumentUploaded?.();
     onComplete?.();
 
     // Collapse the upload methods panel
@@ -951,26 +993,31 @@ export function IdentityDocumentForm({
       // Remove from documentsDetails array (if using lifted state) and trigger POST
       if (isUsingLiftedState) {
         setDocumentFormState!((prevState) => {
-          const newDetails = prevState.documentsDetails.filter(
-            (doc) => doc.documentName !== documentName
-          );
-          console.log('🗑️ Removed from documentsDetails:', documentName);
+          // Remove any documents that reference the deleted file IDs (front/back)
+          // This is more robust than matching display names which may vary.
+          const newDetails = prevState.documentsDetails.filter((doc) => {
+            const removedFrontMatch = fileIds.front ? doc.frontFileId === fileIds.front : false;
+            const removedBackMatch = fileIds.back ? doc.backFileId === fileIds.back : false;
+            const nameMatch = doc.documentName === documentName; // fallback
+            // keep the doc only if it does NOT match any of the removal criteria
+            return !(removedFrontMatch || removedBackMatch || nameMatch);
+          });
+
+          console.log('🗑️ Removed from documentsDetails (by fileId/name):', documentName);
           console.log('📋 Updated documentsDetails after deletion:', newDetails);
           console.log('📊 Remaining documents count:', newDetails.length);
-          
-          // Schedule POST request to run after this state update completes
-          // Use queueMicrotask + setTimeout to ensure React has updated parent state
-          queueMicrotask(() => {
-            setTimeout(() => {
-              if (onDocumentUploaded) {
-                console.log('📤 POST request triggered after deleting:', documentName);
-                console.log('📋 Remaining documents to be sent:', newDetails.map(doc => doc.documentName));
-                onDocumentUploaded();
-              }
-            }, 150); // Delay to ensure parent state is updated
-          });
-          
-          return {
+
+    // Schedule POST request to run after this state update completes
+    // Use queueMicrotask + setTimeout to ensure React has flushed the update
+    queueMicrotask(() => {
+      setTimeout(() => {
+        if (onDocumentUploaded) {
+          console.log('📤 POST request triggered after deleting:', documentName);
+          console.log('📋 Remaining documents to be sent:', newDetails.map(doc => doc.documentName));
+          onDocumentUploaded(newDetails);
+        }
+      }, 200); // Slightly longer delay to be safer
+    });          return {
             ...prevState,
             documentsDetails: newDetails,
           };
@@ -1659,6 +1706,23 @@ export function IdentityDocumentForm({
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
               ) || docId.replace(/_/g, " ");
               
+              // Calculate the new document detail
+              const newDetail = {
+                documentName,
+                documentDefinitionId: typeof documentDefinitionId === 'string' ? documentDefinitionId : documentDefinitionId,
+                frontFileId: uploadedFileIds.front,
+                backFileId: uploadedFileIds.back,
+                frontETag: undefined,
+                backETag: undefined,
+                status: 'uploaded' as const,
+                uploadedAt: new Date().toISOString(),
+              };
+
+              // Get current state and calculate new documents array
+              const currentDetails = documentFormState?.documentsDetails || [];
+              const newDetails = [...currentDetails, newDetail];
+              
+              // Update state
               addDocumentDetail(
                 documentName,
                 documentDefinitionId,
@@ -1671,8 +1735,21 @@ export function IdentityDocumentForm({
                 frontFileId: uploadedFileIds.front,
                 backFileId: uploadedFileIds.back,
               });
+
+              // Schedule POST request with updated documents
+              queueMicrotask(() => {
+                setTimeout(() => {
+                  if (onDocumentUploaded) {
+                    console.log('📤 POST request triggered after camera upload:', documentName);
+                    console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
+                    onDocumentUploaded(newDetails);
+                  }
+                }, 200);
+              });
             } else {
               console.log('❌ Skipping addDocumentDetail (Camera) - conditions not met');
+              // Still call onDocumentUploaded even if no document details added
+              onDocumentUploaded?.();
             }
 
             setSelectedDocument("");
@@ -1781,6 +1858,23 @@ export function IdentityDocumentForm({
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
               ) || docId.replace(/_/g, " ");
               
+              // Calculate the new document detail
+              const newDetail = {
+                documentName,
+                documentDefinitionId: typeof documentDefinitionId === 'string' ? documentDefinitionId : documentDefinitionId,
+                frontFileId: frontId,
+                backFileId: backId,
+                frontETag: frontETag || undefined,
+                backETag: backETag || undefined,
+                status: 'uploaded' as const,
+                uploadedAt: new Date().toISOString(),
+              };
+
+              // Get current state and calculate new documents array
+              const currentDetails = documentFormState?.documentsDetails || [];
+              const newDetails = [...currentDetails, newDetail];
+              
+              // Update state
               addDocumentDetail(
                 documentName,
                 documentDefinitionId,
@@ -1795,8 +1889,21 @@ export function IdentityDocumentForm({
               //   frontFileId: frontId,
               //   backFileId: backId,
               // });
+
+              // Schedule POST request with updated documents
+              queueMicrotask(() => {
+                setTimeout(() => {
+                  if (onDocumentUploaded) {
+                    console.log('📤 POST request triggered after file upload:', documentName);
+                    console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
+                    onDocumentUploaded(newDetails);
+                  }
+                }, 200);
+              });
             } else {
               // console.log('❌ Skipping addDocumentDetail - conditions not met');
+              // Still call onDocumentUploaded even if no document details added
+              onDocumentUploaded?.();
             }
 
             setSelectedDocument("");
