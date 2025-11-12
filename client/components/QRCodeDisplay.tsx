@@ -20,6 +20,7 @@ interface QRCodeDisplayProps {
   // Props for controlling SignalR connection lifecycle from parent
   connectionRef?: React.MutableRefObject<any>;
   shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onConnected?: () => void; // 👈 NEW
 }
 
 export function QRCodeDisplay(props: QRCodeDisplayProps) {
@@ -157,28 +158,38 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
       console.log(`🔑 ${deviceType} Device Fingerprint for SignalR:`, deviceFingerprint);
 
       // Build SignalR connection
+      // Build SignalR connection. Note:
+      // - The 'timeout' option passed into withUrl is not a valid option for
+      //   the SignalR client and causes unexpected behavior. We therefore
+      //   remove it and instead configure the client's timeout/keep-alive
+      //   properties directly after building the connection.
       const connection = new signalR.HubConnectionBuilder()
         .withUrl(`ws://10.10.5.231:5027/hubs/handoff?access_token=${accessToken}`, {
           skipNegotiation: true,
           transport: signalR.HttpTransportType.WebSockets,
-          // Add timeout and keep-alive settings
-          timeout: 60000, // 60 seconds timeout
           // Add custom headers including device fingerprint
           headers: {
             'X-Device-Fingerprint': deviceFingerprint
           }
         })
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (retryContext) => {
-            // Exponential backoff: 0, 2, 10, 30 seconds
-            if (retryContext.previousRetryCount === 0) return 0;
-            if (retryContext.previousRetryCount === 1) return 2000;
-            if (retryContext.previousRetryCount === 2) return 10000;
-            return 30000;
-          }
-        })
-        .configureLogging(signalR.LogLevel.Debug) // Changed to Debug for more info
+        .configureLogging(signalR.LogLevel.Debug)
         .build();
+
+      // Increase client-side timeouts to reduce spurious "Server timeout"
+      // disconnects. These values are client-side only and don't change
+      // any server behaviour. Keep them reasonable; extremely large values
+      // hide real connectivity problems.
+      // Default serverTimeoutInMilliseconds is 30_000 (30s). We'll increase
+      // to 5 minutes here. keepAliveIntervalInMilliseconds controls how
+      // often the client will send keepalives; set to 15s.
+      try {
+        (connection as any).serverTimeoutInMilliseconds = 5 * 60 * 1000; // 5 minutes
+        (connection as any).keepAliveIntervalInMilliseconds = 15 * 1000; // 15 seconds
+      } catch (e) {
+        // Some SignalR builds may not allow writing these properties; ignore
+        // if not present and rely on a manual heartbeat below.
+        console.warn('Could not set client timeout/keep-alive properties', e);
+      }
 
       // Handle reconnection
       connection.onreconnecting((error) => {
@@ -227,26 +238,24 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         }
       });
 
+      // Listen for personal information update events
+      connection.on('personal.updated', (data: any) => {
+        console.log('🔔 personal.updated - RAW Data:', JSON.stringify(data, null, 2));
+        
+        toast({
+          title: "📝 Personal Info Updated",
+          description: `Personal information has been updated from another device`,
+          duration: 4000,
+        });
+      });
+
       // Listen for file upload completed events
       connection.on('file.upload.completed', (data: any) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔔 SignalR Updated: file.upload.completed');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📨 RAW Data:', data);
-        console.log('✅ File Upload Completed:');
-        console.log('   📄 File Name:', data.fileName);
-        console.log('   🆔 File ID:', data.fileId);
-        console.log('   📋 Submission ID:', data.submissionId);
-        console.log('   📑 Document Definition ID:', data.documentDefinitionId);
-        console.log('   📦 Size (bytes):', data.sizeBytes);
-        console.log('   📂 Storage Path:', data.storagePath);
-        console.log('   ⏰ Uploaded At:', data.uploadedAtUtc);
-        console.log('   🏷️  Content Type:', data.contentType);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        console.log('🔔 file.upload.completed - RAW Data:', JSON.stringify(data, null, 2));
         
         toast({
           title: "📎 File Uploaded",
-          description: `Document uploaded: ${data.fileName || 'Unknown file'}`,
+          description: `Document uploaded: ${data.data?.fileName || 'Unknown file'}`,
           duration: 4000,
         });
       });
@@ -266,10 +275,13 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         });
       });
 
-      console.log('📡 Registered handlers for: file.upload.completed, ReceiveNotification');
+      console.log('📡 Registered handlers for: personal.updated, file.upload.completed, ReceiveNotification');
 
       // Start connection
       await connection.start();
+      // expose connection and notify parent
+      if (props.connectionRef) props.connectionRef.current = connection;
+      if (props.onConnected) props.onConnected(); // 👈 NEW
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('✅ SignalR CONNECTED to handoff hub');
       console.log('✅ Connection State:', connection.state);
@@ -299,13 +311,26 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         duration: 3000,
       });
 
-      connectionRef.current = connection;
-
-      // Optional: Send periodic heartbeat to keep connection alive
-      // This prevents idle timeout on some networks/proxies
-      const heartbeatInterval = setInterval(() => {
+      // Optional: Send periodic heartbeat to keep connection alive.
+      // A local console-only heartbeat is insufficient to prevent
+      // "Server timeout elapsed without receiving a message from the server".
+      // If the server exposes a lightweight ping method (e.g. 'Ping'), we
+      // attempt to invoke it periodically. If the server does not expose
+      // such a method the invoke will fail and we silently ignore the
+      // error — this is safe and keeps behaviour robust across backends.
+      const heartbeatInterval = setInterval(async () => {
         if (connection.state === signalR.HubConnectionState.Connected) {
-          console.log('💓 Heartbeat - Connection still alive');
+          try {
+            // Try a no-op/ping invoke. If server doesn't support it, we'll
+            // receive an error which we ignore — the goal is to create
+            // outbound activity so both sides consider the connection active.
+            await connection.invoke('Ping');
+            console.log('💓 Heartbeat - Ping invoked');
+          } catch (err) {
+            // Ignore errors from missing server method; still useful to
+            // have the attempt logged for diagnostics.
+            console.log('💓 Heartbeat - ping invoke failed or not supported', err?.message || err);
+          }
         } else {
           console.warn('⚠️ Heartbeat - Connection not in Connected state:', connection.state);
           clearInterval(heartbeatInterval);

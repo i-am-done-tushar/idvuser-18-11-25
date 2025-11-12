@@ -6,6 +6,10 @@ import { LockedStepComponent } from "./LockedStepComponent";
 import { FormData } from "@shared/templates";
 
 interface DesktopDynamicSectionProps {
+  // SignalR/QR connection props
+  connectionRef?: React.MutableRefObject<any>;
+  shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onHandoffConnected?: () => void;
   section: TemplateVersionSection;
   sectionIndex: number;
   currentStep: number;
@@ -54,6 +58,11 @@ interface DesktopDynamicSectionProps {
     isImageCaptured: boolean;
   };
   setBiometricFormState?: (state: any) => void;
+
+  // ✅ NEW: version to force remount of PI form
+  formVersion?: number;
+  // ✅ NEW: version to force remount of document sections
+  docsVersion?: number;
 }
 
 export function DesktopDynamicSection({
@@ -82,6 +91,11 @@ export function DesktopDynamicSection({
   onDocumentUploaded,
   biometricFormState,
   setBiometricFormState,
+  formVersion, // ✅ NEW
+  docsVersion, // ✅ NEW
+  connectionRef,
+  shouldMaintainConnection,
+  onHandoffConnected,
 }: DesktopDynamicSectionProps) {
   const renderSectionHeader = () => (
     <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
@@ -136,10 +150,7 @@ export function DesktopDynamicSection({
       case "personalInformation": {
         if (!formData || !setFormData) return null;
 
-        // read legacy mapping
         const legacyPI = section.fieldMappings?.[0]?.structure?.personalInfo ?? {};
-
-        // enrich fieldConfig: ensure camelCase requiredToggles is present
         const fieldConfig = {
           ...legacyPI,
           requiredToggles: legacyPI?.requiredToggles ?? {},
@@ -156,6 +167,7 @@ export function DesktopDynamicSection({
                   onFocus={() => onSectionFocus?.(sectionIndex)}
                 >
                   <PersonalInformationForm
+                    key={`pi-${formVersion}`} // ✅ NEW: force remount on version bump
                     formData={formData}
                     setFormData={setFormData}
                     isEmailVerified={isEmailVerified || false}
@@ -163,7 +175,7 @@ export function DesktopDynamicSection({
                     onSendEmailOTP={onSendEmailOTP || (() => {})}
                     onSendPhoneOTP={onSendPhoneOTP || (() => {})}
                     fieldConfig={fieldConfig}
-                    emailLocked={!!emailLocked} /* ✅ NEW */
+                    emailLocked={!!emailLocked}
                   />
                 </div>
               )}
@@ -200,7 +212,7 @@ export function DesktopDynamicSection({
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}
                 >
-                  {/* summary chips so the new fields are visible */}
+                  {/* summary chips */}
                   <div className="text-xs text-muted-foreground flex flex-wrap gap-2 mb-3">
                     <span className="px-2 py-1 rounded-full border bg-white">
                       Upload: {documentConfig.allowUploadFromDevice ? "Device ✓" : "Device ✗"}
@@ -222,6 +234,7 @@ export function DesktopDynamicSection({
                   </div>
 
                   <IdentityDocumentForm
+                    key={`docs-${docsVersion ?? 0}`} // ✅ NEW: force remount on docsVersion bump
                     onComplete={onIdentityDocumentComplete || (() => {})}
                     documentConfig={documentConfig}
                     submissionId={submissionId}
@@ -231,6 +244,9 @@ export function DesktopDynamicSection({
                     documentFormState={documentFormState}
                     setDocumentFormState={setDocumentFormState}
                     onDocumentUploaded={onDocumentUploaded}
+                    connectionRef={connectionRef}
+                    shouldMaintainConnection={shouldMaintainConnection}
+                    onHandoffConnected={onHandoffConnected}
                   />
                 </div>
               )}

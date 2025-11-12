@@ -43,6 +43,18 @@ interface HandoffResolveResponse {
   snapshot: HandoffSnapshot;
 }
 
+// put near top (below interfaces)
+function parsePersonalChunk(input: unknown) {
+  // already an object?
+  if (input && typeof input === "object") return input as any;
+  // string? try single, then double
+  if (typeof input === "string") {
+    try { return JSON.parse(input); } catch {}
+    try { return JSON.parse(JSON.parse(input)); } catch {}
+  }
+  return null;
+}
+
 export default function HandoffPage() {
   const { joincode } = useParams<{ joincode: string }>();
   const { toast } = useToast();
@@ -327,21 +339,13 @@ export default function HandoffPage() {
         .withUrl(`ws://10.10.5.231:5027/hubs/handoff?access_token=${accessToken}`, {
           skipNegotiation: true,
           transport: signalR.HttpTransportType.WebSockets,
-          timeout: 60000, // 60 seconds timeout
+          timeout: 60000000, // 60 seconds timeout
           // Add custom headers including device fingerprint
           headers: {
             'X-Device-Fingerprint': deviceFingerprint
           }
         })
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (retryContext) => {
-            // Exponential backoff: 0, 2, 10, 30 seconds
-            if (retryContext.previousRetryCount === 0) return 0;
-            if (retryContext.previousRetryCount === 1) return 2000;
-            if (retryContext.previousRetryCount === 2) return 10000;
-            return 30000;
-          }
-        })
+  
         .configureLogging(signalR.LogLevel.Debug)
         .build();
 
@@ -392,26 +396,24 @@ export default function HandoffPage() {
         }
       });
 
+      // Listen for personal information update events
+      connection.on('personal.updated', (data: any) => {
+        console.log('🔔 personal.updated - RAW Data:', JSON.stringify(data, null, 2));
+        
+        toast({
+          title: "📝 Personal Info Updated",
+          description: `Personal information has been updated from another device`,
+          duration: 4000,
+        });
+      });
+
       // Listen for file upload completed events
       connection.on('file.upload.completed', (data: any) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔔 SignalR Updated: file.upload.completed');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📨 RAW Data:', data);
-        console.log('✅ File Upload Completed:');
-        console.log('   📄 File Name:', data.fileName);
-        console.log('   🆔 File ID:', data.fileId);
-        console.log('   📋 Submission ID:', data.submissionId);
-        console.log('   📑 Document Definition ID:', data.documentDefinitionId);
-        console.log('   📦 Size (bytes):', data.sizeBytes);
-        console.log('   📂 Storage Path:', data.storagePath);
-        console.log('   ⏰ Uploaded At:', data.uploadedAtUtc);
-        console.log('   🏷️  Content Type:', data.contentType);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        console.log('🔔 file.upload.completed - RAW Data:', JSON.stringify(data, null, 2));
         
         toast({
           title: "📎 File Uploaded",
-          description: `Document uploaded: ${data.fileName || 'Unknown file'}`,
+          description: `Document uploaded: ${data.data?.fileName || 'Unknown file'}`,
           duration: 4000,
         });
       });
@@ -431,7 +433,7 @@ export default function HandoffPage() {
         });
       });
 
-      console.log('📡 Registered handlers for: file.upload.completed, ReceiveNotification');
+      console.log('📡 Registered handlers for: personal.updated, file.upload.completed, ReceiveNotification');
 
       // Start connection
       await connection.start();
@@ -719,8 +721,12 @@ export default function HandoffPage() {
     const requiredToggles = personalInfo?.requiredToggles || {};
     const checks: boolean[] = [];
 
-    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
-    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
+    if (personalInfo.firstName) {
+      checks.push(isValidName(formData.firstName));
+    }
+    if (personalInfo.lastName) {
+      checks.push(isValidName(formData.lastName));
+    }
 
     if (personalInfo.middleName) {
       if (requiredToggles.middleName) {
@@ -739,17 +745,27 @@ export default function HandoffPage() {
     }
 
     if (personalInfo.email) {
-      checks.push(isValidEmail(formData.email));
-      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified);
+      const emailValid = isValidEmail(formData.email);
+      const emailVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified;
+      checks.push(emailValid);
+      checks.push(emailVerifiedOrBypassed);
     }
 
     if (personalInfo.phoneNumber) {
       if (requiredToggles.phoneNumber) {
-        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+        const countryCodeValid = !!formData.countryCode;
+        const phoneValid = isValidPhoneForCountry(formData.countryCode, formData.phoneNumber);
+        const phoneVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified;
+        checks.push(countryCodeValid);
+        checks.push(phoneValid);
+        checks.push(phoneVerifiedOrBypassed);
       } else if (formData.phoneNumber) {
-        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+        const countryCodeValid = !!formData.countryCode;
+        const phoneValid = isValidPhoneForCountry(formData.countryCode, formData.phoneNumber);
+        const phoneVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified;
+        checks.push(countryCodeValid);
+        checks.push(phoneValid);
+        checks.push(phoneVerifiedOrBypassed);
       }
     }
 
@@ -765,9 +781,9 @@ export default function HandoffPage() {
       }
 
       if (requiredToggles.currentCity) {
-        checks.push(isValidName(formData.city));
+        checks.push(!!formData.city && formData.city.trim().length >= 2);
       } else if (formData.city) {
-        checks.push(isValidName(formData.city));
+        checks.push(formData.city.trim().length >= 2);
       }
 
       if (requiredToggles.currentPostal) {
@@ -785,9 +801,9 @@ export default function HandoffPage() {
       }
 
       if (requiredToggles.permanentCity) {
-        checks.push(isValidName(formData.permanentCity));
+        checks.push(!!formData.permanentCity && formData.permanentCity.trim().length >= 2);
       } else if (formData.permanentCity) {
-        checks.push(isValidName(formData.permanentCity));
+        checks.push(formData.permanentCity.trim().length >= 2);
       }
 
       if (requiredToggles.permanentPostal) {
@@ -1037,38 +1053,31 @@ export default function HandoffPage() {
             setTemplateVersion(template);
 
             // Hydrate form data from cached snapshot
+            // A) Cached path (inside cachedJoinCode branch)
             const cachedSnapshot = localStorage.getItem('handoffSnapshot');
             if (cachedSnapshot) {
-              try {
-                const snapshot = JSON.parse(cachedSnapshot);
-                if (snapshot && snapshot.personalInfoBySection) {
-                  Object.values(snapshot.personalInfoBySection).forEach((jsonString: any) => {
-                    try {
-                      const parsed = JSON.parse(JSON.parse(jsonString));
-                      setFormData(prev => ({
-                        ...prev,
-                        firstName: parsed.firstName || prev.firstName,
-                        lastName: parsed.lastName || prev.lastName,
-                        middleName: parsed.middleName || prev.middleName,
-                        dateOfBirth: parsed.dateOfBirth || prev.dateOfBirth,
-                        email: parsed.email || prev.email,
-                        countryCode: parsed.countryCode || prev.countryCode,
-                        phoneNumber: parsed.phoneNumber || prev.phoneNumber,
-                        gender: parsed.gender || prev.gender,
-                        address: parsed.address || prev.address,
-                        city: parsed.city || prev.city,
-                        postalCode: parsed.postalCode || prev.postalCode,
-                        permanentAddress: parsed.permanentAddress || prev.permanentAddress,
-                        permanentCity: parsed.permanentCity || prev.permanentCity,
-                        permanentPostalCode: parsed.permanentPostalCode || prev.permanentPostalCode,
-                      }));
-                    } catch (e) {
-                      console.error('Error parsing cached personal info:', e);
-                    }
-                  });
-                }
-              } catch (e) {
-                console.error('Error loading cached snapshot:', e);
+              const snapshot = JSON.parse(cachedSnapshot);
+              const chunks = snapshot?.personalInfoBySection ? Object.values(snapshot.personalInfoBySection) : [];
+              for (const chunk of chunks) {
+                const parsed = parsePersonalChunk(chunk);
+                if (!parsed) continue;
+                setFormData(prev => ({
+                  ...prev,
+                  firstName: parsed.firstName ?? prev.firstName,
+                  lastName: parsed.lastName ?? prev.lastName,
+                  middleName: parsed.middleName ?? prev.middleName,
+                  dateOfBirth: parsed.dateOfBirth ?? prev.dateOfBirth,
+                  email: parsed.email ?? prev.email,
+                  countryCode: parsed.countryCode ?? prev.countryCode,
+                  phoneNumber: parsed.phoneNumber ?? prev.phoneNumber,
+                  gender: parsed.gender ?? prev.gender,
+                  address: parsed.address ?? prev.address,
+                  city: parsed.city ?? prev.city,
+                  postalCode: parsed.postalCode ?? prev.postalCode,
+                  permanentAddress: parsed.permanentAddress ?? prev.permanentAddress,
+                  permanentCity: parsed.permanentCity ?? prev.permanentCity,
+                  permanentPostalCode: parsed.permanentPostalCode ?? prev.permanentPostalCode,
+                }));
               }
             }
 
@@ -1170,31 +1179,30 @@ export default function HandoffPage() {
           setTemplateVersion(template);
 
           // Step 4: Hydrate form data from snapshot
+          // B) Fresh resolve path (outside cachedJoinCode branch)
           if (handoffData.snapshot && handoffData.snapshot.personalInfoBySection) {
-            Object.values(handoffData.snapshot.personalInfoBySection).forEach((jsonString: any) => {
-              try {
-                const parsed = JSON.parse(JSON.parse(jsonString));
-                setFormData(prev => ({
-                  ...prev,
-                  firstName: parsed.firstName || prev.firstName,
-                  lastName: parsed.lastName || prev.lastName,
-                  middleName: parsed.middleName || prev.middleName,
-                  dateOfBirth: parsed.dateOfBirth || prev.dateOfBirth,
-                  email: parsed.email || prev.email,
-                  countryCode: parsed.countryCode || prev.countryCode,
-                  phoneNumber: parsed.phoneNumber || prev.phoneNumber,
-                  gender: parsed.gender || prev.gender,
-                  address: parsed.address || prev.address,
-                  city: parsed.city || prev.city,
-                  postalCode: parsed.postalCode || prev.postalCode,
-                  permanentAddress: parsed.permanentAddress || prev.permanentAddress,
-                  permanentCity: parsed.permanentCity || prev.permanentCity,
-                  permanentPostalCode: parsed.permanentPostalCode || prev.permanentPostalCode,
-                }));
-              } catch (e) {
-                console.error('Error parsing personal info:', e);
-              }
-            });
+            const chunks = Object.values(handoffData.snapshot.personalInfoBySection);
+            for (const chunk of chunks) {
+              const parsed = parsePersonalChunk(chunk);
+              if (!parsed) continue;
+              setFormData(prev => ({
+                ...prev,
+                firstName: parsed.firstName ?? prev.firstName,
+                lastName: parsed.lastName ?? prev.lastName,
+                middleName: parsed.middleName ?? prev.middleName,
+                dateOfBirth: parsed.dateOfBirth ?? prev.dateOfBirth,
+                email: parsed.email ?? prev.email,
+                countryCode: parsed.countryCode ?? prev.countryCode,
+                phoneNumber: parsed.phoneNumber ?? prev.phoneNumber,
+                gender: parsed.gender ?? prev.gender,
+                address: parsed.address ?? prev.address,
+                city: parsed.city ?? prev.city,
+                postalCode: parsed.postalCode ?? prev.postalCode,
+                permanentAddress: parsed.permanentAddress ?? prev.permanentAddress,
+                permanentCity: parsed.permanentCity ?? prev.permanentCity,
+                permanentPostalCode: parsed.permanentPostalCode ?? prev.permanentPostalCode,
+              }));
+            }
           }
 
           toast({
@@ -1276,7 +1284,13 @@ export default function HandoffPage() {
           completedSectionIds.add(submission.templateSectionId);
 
           try {
-            const parsedValue = JSON.parse(submission.fieldValue);
+            // Parse fieldValue - it might be a string or already an object
+            let parsedValue: any;
+            if (typeof submission.fieldValue === 'string') {
+              parsedValue = JSON.parse(submission.fieldValue);
+            } else {
+              parsedValue = submission.fieldValue;
+            }
 
             // Extract and store eTag for Personal Information section
             if (section.sectionType === "personalInformation" && submission.eTag) {
@@ -1349,6 +1363,157 @@ export default function HandoffPage() {
 
     fetchSubmissionValues();
   }, [submissionId, templateVersion]);
+
+  // SignalR: Listen for cross-device updates
+  useEffect(() => {
+    if (!signalRConnectionRef.current || !submissionId || !templateVersion) return;
+
+    const connection = signalRConnectionRef.current;
+    const currentDeviceId = getMobileDeviceFingerprint();
+
+    // Handler for personal.updated event
+    const handlePersonalUpdated = async (message: any) => {
+      console.log('🔔 SignalR: personal.updated received:', message);
+      
+      // Only refresh if the update came from a different device
+      if (message.deviceId && message.deviceId !== currentDeviceId) {
+        console.log('🔄 Update from different device, refreshing Personal Information...');
+        
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+            { method: "GET", headers: { Accept: "application/json" } }
+          );
+
+          if (response.ok) {
+            const submissionValues = await response.json();
+            const personalInfoSubmission = submissionValues.find((s: any) => {
+              const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+              return section?.sectionType === "personalInformation";
+            });
+
+            if (personalInfoSubmission) {
+              // Parse fieldValue - it might be a string or already an object
+              let parsedValue: any;
+              if (typeof personalInfoSubmission.fieldValue === 'string') {
+                parsedValue = JSON.parse(personalInfoSubmission.fieldValue);
+              } else {
+                parsedValue = personalInfoSubmission.fieldValue;
+              }
+              
+              setFormData((prev) => ({
+                ...prev,
+                firstName: parsedValue.firstName ?? prev.firstName,
+                lastName: parsedValue.lastName ?? prev.lastName,
+                middleName: parsedValue.middleName ?? prev.middleName,
+                dateOfBirth: parsedValue.dateOfBirth ?? prev.dateOfBirth,
+                email: parsedValue.email ?? prev.email,
+                countryCode: parsedValue.countryCode ?? prev.countryCode,
+                phoneNumber: parsedValue.phoneNumber ?? prev.phoneNumber,
+                gender: parsedValue.gender ?? prev.gender,
+                address: parsedValue.address ?? prev.address,
+                city: parsedValue.city ?? prev.city,
+                postalCode: parsedValue.postalCode ?? prev.postalCode,
+                permanentAddress: parsedValue.permanentAddress ?? prev.permanentAddress,
+                permanentCity: parsedValue.permanentCity ?? prev.permanentCity,
+                permanentPostalCode: parsedValue.permanentPostalCode ?? prev.permanentPostalCode,
+              }));
+
+              // Update eTag from the notification
+              if (message.data?.eTag) {
+                const cleanedETag = message.data.eTag.replace(/^W\/"|"$/g, '');
+                console.log('📦 Updated Personal Info eTag from SignalR:', cleanedETag);
+                setPersonalInfoETag(cleanedETag);
+                localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+              }
+
+              toast({
+                title: "📱 Update from other device",
+                description: "Personal information has been updated from another device.",
+                duration: 3000,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error refreshing personal info:', error);
+        }
+      }
+    };
+
+    // Handler for file.upload.completed event
+    const handleFileUploadCompleted = async (message: any) => {
+      console.log('🔔 SignalR: file.upload.completed received:', message);
+      
+      // Only refresh if the upload came from a different device
+      if (message.deviceId && message.deviceId !== currentDeviceId) {
+        console.log('🔄 Upload from different device, refreshing Documents...');
+        
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+            { method: "GET", headers: { Accept: "application/json" } }
+          );
+
+          if (response.ok) {
+            const submissionValues = await response.json();
+            const documentsSubmission = submissionValues.find((s: any) => {
+              const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+              return section?.sectionType === "documents";
+            });
+
+            if (documentsSubmission) {
+              const parsedValue = JSON.parse(documentsSubmission.fieldValue);
+              const documentsArray = parsedValue.documents || [];
+              const uploadedDocIds: string[] = [];
+              const rebuiltDocumentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }> = {};
+
+              documentsArray.forEach((doc: any) => {
+                const docName = doc.documentName;
+                const docId = docName.toLowerCase().replace(/\s+/g, "_");
+                uploadedDocIds.push(docId);
+                rebuiltDocumentUploadIds[docId] = {
+                  front: doc.frontFileId,
+                  ...(doc.backFileId && { back: doc.backFileId }),
+                  ...(doc.frontETag && { frontETag: doc.frontETag }),
+                  ...(doc.backETag && { backETag: doc.backETag }),
+                };
+              });
+
+              setDocumentFormState((prev) => ({
+                ...prev,
+                country: parsedValue.country || prev.country,
+                uploadedDocuments: uploadedDocIds,
+                documentUploadIds: rebuiltDocumentUploadIds,
+                documentsDetails: documentsArray,
+              }));
+
+              if (documentsArray.length > 0) {
+                setIsIdentityDocumentCompleted(true);
+              }
+
+              toast({
+                title: "📱 Update from other device",
+                description: "Documents have been uploaded from another device.",
+                duration: 3000,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error refreshing documents:', error);
+        }
+      }
+    };
+
+    // Register event listeners
+    connection.on('personal.updated', handlePersonalUpdated);
+    connection.on('file.upload.completed', handleFileUploadCompleted);
+
+    // Cleanup
+    return () => {
+      connection.off('personal.updated', handlePersonalUpdated);
+      connection.off('file.upload.completed', handleFileUploadCompleted);
+    };
+  }, [signalRConnectionRef.current, submissionId, templateVersion, toast]);
 
   // Welcome back toast and expand logic
   useEffect(() => {
@@ -1498,10 +1663,9 @@ export default function HandoffPage() {
     if (sections.length === 0) return;
 
     const isSectionComplete = (type: string) => {
-      if (type === "personalInformation") return isStep1Complete();
-      if (type === "documents") return isIdentityDocumentCompleted;
-      if (type === "biometrics") return isSelfieCompleted;
-      return false;
+      return type === "personalInformation" ? isStep1Complete() :
+             type === "documents" ? isIdentityDocumentCompleted :
+             type === "biometrics" ? isSelfieCompleted : true;
     };
 
     const firstIncompleteIdx = sections.findIndex(
@@ -1512,6 +1676,8 @@ export default function HandoffPage() {
 
     if (nextStep !== currentStep) {
       setCurrentStep(nextStep);
+      setExpandedSections(prev => ({ ...prev, [nextStep]: true }));
+      setShowMobileMenu(false);
     }
   }, [
     templateVersion,
@@ -1524,6 +1690,7 @@ export default function HandoffPage() {
     formData.email,
     formData.countryCode,
     formData.phoneNumber,
+    formData.gender,
     formData.address,
     formData.city,
     formData.postalCode,
@@ -1850,6 +2017,12 @@ export default function HandoffPage() {
       ...prev,
       [idx]: !prev[idx]
     }));
+
+    // If closing a completed section, save its data
+    if (expandedSections[idx] && completedSections[idx]) {
+      const section = activeSections[idx - 1];
+      if (section) await postSectionData(section);
+    }
   };
 
   const handleSubmit = async () => {

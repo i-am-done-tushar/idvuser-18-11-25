@@ -70,6 +70,10 @@ interface IdentityDocumentFormProps {
   onDocumentUploaded?: () => void;
   // Added prop to control identity document completion state
   setIsIdentityDocumentCompleted?: (completed: boolean) => void;
+  // SignalR/QR connection props
+  connectionRef?: React.MutableRefObject<any>;
+  shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onHandoffConnected?: () => void;
 }
 
 export function IdentityDocumentForm({
@@ -83,6 +87,9 @@ export function IdentityDocumentForm({
   setDocumentFormState,
   onDocumentUploaded,
   setIsIdentityDocumentCompleted,
+  connectionRef,
+  shouldMaintainConnection,
+  onHandoffConnected,
 }: IdentityDocumentFormProps) {
   // Use lifted state directly if available, otherwise local state
   const [localCountry, setLocalCountry] = useState("");
@@ -1451,6 +1458,9 @@ export function IdentityDocumentForm({
                           submissionId={submissionId}
                           size="large"
                           showUrl={false}
+                          connectionRef={connectionRef}
+                          shouldMaintainConnection={shouldMaintainConnection}
+                          onConnected={onHandoffConnected}
                         />
                         <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
                           Scan this QR code with your other device to continue verification.
