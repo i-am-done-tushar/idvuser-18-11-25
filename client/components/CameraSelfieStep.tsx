@@ -166,6 +166,8 @@ const faceMismatchCounterRef = useRef(0);
 const continuousRecordingBlobsRef = useRef<Blob[]>([]);
 const recordedChunksPerSegmentRef = useRef<Record<number, Blob[]>>({});
 const headRecordedChunksRef = useRef<Blob[]>([]);
+// Store the most recent head verification blob (assembled on stop)
+const latestHeadBlobRef = useRef<Blob | null>(null);
 const partialSegmentBlobsPerSegmentRef = useRef<Record<number, PartialSegmentBlob[]>>({});
 const segmentSubPartsRef = useRef<Record<number, SegmentSubPart[]>>({});
 
@@ -175,6 +177,8 @@ const verificationTriggeredForSegmentRef = useRef<Record<number, boolean>>({});
 const verificationSuccessForSegmentRef = useRef<Record<number, boolean>>({});
 const headTurnAttemptsPerSegmentRef = useRef<Record<number, number>>({});
 const headVerificationCountPerSegmentRef = useRef<Record<number, number>>({});
+// Track whether head downloads for segment 1 and 2 have been performed
+const headDownloadDoneRef = useRef<Record<number, boolean>>({});
 
 //Flags/Counters (internal state):
 const recordingFlagRef = useRef(0);
@@ -1335,31 +1339,8 @@ const performVerificationForCurrentSegment: () => Promise<void> = useCallback(as
     const selectedChunks = headRecordedChunksRef.current.slice(-chunksToKeep);
     const headBlob = new Blob(selectedChunks, { type: options?.mimeType ?? 'video/webm' });
 
-    setHeadVerificationCountPerSegment(prev => {
-      const newCount = { ...prev };
-      if (!newCount[currentSegment]) {
-        newCount[currentSegment] = 0;
-      }
-      newCount[currentSegment]++;
-      const count = newCount[currentSegment];
-
-      // ✅ Download head verification video immediately (like Angular version)
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = URL.createObjectURL(headBlob);
-      a.download = `head${count}.webm`;
-      document.body.appendChild(a);
-      a.click();
-
-      setTimeout(() => {
-        URL.revokeObjectURL(a.href);
-        document.body.removeChild(a);
-      }, 100);
-
-      showMessage('statusMessage', `Head verification video head${count}.webm downloaded.`);
-
-      return newCount;
-    });
+    // Store latest head verification blob for conditional download on SUCCESS only
+    latestHeadBlobRef.current = headBlob;
 
     // Reset head chunks and counter for next verification video if any
     headRecordedChunksRef.current = [];
@@ -1393,6 +1374,40 @@ const performVerificationForCurrentSegment: () => Promise<void> = useCallback(as
     setHeadTurnAttempts(0);
     setHeadTurnAttemptsPerSegment(prev => ({ ...prev, [segment]: 0 }));
     showMessage('headTurnAttemptStatus', `✅ Head turn verified for segment ${segment}.`);
+
+    // ✅ Download head verification video exactly once for segment 1 and 2
+    if ((segment === 1 || segment === 2) && !headDownloadDoneRef.current[segment]) {
+      try {
+        let blobToDownload: Blob | null = latestHeadBlobRef.current;
+        if (!blobToDownload) {
+          // Fallback to chunks if latest blob wasn't set yet
+          const chunksToKeep = Math.min(headRecordedChunksRef.current.length, 3);
+          const selectedChunks = headRecordedChunksRef.current.slice(-chunksToKeep);
+          blobToDownload = selectedChunks.length ? new Blob(selectedChunks, { type: 'video/webm' }) : null;
+        }
+        if (blobToDownload) {
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = URL.createObjectURL(blobToDownload);
+          a.download = `head${segment}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            URL.revokeObjectURL(a.href);
+            document.body.removeChild(a);
+          }, 100);
+          headDownloadDoneRef.current[segment] = true;
+          console.log('info', `[HeadVerification] Downloaded head${segment}.webm`);
+        } else {
+          console.warn('[HeadVerification] No head blob available to download after success');
+        }
+      } catch (e) {
+        console.warn('[HeadVerification] Failed to download head video after success:', e);
+      } finally {
+        // Clear latest blob reference for next time
+        latestHeadBlobRef.current = null;
+      }
+    }
     
     // ✅ Resume segment recording after successful verification
     // Since segment is already complete (saved to completedSegments), calling _startSegmentRecording
@@ -1483,6 +1498,68 @@ const performVerificationForCurrentSegment: () => Promise<void> = useCallback(as
 ]);
 
 
+const stopCamera = useCallback(() => {
+  console.log('info', '[Camera] Stopping camera and cleaning up...');
+  
+  // Stop animation frame loop
+  if (rafIdRef.current !== null) {
+    cancelAnimationFrame(rafIdRef.current);
+    rafIdRef.current = null;
+    console.log('info', '[Camera] Cancelled animation frame');
+  }
+
+  // Clear timer interval
+  if (timerIntervalRef.current) {
+    clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = null;
+    console.log('info', '[Camera] Cleared timer interval');
+  }
+
+  // Clear blink interval
+  if (blinkIntervalIdRef.current) {
+    clearInterval(blinkIntervalIdRef.current);
+    blinkIntervalIdRef.current = null;
+    console.log('info', '[Camera] Cleared blink interval');
+  }
+
+  // Stop all media recorders
+  if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    try {
+      mediaRecorderRef.current.stop();
+      console.log('info', '[Camera] Stopped main media recorder');
+    } catch (e) {
+      console.warn('[Camera] Error stopping main recorder:', e);
+    }
+  }
+
+  if (headMediaRecorderRef.current && headMediaRecorderRef.current.state !== 'inactive') {
+    try {
+      headMediaRecorderRef.current.stop();
+      console.log('info', '[Camera] Stopped head verification recorder');
+    } catch (e) {
+      console.warn('[Camera] Error stopping head recorder:', e);
+    }
+  }
+
+  // Stop all media stream tracks (this actually turns off the camera)
+  if (streamRef.current) {
+    streamRef.current.getTracks().forEach(track => {
+      track.stop();
+      console.log('info', `[Camera] Stopped track: ${track.kind}`);
+    });
+    streamRef.current = null;
+  }
+
+  // Clear video element source
+  if (videoRef.current) {
+    videoRef.current.srcObject = null;
+  }
+
+  // Update camera state
+  setIsCameraOn(false);
+  console.log('info', '[Camera] ✅ Camera stopped and cleaned up successfully');
+}, [setIsCameraOn]);
+
 
 const downloadAllBlobs = useCallback(() => {
   if (downloadsTriggeredRef.current) {
@@ -1495,35 +1572,32 @@ const downloadAllBlobs = useCallback(() => {
   console.log('info', '[Downloads] Starting download of all segments');
   console.log('info', '[Downloads] completedSegments count:', completedSegments.length);
 
-  // Fallback: rebuild blobs directly from recordedChunksPerSegmentRef if completedSegments is incomplete
-  let effectiveCompletedSegments = completedSegments;
-  if (effectiveCompletedSegments.length < totalSegments) {
-    console.log('warn', `[Downloads] completedSegments length (${effectiveCompletedSegments.length}) < totalSegments (${totalSegments}). Attempting rebuild from recordedChunks refs.`);
-    const rebuilt: Blob[] = [];
-    for (let seg = 1; seg <= totalSegments; seg++) {
-      const chunks = recordedChunksPerSegmentRef.current[seg];
-      if (chunks && chunks.length > 0) {
-        try {
-          const blob = new Blob(chunks, { type: 'video/webm' });
-          rebuilt.push(blob);
-          console.log('info', `[Downloads] Rebuilt blob for segment ${seg} with ${chunks.length} chunks.`);
-        } catch (e) {
-          console.log('error', `[Downloads] Failed to rebuild blob for segment ${seg}:`, e);
-        }
-      } else {
-        console.log('warn', `[Downloads] No chunks found for segment ${seg} during rebuild.`);
+  // Build exactly one blob per segment (1..totalSegments) to avoid duplicates
+  const finalSegments: Blob[] = [];
+  for (let seg = 1; seg <= totalSegments; seg++) {
+    const chunks = recordedChunksPerSegmentRef.current[seg];
+    if (chunks && chunks.length > 0) {
+      try {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        finalSegments.push(blob);
+        console.log('info', `[Downloads] Using recorded chunks for segment ${seg} (${chunks.length} chunks).`);
+        continue;
+      } catch (e) {
+        console.log('error', `[Downloads] Failed to build blob from chunks for segment ${seg}:`, e);
       }
     }
-    if (rebuilt.length > 0) {
-      effectiveCompletedSegments = rebuilt;
-      console.log('info', `[Downloads] Using rebuilt blobs (count=${rebuilt.length}) for download.`);
+    // Fallback to completedSegments array by index (seg-1)
+    const fallback = completedSegments[seg - 1];
+    if (fallback) {
+      finalSegments.push(fallback);
+      console.log('info', `[Downloads] Using fallback completedSegments entry for segment ${seg}.`);
     } else {
-      console.log('error', '[Downloads] Rebuild failed: no segment blobs available. Downloads will be skipped.');
+      console.log('warn', `[Downloads] No blob available for segment ${seg}.`);
     }
   }
 
   // Stagger downloads to avoid popup blockers; attach anchors to DOM for reliability
-  effectiveCompletedSegments.forEach((blob, idx) => {
+  finalSegments.forEach((blob, idx) => {
     const segmentNumber = idx + 1;
     const delay = idx * 300; // stagger by 300ms
     setTimeout(() => {
@@ -1547,42 +1621,25 @@ const downloadAllBlobs = useCallback(() => {
     }, delay);
   });
 
-  // Do not download partial segment blobs (pause/resume chunks) - only download final complete segments
-  // Object.keys(partialSegmentBlobsPerSegment || {}).forEach(segmentNum => {
-  //   const partials = partialSegmentBlobsPerSegment[parseInt(segmentNum)];
-  //   partials.forEach((partial: any, partialIdx) => {
-  //     let filename;
-  //     
-  //     if (partial && typeof partial === 'object' && partial.startTime !== undefined && partial.endTime !== undefined) {
-  //       // New format with time tracking
-  //       const startSec = Math.floor(partial.startTime);
-  //       const endSec = Math.floor(partial.endTime);
-  //       filename = `segment_${segmentNum}_${startSec}-${endSec}_(${partialIdx + 1}).webm`;
-  //     } else {
-  //       // Fallback for old format or if partial is just a Blob
-  //       filename = `segment_${segmentNum}_partial_${partialIdx + 1}.webm`;
-  //     }
-  //     
-  //     const blob = (partial && partial.blob) ? partial.blob : partial; // Handle both old and new formats
-  //     const url = URL.createObjectURL(blob);
-  //     const a = document.createElement('a');
-  //     a.href = url;
-  //     a.download = filename;
-  //     a.click();
-  //     URL.revokeObjectURL(url);
-  //     
-  //     logServiceRef.current?.log('info', `Downloaded: ${filename}`);
-  //   });
-  // });
+  // DO NOT download partial blobs - they are intermediate recordings from restarts
+  // Only download the final complete segments above
+  console.log('info', '[Downloads] Skipping partial segment downloads (internal use only)');
 
-  // Do not download head verification clips separately per requirement
+  // Head verification videos are already downloaded immediately after each verification
+  // (see headRecorder.onstop in performVerificationForCurrentSegment)
+  console.log('info', '[Downloads] Head verification videos already downloaded during verification');
 
-  setStatusMessage('Downloads complete ✅ (only verified segments)');
-  // Do NOT call _resetAll automatically; leave session in completed state.
-  // Mark session completed & disable auto start.
+  setStatusMessage('Downloads complete ✅ (segments + head verifications)');
+  
+  // Mark session completed & disable auto start IMMEDIATELY
   sessionCompletedRef.current = true;
   autoStartDisabledRef.current = true;
-  console.log("✅ Session fully completed. Awaiting manual restart.");
+  
+  // Stop camera and detection loop IMMEDIATELY to prevent any further recordings
+  console.log('info', '[Downloads] Stopping camera immediately to prevent duplicate downloads...');
+  stopCamera();
+  
+  console.log("✅ Session fully completed. Camera stopped.");
   console.log("➡️ Calling onStepComplete(7)");
   onStepComplete?.(7);
 }, [
@@ -1592,7 +1649,8 @@ const downloadAllBlobs = useCallback(() => {
   headTurnAttemptsPerSegment,
   setStatusMessage,
   _resetAll,
-  onStepComplete
+  onStepComplete,
+  stopCamera
 ]);
 
 
@@ -1638,9 +1696,9 @@ const onSegmentComplete = useCallback(async () => {
       // Silently complete - only show final success message
       // showMessage('recordingMessage', '✅ All 3 segments recorded successfully!');
       // downloadLogs();
-      setTimeout(() => {
-        downloadAllBlobs();
-      }, 3000);
+      
+      // Immediately download all blobs and stop camera (no delay)
+      downloadAllBlobs();
       setShowSuccessScreen(true);
     }
   }
@@ -2605,6 +2663,12 @@ const startDetectionRAF = useCallback(() => {
   const options = new faceapi.TinyFaceDetectorOptions();
 
   const loop = async () => {
+    // Stop detection loop immediately if session is completed
+    if (sessionCompletedRef.current || autoStartDisabledRef.current) {
+      console.log('info', '[Detection] Loop stopped - session completed');
+      return;
+    }
+
     // Validate camera and video readiness
     if (!validateCameraAndVideo(loop)) return;
 
@@ -2948,7 +3012,29 @@ const checkVideoResolution = useCallback(() => {
   return(
   <div className="selfie-app-root">
       <h2>Face Recording App 🎥</h2>
+
       <h3 className="note">⚠️ Please remove any accessories on your face (e.g. glasses)</h3>
+
+      {/* Error messages only, positioned above video and below 'remove any accessories' */}
+      {(cameraErrorMessage || brightnessMessage || verificationMessage) && (
+        <div className="selfie-error-messages" style={{ margin: '12px 0', textAlign: 'center' }}>
+          {cameraErrorMessage && (
+            <div className="selfie-error-message" style={{ color: '#dc2626', fontWeight: 600 }}>
+              {cameraErrorMessage}
+            </div>
+          )}
+          {brightnessMessage && (
+            <div className="selfie-error-message" style={{ color: '#dc2626', fontWeight: 600 }}>
+              {brightnessMessage}
+            </div>
+          )}
+          {verificationMessage && verificationMessage.toLowerCase().includes('error') && (
+            <div className="selfie-error-message" style={{ color: '#dc2626', fontWeight: 600 }}>
+              {verificationMessage}
+            </div>
+          )}
+        </div>
+      )}
 
       {isVerifyingHeadTurn && (
         <h3 className="head-turn-instruction">
@@ -2986,52 +3072,6 @@ const checkVideoResolution = useCallback(() => {
               {statusMessage && <div className="selfie-global-status">{statusMessage}</div>}
               <p>⏺️ Recording </p>
               <p>⏳ Time left: {timeRemaining}s</p>
-            </div>
-          )}
-
-          {/* Status Bubbles */}
-          {!isMobile && (
-            <div className="selfie-status-messages">
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${cameraErrorMessage && cameraErrorMessage !== '✅ No camera issues' ? ' selfie-error' : ''}`}>
-                  {cameraErrorMessage || '✅ No camera issues'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${brightnessMessage && brightnessMessage !== '✅ Brightness looks good' ? ' selfie-error' : ''}`}>
-                  {brightnessMessage || '✅ Brightness looks good'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${!ovalAlignMessage ? ' selfie-yellow' : ' selfie-green'}`}>
-                  {ovalAlignMessage || 'Please align your face inside the circle'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${distanceMessage && distanceMessage !== '✅ You are at the right distance' ? ' selfie-error' : ''}`}>
-                  {distanceMessage || '✅ You are at the right distance'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${recordingMessage ? ' selfie-blue' : ' selfie-green'}`}>
-                  {recordingMessage || '✅ Ready to record'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${verificationMessage && verificationMessage.toLowerCase().includes('error') ? ' selfie-error' : ''}`}>
-                  {verificationMessage || '🔄 Verification in progress... please wait! 😊'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${dashedCircleAlignMessage && dashedCircleAlignMessage !== '✅ Face inside dashed circle' ? ' selfie-error' : ''}`}>
-                  {dashedCircleAlignMessage || '✅ Face inside dashed circle'}
-                </div>
-              </div>
-              <div className="selfie-status-bubble-container">
-                <div className={`selfie-status-bubble${headTurnAttemptStatus && headTurnAttemptStatus.toLowerCase().includes('not') ? ' selfie-error' : ''}`}>
-                  {headTurnAttemptStatus || 'Waiting for action...'}
-                </div>
-              </div>
             </div>
           )}
         </div>
