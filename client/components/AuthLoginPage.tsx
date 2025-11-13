@@ -167,40 +167,6 @@ export function AuthLoginPage() {
     }
   };
 
-  const handleMfaClick = async () => {
-    setCiamMsg("");
-    setLoading(true);
-    try {
-      const userId = (emailOrPhone || "admin@idv.com").trim();
-      const url = buildCiamUrl(userId);
-
-      // Probe CIAM first — if it returns JSON with Status:false, show message.
-      const res = await fetch(url, { method: "GET", mode: "cors" });
-      const ct = res.headers.get("content-type") || "";
-
-      if (ct.includes("application/json")) {
-        const data = await res.json().catch(() => ({}));
-        if (data?.Status === false) {
-          const err = data?.error || "CIAM MFA inactive.";
-          setCiamMsg(
-            `${err}. CIAM MFA not set up for end users. Please try sending OTPs via the options below.`
-          );
-          return; // 🔒 do NOT redirect
-        }
-      }
-
-      // If not JSON (likely HTML redirect) or Status not false, proceed to CIAM
-      localStorage.setItem("pendingMfaContext", "auth-login");
-      window.location.replace(url);
-    } catch (e) {
-      setCiamMsg(
-        "Could not reach CIAM MFA. Please try sending OTPs via the options below."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="flex w-full min-h-screen bg-white">
       {/* Left Section - Decorative */}
@@ -310,15 +276,6 @@ export function AuthLoginPage() {
                   {ciamMsg}
                 </div>
               )}
-
-              {/* MFA Button */}
-              <button
-                type="button"
-                onClick={handleMfaClick}
-                className="w-full h-12 mt-3 px-4 py-3 rounded font-roboto text-base font-bold bg-black text-white hover:bg-black/90"
-              >
-                MFA
-              </button>
 
               {/* Form */}
               <div className="space-y-6">
