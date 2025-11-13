@@ -365,8 +365,8 @@ export function DesktopDynamicSection({
                             />
                             <div className="flex flex-col items-center gap-3 max-w-[214px]">
                               <p className="text-[#676879] text-center font-roboto text-[13px] font-normal leading-5">
-                                Continue on another device by scanning the QR code
-                                or opening{" "}
+                                Continue on another device by scanning the QR
+                                code or opening{" "}
                                 <a
                                   href="https://id.xyz/verify"
                                   className="text-[#0073EA]"

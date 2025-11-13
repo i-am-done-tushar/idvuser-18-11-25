@@ -31,7 +31,9 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
           </div>
           <div className="flex justify-center items-center gap-2.5 self-stretch pl-[29px]">
             <div className="flex-1 text-[#172B4D] font-roboto text-[14px] font-normal leading-[21px]">
-              Take a live selfie to confirm you are the person in the ID document. Make sure you're in a well-lit area and your face is clearly visible.
+              Take a live selfie to confirm you are the person in the ID
+              document. Make sure you're in a well-lit area and your face is
+              clearly visible.
             </div>
           </div>
         </div>
@@ -184,9 +186,13 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
                           <div className="flex w-[225px] flex-col items-start">
                             <div className="self-stretch text-center font-roboto text-[14px] font-normal leading-[21px]">
                               <span className="text-[#676879]">
-                                Continue on another device by scanning the QR code or opening
+                                Continue on another device by scanning the QR
+                                code or opening
                               </span>
-                              <span className="text-[#0073EA]"> https://id.xyz/verify</span>
+                              <span className="text-[#0073EA]">
+                                {" "}
+                                https://id.xyz/verify
+                              </span>
                             </div>
                           </div>
                         </div>
