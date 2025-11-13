@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Header } from "../components/Header";
 import { StepSidebar } from "../components/StepSidebar";
@@ -18,6 +18,8 @@ import {
   isValidAddress,
   isValidPostalCode,
 } from "@/lib/validation";
+import * as signalR from '@microsoft/signalr';
+import { getMobileDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
@@ -27,15 +29,6 @@ const BYPASS_OTP_FOR_DEVELOPMENT = true;
 // token helper
 const getToken = () =>
   (typeof window !== "undefined" && localStorage.getItem("access")) || null;
-
-// Generate a random device fingerprint (UUID v4 format)
-function generateDeviceFingerprint(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
 
 interface HandoffSnapshot {
   personalInfoBySection: Record<string, string>;
@@ -48,6 +41,18 @@ interface HandoffResolveResponse {
   accessToken: string;
   expiresAtUtc: string;
   snapshot: HandoffSnapshot;
+}
+
+// put near top (below interfaces)
+function parsePersonalChunk(input: unknown) {
+  // already an object?
+  if (input && typeof input === "object") return input as any;
+  // string? try single, then double
+  if (typeof input === "string") {
+    try { return JSON.parse(input); } catch {}
+    try { return JSON.parse(JSON.parse(input)); } catch {}
+  }
+  return null;
 }
 
 export default function HandoffPage() {
@@ -95,6 +100,9 @@ export default function HandoffPage() {
   const [submissionId, setSubmissionId] = useState<number | null>(null);
   const [userId, setUserId] = useState<number | null>(null);
 
+  // eTag for Personal Information section (for optimistic concurrency control with PUT)
+  const [personalInfoETag, setPersonalInfoETag] = useState<string>("AAAAAAAAAAAAAAAAAAAAAA==");
+
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -120,7 +128,7 @@ export default function HandoffPage() {
     documentUploadIds: {} as Record<string, { front?: number; back?: number }>,
     documentsDetails: [] as Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
       status: "uploaded" | "pending";
@@ -132,6 +140,11 @@ export default function HandoffPage() {
     capturedImage: null as string | null,
     isImageCaptured: false,
   });
+
+  // SignalR connection ref
+  const signalRConnectionRef = useRef<signalR.HubConnection | null>(null);
+
+  const [signalRConnected, setSignalRConnected] = useState(false);
 
   const getPersonalInfoConfig = () => {
     if (!templateVersion) return {};
@@ -217,23 +230,8 @@ export default function HandoffPage() {
   async function sendSessionHeartbeat() {
     const token = getToken();
 
-    let fingerprint: string | null = null;
-    try {
-      fingerprint = localStorage.getItem("device_fingerprint");
-    } catch (e) {
-      fingerprint = null;
-    }
-
-    if (!fingerprint) {
-      try {
-        fingerprint = typeof crypto?.randomUUID === "function" 
-          ? crypto.randomUUID() 
-          : generateDeviceFingerprint();
-        localStorage.setItem("device_fingerprint", fingerprint);
-      } catch (e) {
-        fingerprint = generateDeviceFingerprint();
-      }
-    }
+    // Get mobile device fingerprint (Device 2 - Handoff)
+    const fingerprint = getMobileDeviceFingerprint();
 
     const res = await fetch(`${API_BASE}/api/session/heartbeat`, {
       method: "POST",
@@ -325,6 +323,127 @@ export default function HandoffPage() {
 
   const getActiveVersionId = () =>
     templateVersion?.versionId ?? null;
+
+  // ---- SignalR WebSocket connection ----
+  const connectToSignalR = async (accessToken: string, submissionId: number) => {
+    try {
+      // Close existing connection if any
+      if (signalRConnectionRef.current) {
+        await signalRConnectionRef.current.stop();
+      }
+
+      const deviceFingerprint = getMobileDeviceFingerprint();
+      console.log('🔑 Mobile Device Fingerprint (Device 2) for SignalR:', deviceFingerprint);
+
+      // Use normal HTTP URL + accessTokenFactory, NOT manual ws:// + skipNegotiation
+      const base = API_BASE.replace(/\/$/, "");
+      const hubUrl = `${base}/hubs/handoff`;
+
+      const connection = new signalR.HubConnectionBuilder()
+        .withUrl(hubUrl, {
+          accessTokenFactory: () => accessToken,
+          transport: signalR.HttpTransportType.WebSockets, // optional
+          headers: {
+            "X-Device-Fingerprint": deviceFingerprint,
+          },
+        })
+        .withAutomaticReconnect([0, 2000, 10000, 30000])
+        .configureLogging(signalR.LogLevel.Debug)
+        .build();
+
+      connection.onreconnecting((error) => {
+        console.log("🔄 SignalR reconnecting...", error);
+        toast({
+          title: "Reconnecting...",
+          description: "Connection lost, attempting to reconnect.",
+          duration: 3000,
+        });
+      });
+
+      connection.onreconnected(async (connectionId) => {
+        console.log("✅ SignalR reconnected with connectionId:", connectionId);
+        toast({
+          title: "✅ Reconnected",
+          description: "Connection restored successfully.",
+          duration: 3000,
+        });
+
+        // 🔁 IMPORTANT: re-join submission group after reconnect
+        try {
+          console.log("📞 Re-joining submission after reconnect:", submissionId);
+          await connection.invoke("JoinSubmission", submissionId);
+          console.log("✅ Rejoined submission:", submissionId);
+        } catch (e: any) {
+          console.warn("❌ Failed to rejoin submission after reconnect:", e?.message || e);
+        }
+      });
+
+      connection.onclose((error) => {
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.error("❌ SignalR CONNECTION CLOSED");
+        console.error("❌ Close reason:", error?.message || "No error provided");
+        console.error("❌ Error details:", error);
+        console.error("❌ Connection was in state:", connection.state);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        
+        if (error) {
+          toast({
+            title: "❌ Connection Lost",
+            description: `Connection closed: ${error.message}`,
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else {
+          console.log("ℹ️ Connection closed gracefully (no error)");
+        }
+
+        // optional: you can clear the flag here if you want
+        setSignalRConnected(false);
+      });
+
+      // ❌ REMOVE the old handlers here for:
+      // connection.on('personal.updated', ...)
+      // connection.on('file.upload.completed', ...)
+      // connection.on('ReceiveNotification', ...)
+      // Those will be attached in the useEffect below, with proper data refresh.
+
+      console.log("📡 Starting SignalR connection...");
+      await connection.start();
+      console.log("✅ SignalR CONNECTED to handoff hub");
+      console.log("✅ Connection State:", connection.state);
+      console.log("✅ Connection ID:", connection.connectionId);
+      console.log("✅ Submission ID:", submissionId);
+      console.log("✅ Device Fingerprint:", deviceFingerprint);
+      console.log("✅ Access Token (first 50 chars):", accessToken.substring(0, 50) + "...");
+
+      // Join group for this submission on initial connect
+      try {
+        console.log("📞 Attempting to invoke JoinSubmission on hub with submissionId:", submissionId);
+        await connection.invoke("JoinSubmission", submissionId);
+        console.log("✅ Successfully joined submission:", submissionId);
+      } catch (invokeError: any) {
+        console.warn("⚠️ JoinSubmission method not available or failed:", invokeError.message);
+      }
+
+      toast({
+        title: "🔗 Connected",
+        description: `Real-time updates enabled for submission:${submissionId}`,
+        duration: 3000,
+      });
+
+      signalRConnectionRef.current = connection;
+      setSignalRConnected(true); // 👈 tell React the connection is ready
+
+    } catch (err) {
+      console.error("❌ SignalR connection failed:", err);
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to real-time updates.",
+        variant: "destructive",
+        duration: 4000,
+      });
+    }
+  };
 
   // ---- OTP handlers ----
   const handleSendEmailOTP = async () => {
@@ -559,8 +678,12 @@ export default function HandoffPage() {
     const requiredToggles = personalInfo?.requiredToggles || {};
     const checks: boolean[] = [];
 
-    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
-    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
+    if (personalInfo.firstName) {
+      checks.push(isValidName(formData.firstName));
+    }
+    if (personalInfo.lastName) {
+      checks.push(isValidName(formData.lastName));
+    }
 
     if (personalInfo.middleName) {
       if (requiredToggles.middleName) {
@@ -579,17 +702,27 @@ export default function HandoffPage() {
     }
 
     if (personalInfo.email) {
-      checks.push(isValidEmail(formData.email));
-      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified);
+      const emailValid = isValidEmail(formData.email);
+      const emailVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified;
+      checks.push(emailValid);
+      checks.push(emailVerifiedOrBypassed);
     }
 
     if (personalInfo.phoneNumber) {
       if (requiredToggles.phoneNumber) {
-        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+        const countryCodeValid = !!formData.countryCode;
+        const phoneValid = isValidPhoneForCountry(formData.countryCode, formData.phoneNumber);
+        const phoneVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified;
+        checks.push(countryCodeValid);
+        checks.push(phoneValid);
+        checks.push(phoneVerifiedOrBypassed);
       } else if (formData.phoneNumber) {
-        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+        const countryCodeValid = !!formData.countryCode;
+        const phoneValid = isValidPhoneForCountry(formData.countryCode, formData.phoneNumber);
+        const phoneVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified;
+        checks.push(countryCodeValid);
+        checks.push(phoneValid);
+        checks.push(phoneVerifiedOrBypassed);
       }
     }
 
@@ -605,9 +738,9 @@ export default function HandoffPage() {
       }
 
       if (requiredToggles.currentCity) {
-        checks.push(isValidName(formData.city));
+        checks.push(!!formData.city && formData.city.trim().length >= 2);
       } else if (formData.city) {
-        checks.push(isValidName(formData.city));
+        checks.push(formData.city.trim().length >= 2);
       }
 
       if (requiredToggles.currentPostal) {
@@ -625,9 +758,9 @@ export default function HandoffPage() {
       }
 
       if (requiredToggles.permanentCity) {
-        checks.push(isValidName(formData.permanentCity));
+        checks.push(!!formData.permanentCity && formData.permanentCity.trim().length >= 2);
       } else if (formData.permanentCity) {
-        checks.push(isValidName(formData.permanentCity));
+        checks.push(formData.permanentCity.trim().length >= 2);
       }
 
       if (requiredToggles.permanentPostal) {
@@ -641,7 +774,10 @@ export default function HandoffPage() {
   };
 
   const isFormValid = () => {
-    if (!templateVersion) return false;
+    if (!templateVersion) {
+      console.log('❌ isFormValid: No template version');
+      return false;
+    }
     const personalInfo: any = getPersonalInfoConfig();
     const requiredToggles = personalInfo?.requiredToggles || {};
     const checks: boolean[] = [];
@@ -694,11 +830,26 @@ export default function HandoffPage() {
     const docsRequired = !!docsSection?.isActive;
     const bioRequired = !!biometricsSection?.isActive;
 
-    return (
+    console.log('🔍 Form Validation Check:', {
+      personalOk,
+      docsRequired,
+      isIdentityDocumentCompleted,
+      bioRequired,
+      isSelfieCompleted,
+      checks,
+      checksLength: checks.length,
+      allChecksPass: checks.every(Boolean),
+    });
+
+    const isValid = (
       personalOk &&
       (!docsRequired || isIdentityDocumentCompleted) &&
       (!bioRequired || isSelfieCompleted)
     );
+
+    console.log('🔍 Final isFormValid result:', isValid);
+
+    return isValid;
   };
 
   const getMissingFields = () => {
@@ -807,16 +958,111 @@ export default function HandoffPage() {
       try {
         setLoading(true);
         
-        const deviceFingerprint = generateDeviceFingerprint();
-        console.log('🔑 Device Fingerprint:', deviceFingerprint);
+        // Check if we already resolved this joinCode
+        const cachedJoinCode = localStorage.getItem('resolvedJoinCode');
+        const cachedSubmissionId = localStorage.getItem('submissionId');
+        const cachedAccessToken = localStorage.getItem('access');
+        
+        if (cachedJoinCode === joincode && cachedSubmissionId && cachedAccessToken) {
+          console.log('⚡ Using cached handoff data for joinCode:', joincode);
+          
+          // Use cached data instead of calling API again
+          setSubmissionId(Number(cachedSubmissionId));
+          
+          // Continue with fetching submission details
+          const submissionResponse = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissions/${cachedSubmissionId}`,
+            {
+              method: 'GET',
+              headers: { 'accept': 'application/json' }
+            }
+          );
+
+          if (!submissionResponse.ok) {
+            throw new Error('Failed to fetch submission details');
+          }
+
+          const submissionData = await submissionResponse.json();
+          const templateVersionId = submissionData.templateVersionId;
+          const fetchedUserId = submissionData.userId;
+          
+          setUserId(fetchedUserId);
+          localStorage.setItem('userId', fetchedUserId.toString());
+          localStorage.setItem('templateVersionId', templateVersionId.toString());
+
+          // Fetch template version
+          const templateResponse = await fetch(
+            `${API_BASE}/api/TemplateVersion?templateId=${templateVersionId}&page=1&pageSize=50`,
+            {
+              method: 'GET',
+              headers: { 'accept': 'application/json' }
+            }
+          );
+
+          if (!templateResponse.ok) {
+            throw new Error('Failed to fetch template version');
+          }
+
+          const templateArray = await templateResponse.json();
+          
+          if (templateArray && templateArray.length > 0) {
+            const template = templateArray[0];
+            setTemplateVersion(template);
+
+            // Hydrate form data from cached snapshot
+            // A) Cached path (inside cachedJoinCode branch)
+            const cachedSnapshot = localStorage.getItem('handoffSnapshot');
+            if (cachedSnapshot) {
+              const snapshot = JSON.parse(cachedSnapshot);
+              const chunks = snapshot?.personalInfoBySection ? Object.values(snapshot.personalInfoBySection) : [];
+              for (const chunk of chunks) {
+                const parsed = parsePersonalChunk(chunk);
+                if (!parsed) continue;
+                setFormData(prev => ({
+                  ...prev,
+                  firstName: parsed.firstName ?? prev.firstName,
+                  lastName: parsed.lastName ?? prev.lastName,
+                  middleName: parsed.middleName ?? prev.middleName,
+                  dateOfBirth: parsed.dateOfBirth ?? prev.dateOfBirth,
+                  email: parsed.email ?? prev.email,
+                  countryCode: parsed.countryCode ?? prev.countryCode,
+                  phoneNumber: parsed.phoneNumber ?? prev.phoneNumber,
+                  gender: parsed.gender ?? prev.gender,
+                  address: parsed.address ?? prev.address,
+                  city: parsed.city ?? prev.city,
+                  postalCode: parsed.postalCode ?? prev.postalCode,
+                  permanentAddress: parsed.permanentAddress ?? prev.permanentAddress,
+                  permanentCity: parsed.permanentCity ?? prev.permanentCity,
+                  permanentPostalCode: parsed.permanentPostalCode ?? prev.permanentPostalCode,
+                }));
+              }
+            }
+
+            toast({
+              title: "✅ Session Restored",
+              description: "Your verification session has been successfully restored from cache.",
+              duration: 5000,
+            });
+
+            // Connect to SignalR for real-time file upload notifications
+            await connectToSignalR(cachedAccessToken, Number(cachedSubmissionId));
+          }
+
+          setLoading(false);
+          return;
+        }
+
+        // Get mobile device fingerprint for this handoff device (Device 2)
+        const handoffDeviceFingerprint = getMobileDeviceFingerprint();
+        console.log('🔑 Mobile Device Fingerprint (Device 2 - Handoff):', handoffDeviceFingerprint);
         console.log('🔗 Join Code:', joincode);
 
-        // Call handoff/resolve API
+        // Call handoff/resolve API (first time only)
         const handoffResponse = await fetch(`${API_BASE}/api/handoff/resolve`, {
           method: 'POST',
           headers: {
             'accept': 'text/plain',
-            'X-Device-Fingerprint': deviceFingerprint,
+            'X-Device-Fingerprint': handoffDeviceFingerprint,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -831,12 +1077,18 @@ export default function HandoffPage() {
 
         const handoffData: HandoffResolveResponse = await handoffResponse.json();
         console.log('✅ Handoff Resolved:', handoffData);
+        console.log('📱 This is Device 2 (Handoff Device) with fingerprint:', handoffDeviceFingerprint);
 
-        // Save to localStorage
+        // Save to localStorage (including joinCode for future reference)
+        localStorage.setItem('resolvedJoinCode', joincode);
         localStorage.setItem('access', handoffData.accessToken);
         localStorage.setItem('accessToken', handoffData.accessToken);
         localStorage.setItem('submissionId', handoffData.submissionId.toString());
-        localStorage.setItem('deviceFingerprint', deviceFingerprint);
+        
+        // Store snapshot data for future cached loads
+        if (handoffData.snapshot) {
+          localStorage.setItem('handoffSnapshot', JSON.stringify(handoffData.snapshot));
+        }
         
         setSubmissionId(handoffData.submissionId);
 
@@ -884,31 +1136,30 @@ export default function HandoffPage() {
           setTemplateVersion(template);
 
           // Step 4: Hydrate form data from snapshot
+          // B) Fresh resolve path (outside cachedJoinCode branch)
           if (handoffData.snapshot && handoffData.snapshot.personalInfoBySection) {
-            Object.values(handoffData.snapshot.personalInfoBySection).forEach((jsonString: any) => {
-              try {
-                const parsed = JSON.parse(JSON.parse(jsonString));
-                setFormData(prev => ({
-                  ...prev,
-                  firstName: parsed.firstName || prev.firstName,
-                  lastName: parsed.lastName || prev.lastName,
-                  middleName: parsed.middleName || prev.middleName,
-                  dateOfBirth: parsed.dateOfBirth || prev.dateOfBirth,
-                  email: parsed.email || prev.email,
-                  countryCode: parsed.countryCode || prev.countryCode,
-                  phoneNumber: parsed.phoneNumber || prev.phoneNumber,
-                  gender: parsed.gender || prev.gender,
-                  address: parsed.address || prev.address,
-                  city: parsed.city || prev.city,
-                  postalCode: parsed.postalCode || prev.postalCode,
-                  permanentAddress: parsed.permanentAddress || prev.permanentAddress,
-                  permanentCity: parsed.permanentCity || prev.permanentCity,
-                  permanentPostalCode: parsed.permanentPostalCode || prev.permanentPostalCode,
-                }));
-              } catch (e) {
-                console.error('Error parsing personal info:', e);
-              }
-            });
+            const chunks = Object.values(handoffData.snapshot.personalInfoBySection);
+            for (const chunk of chunks) {
+              const parsed = parsePersonalChunk(chunk);
+              if (!parsed) continue;
+              setFormData(prev => ({
+                ...prev,
+                firstName: parsed.firstName ?? prev.firstName,
+                lastName: parsed.lastName ?? prev.lastName,
+                middleName: parsed.middleName ?? prev.middleName,
+                dateOfBirth: parsed.dateOfBirth ?? prev.dateOfBirth,
+                email: parsed.email ?? prev.email,
+                countryCode: parsed.countryCode ?? prev.countryCode,
+                phoneNumber: parsed.phoneNumber ?? prev.phoneNumber,
+                gender: parsed.gender ?? prev.gender,
+                address: parsed.address ?? prev.address,
+                city: parsed.city ?? prev.city,
+                postalCode: parsed.postalCode ?? prev.postalCode,
+                permanentAddress: parsed.permanentAddress ?? prev.permanentAddress,
+                permanentCity: parsed.permanentCity ?? prev.permanentCity,
+                permanentPostalCode: parsed.permanentPostalCode ?? prev.permanentPostalCode,
+              }));
+            }
           }
 
           toast({
@@ -916,6 +1167,9 @@ export default function HandoffPage() {
             description: "Your verification session has been successfully restored. Continue where you left off!",
             duration: 5000,
           });
+
+          // Connect to SignalR for real-time file upload notifications
+          await connectToSignalR(handoffData.accessToken, handoffData.submissionId);
         } else {
           throw new Error('No template version found');
         }
@@ -935,6 +1189,29 @@ export default function HandoffPage() {
 
     resolveHandoff();
   }, [joincode, toast]);
+
+  // Cleanup SignalR connection on unmount
+  useEffect(() => {
+    return () => {
+      if (signalRConnectionRef.current) {
+        console.log('🧹 Cleaning up SignalR connection on page unmount');
+        signalRConnectionRef.current.stop().catch(err => {
+          console.error('Error stopping SignalR connection:', err);
+        });
+      }
+    };
+  }, []);
+
+  // Load Personal Information eTag from localStorage when submissionId is available
+  useEffect(() => {
+    if (submissionId) {
+      const savedETag = localStorage.getItem(`personalInfoETag_${submissionId}`);
+      if (savedETag) {
+        console.log('📦 Loaded Personal Info eTag from localStorage:', savedETag);
+        setPersonalInfoETag(savedETag);
+      }
+    }
+  }, [submissionId]);
 
   // Fetch submission values (documents, etc.)
   useEffect(() => {
@@ -964,7 +1241,22 @@ export default function HandoffPage() {
           completedSectionIds.add(submission.templateSectionId);
 
           try {
-            const parsedValue = JSON.parse(submission.fieldValue);
+            // Parse fieldValue - it might be a string or already an object
+            let parsedValue: any;
+            if (typeof submission.fieldValue === 'string') {
+              parsedValue = JSON.parse(submission.fieldValue);
+            } else {
+              parsedValue = submission.fieldValue;
+            }
+
+            // Extract and store eTag for Personal Information section
+            if (section.sectionType === "personalInformation" && submission.eTag) {
+              const cleanedETag = submission.eTag.replace(/^W\/"|"$/g, '');
+              console.log('📦 Extracted Personal Info eTag from GET:', submission.eTag);
+              console.log('📦 Cleaned eTag:', cleanedETag);
+              setPersonalInfoETag(cleanedETag);
+              localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+            }
 
             if (section.sectionType === "documents" && parsedValue) {
               const documentsArray = parsedValue.documents || [];
@@ -1028,6 +1320,156 @@ export default function HandoffPage() {
 
     fetchSubmissionValues();
   }, [submissionId, templateVersion]);
+
+  // SignalR: Listen for cross-device updates
+  useEffect(() => {
+    const connection = signalRConnectionRef.current;
+    if (!connection || !submissionId || !templateVersion || !signalRConnected) return;
+
+    const currentDeviceId = getMobileDeviceFingerprint();
+
+    const handlePersonalUpdated = async (message: any) => {
+      console.log("🔔 SignalR: personal.updated received:", message);
+
+      if (message.deviceId && message.deviceId !== currentDeviceId) {
+        console.log("🔄 Update from different device, refreshing Personal Information...");
+
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+            { method: "GET", headers: { Accept: "application/json" } }
+          );
+
+          if (response.ok) {
+            const submissionValues = await response.json();
+            const personalInfoSubmission = submissionValues.find((s: any) => {
+              const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+              return section?.sectionType === "personalInformation";
+            });
+
+            if (personalInfoSubmission) {
+              let parsedValue: any;
+              if (typeof personalInfoSubmission.fieldValue === "string") {
+                parsedValue = JSON.parse(personalInfoSubmission.fieldValue);
+              } else {
+                parsedValue = personalInfoSubmission.fieldValue;
+              }
+
+              setFormData((prev) => ({
+                ...prev,
+                firstName: parsedValue.firstName ?? prev.firstName,
+                lastName: parsedValue.lastName ?? prev.lastName,
+                middleName: parsedValue.middleName ?? prev.middleName,
+                dateOfBirth: parsedValue.dateOfBirth ?? prev.dateOfBirth,
+                email: parsedValue.email ?? prev.email,
+                countryCode: parsedValue.countryCode ?? prev.countryCode,
+                phoneNumber: parsedValue.phoneNumber ?? prev.phoneNumber,
+                gender: parsedValue.gender ?? prev.gender,
+                address: parsedValue.address ?? prev.address,
+                city: parsedValue.city ?? prev.city,
+                postalCode: parsedValue.postalCode ?? prev.postalCode,
+                permanentAddress: parsedValue.permanentAddress ?? prev.permanentAddress,
+                permanentCity: parsedValue.permanentCity ?? prev.permanentCity,
+                permanentPostalCode: parsedValue.permanentPostalCode ?? prev.permanentPostalCode,
+              }));
+
+              if (message.data?.eTag) {
+                const cleanedETag = message.data.eTag.replace(/^W\/"|"$/g, "");
+                console.log("📦 Updated Personal Info eTag from SignalR:", cleanedETag);
+                setPersonalInfoETag(cleanedETag);
+                localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+              }
+
+              toast({
+                title: "📱 Update from other device",
+                description: "Personal information has been updated from another device.",
+                duration: 3000,
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error refreshing personal info:", error);
+        }
+      }
+    };
+
+    const handleFileUploadCompleted = async (message: any) => {
+      console.log("🔔 SignalR: file.upload.completed received:", message);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+          { method: "GET", headers: { Accept: "application/json" } }
+        );
+
+        if (response.ok) {
+          const submissionValues = await response.json();
+          const documentsSubmission = submissionValues.find((s: any) => {
+            const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+            return section?.sectionType === "documents";
+          });
+
+          if (documentsSubmission) {
+            const parsedValue = JSON.parse(documentsSubmission.fieldValue);
+            const documentsArray = parsedValue.documents || [];
+            const uploadedDocIds: string[] = [];
+            const rebuiltDocumentUploadIds: Record<
+              string,
+              { front?: number; back?: number; frontETag?: string; backETag?: string }
+            > = {};
+
+            documentsArray.forEach((doc: any) => {
+              const docName = doc.documentName;
+              const docId = docName.toLowerCase().replace(/\s+/g, "_");
+              uploadedDocIds.push(docId);
+              rebuiltDocumentUploadIds[docId] = {
+                front: doc.frontFileId,
+                ...(doc.backFileId && { back: doc.backFileId }),
+                ...(doc.frontETag && { frontETag: doc.frontETag }),
+                ...(doc.backETag && { backETag: doc.backETag }),
+              };
+            });
+
+            setDocumentFormState((prev) => ({
+              ...prev,
+              country: parsedValue.country || prev.country,
+              uploadedDocuments: uploadedDocIds,
+              documentUploadIds: rebuiltDocumentUploadIds,
+              documentsDetails: documentsArray,
+            }));
+
+            if (documentsArray.length > 0) {
+              setIsIdentityDocumentCompleted(true);
+            }
+
+            if (message.status === "Deleted") {
+              toast({
+                title: "🗑️ File Deleted",
+                description: "A document has been deleted.",
+                duration: 3000,
+              });
+            } else if (message.deviceId && message.deviceId !== currentDeviceId) {
+              toast({
+                title: "📱 Update from other device",
+                description: "Documents have been uploaded from another device.",
+                duration: 3000,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error refreshing documents:", error);
+      }
+    };
+
+    connection.on("personal.updated", handlePersonalUpdated);
+    connection.on("file.upload.completed", handleFileUploadCompleted);
+
+    return () => {
+      connection.off("personal.updated", handlePersonalUpdated);
+      connection.off("file.upload.completed", handleFileUploadCompleted);
+    };
+  }, [signalRConnected, submissionId, templateVersion, toast]);
 
   // Welcome back toast and expand logic
   useEffect(() => {
@@ -1177,10 +1619,9 @@ export default function HandoffPage() {
     if (sections.length === 0) return;
 
     const isSectionComplete = (type: string) => {
-      if (type === "personalInformation") return isStep1Complete();
-      if (type === "documents") return isIdentityDocumentCompleted;
-      if (type === "biometrics") return isSelfieCompleted;
-      return false;
+      return type === "personalInformation" ? isStep1Complete() :
+             type === "documents" ? isIdentityDocumentCompleted :
+             type === "biometrics" ? isSelfieCompleted : true;
     };
 
     const firstIncompleteIdx = sections.findIndex(
@@ -1191,6 +1632,8 @@ export default function HandoffPage() {
 
     if (nextStep !== currentStep) {
       setCurrentStep(nextStep);
+      setExpandedSections(prev => ({ ...prev, [nextStep]: true }));
+      setShowMobileMenu(false);
     }
   }, [
     templateVersion,
@@ -1203,6 +1646,7 @@ export default function HandoffPage() {
     formData.email,
     formData.countryCode,
     formData.phoneNumber,
+    formData.gender,
     formData.address,
     formData.city,
     formData.postalCode,
@@ -1219,10 +1663,30 @@ export default function HandoffPage() {
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
 
-  const postSectionData = async (section: any) => {
+  // Handle visibility change to resume SignalR connection when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && signalRConnectionRef.current) {
+        const connection = signalRConnectionRef.current;
+        if (connection.state === signalR.HubConnectionState.Disconnected) {
+          console.log('🔄 Tab became visible, attempting to resume SignalR connection...');
+          connection.start().catch(err => {
+            console.error('❌ Failed to resume SignalR connection on visibility change:', err);
+          });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  const postSectionData = async (section: any, updatedDocuments?: any[]) => {
     if (!templateVersion || !userId || !submissionId) return;
-    let fieldValue = "";
     
+    // Special handling for Personal Information section - use PUT with eTag
     if (section.sectionType === "personalInformation") {
       const personalInfo = getPersonalInfoConfig();
       const mappedData: any = {};
@@ -1246,13 +1710,85 @@ export default function HandoffPage() {
         mappedData.permanentCity = formData.permanentCity;
         mappedData.permanentPostalCode = formData.permanentPostalCode;
       }
-      fieldValue = JSON.stringify(mappedData);
-    } else if (section.sectionType === "documents") {
+      
+      const fieldValueJson = JSON.stringify(mappedData);
+      const deviceFingerprint = getMobileDeviceFingerprint();
+      const token = getToken();
+      
+      try {
+        console.log('🔄 PUT Personal Information with eTag:', personalInfoETag);
+        const response = await fetch(
+          `${API_BASE}/api/personal-info/${submissionId}/${section.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "text/plain",
+              "If-Match": personalInfoETag,
+              "X-Device-Fingerprint": deviceFingerprint,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ fieldValueJson }),
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`PUT failed: ${response.statusText}`);
+        }
+        
+        // Extract new eTag from response headers or body
+        let newETag: string | null = null;
+        
+        // First try to get eTag from response headers
+        const eTagHeader = response.headers.get('etag') || response.headers.get('ETag');
+        if (eTagHeader) {
+          newETag = eTagHeader;
+          console.log('📥 Received eTag from headers:', eTagHeader);
+        } else {
+          // Fallback: try to parse from response body
+          try {
+            const responseText = await response.text();
+            const responseData = JSON.parse(responseText);
+            newETag = responseData?.eTag || null;
+            console.log('📥 Received eTag from body:', newETag);
+          } catch (e) {
+            console.warn('Could not parse PUT response:', e);
+          }
+        }
+        
+        // Update eTag if we got a new one
+        if (newETag) {
+          // Clean eTag format: remove W/"" wrapper if present
+          // Example: W/"+NPEw6bCX0e4AGuC/u8s8g==" becomes +NPEw6bCX0e4AGuC/u8s8g==
+          const cleanedETag = newETag.replace(/^W\/"|"$/g, '');
+          console.log('✅ Cleaned eTag for storage/next request:', cleanedETag);
+          setPersonalInfoETag(cleanedETag);
+          // Save cleaned eTag to localStorage for persistence
+          if (submissionId) {
+            localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+          }
+        }
+        
+        console.log('✅ Personal Information saved successfully');
+      } catch (err) {
+        console.error("Failed to PUT personal information section", err);
+      }
+      return;
+    }
+    
+    // For other sections (documents, biometrics) - use POST as before
+    let fieldValue = "";
+    if (section.sectionType === "documents") {
+      console.log('📤 Posting documents data:', {
+        country: documentFormState.country,
+        documentsDetails: updatedDocuments || documentFormState.documentsDetails,
+      });
       const documentData = {
         country: documentFormState.country,
-        documents: documentFormState.documentsDetails,
+        documents: updatedDocuments || documentFormState.documentsDetails,
       };
       fieldValue = JSON.stringify(documentData);
+      console.log('📤 Documents fieldValue:', fieldValue);
     } else if (section.sectionType === "biometrics") {
       fieldValue = JSON.stringify({
         selfieUploaded: isSelfieCompleted,
@@ -1431,10 +1967,15 @@ export default function HandoffPage() {
     }
   };
 
-  const handleDocumentUploaded = async () => {
+  const handleDocumentUploaded = async (updatedDocuments?: any[]) => {
+    console.log('🔔 handleDocumentUploaded called!');
+    console.log('📋 Current documentFormState:', documentFormState);
     const documentsSection = activeSections.find(s => s.sectionType === "documents");
     if (documentsSection) {
-      await postSectionData(documentsSection);
+      console.log('📄 Found documents section, calling postSectionData...');
+      await postSectionData(documentsSection, updatedDocuments);
+    } else {
+      console.log('❌ No documents section found!');
     }
   };
 
@@ -1452,11 +1993,26 @@ export default function HandoffPage() {
       ...prev,
       [idx]: !prev[idx]
     }));
+
+    // If closing a completed section, save its data
+    if (expandedSections[idx] && completedSections[idx]) {
+      const section = activeSections[idx - 1];
+      if (section) await postSectionData(section);
+    }
   };
 
   const handleSubmit = async () => {
+    console.log('🚀 Submit button clicked!');
+    console.log('📊 Current State:', {
+      isIdentityDocumentCompleted,
+      isSelfieCompleted,
+      documentsDetails: documentFormState.documentsDetails,
+      formData,
+    });
+
     if (!isFormValid()) {
       const missing = getMissingFields();
+      console.log('❌ Form validation failed. Missing fields:', missing);
       toast({
         title: "❌ Form Incomplete",
         description: missing.length > 0 
@@ -1468,7 +2024,10 @@ export default function HandoffPage() {
       return;
     }
 
+    console.log('✅ Form validation passed!');
+
     if (!userId || !templateVersion || !submissionId) {
+      console.log('❌ Missing required data:', { userId, templateVersion: !!templateVersion, submissionId });
       toast({
         title: "❌ Error",
         description: "Missing required data. Please refresh and try again.",
@@ -1477,51 +2036,18 @@ export default function HandoffPage() {
       return;
     }
 
-    try {
-      // Final save of all sections
-      const sections = activeSections;
-      for (const section of sections) {
-        await postSectionData(section);
-      }
+    // Clear handoff cache
+    localStorage.removeItem('resolvedJoinCode');
+    localStorage.removeItem('handoffSnapshot');
 
-      // Update submission status to 'submitted'
-      const updateResponse = await fetch(
-        `${API_BASE}/api/UserTemplateSubmissions/${submissionId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "*/*",
-          },
-          body: JSON.stringify({
-            id: submissionId,
-            userId,
-            templateVersionId: templateVersion.versionId,
-            status: "submitted",
-          }),
-        }
-      );
+    toast({
+      title: "🎉 Verification Complete!",
+      description: "Your identity verification has been submitted successfully.",
+      duration: 3000,
+    });
 
-      if (!updateResponse.ok) {
-        throw new Error("Failed to update submission status");
-      }
-
-      toast({
-        title: "🎉 Verification Complete!",
-        description: "Your identity verification has been submitted successfully.",
-        duration: 5000,
-      });
-
-      navigate("/verification-success");
-    } catch (error) {
-      console.error("Submission error:", error);
-      toast({
-        title: "❌ Submission Failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-        duration: 5000,
-      });
-    }
+    // Navigate to success page
+    navigate("/verification-success");
   };
 
   const activeSections = (templateVersion?.sections || [])

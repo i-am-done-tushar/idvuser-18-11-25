@@ -38,7 +38,7 @@ interface DynamicSectionProps {
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
       status: "uploaded" | "pending";
@@ -54,8 +54,16 @@ interface DynamicSectionProps {
     isImageCaptured: boolean;
   };
   setBiometricFormState?: (state: any) => void;
-}
 
+  // ✅ NEW: version to force remount of PI form
+  formVersion?: number;
+  // ✅ NEW: version to force remount of document sections
+  docsVersion?: number;
+  // SignalR/QR connection props
+  connectionRef?: React.MutableRefObject<any>;
+  shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onHandoffConnected?: () => void;
+}
 
 export function DynamicSection({
   section,
@@ -82,6 +90,11 @@ export function DynamicSection({
   onDocumentUploaded,
   biometricFormState,
   setBiometricFormState,
+  formVersion, // ✅ NEW
+  docsVersion, // ✅ NEW
+  connectionRef,
+  shouldMaintainConnection,
+  onHandoffConnected,
 }: DynamicSectionProps) {
   
   const renderSectionContent = () => {
@@ -107,6 +120,7 @@ export function DynamicSection({
         return (
           <div className="flex py-5 px-[34px] flex-col items-start self-stretch border-t border-border bg-background">
             <PersonalInformationForm
+              key={`pi-${formVersion}`} // ✅ NEW: force remount on version bump
               formData={formData}
               setFormData={setFormData}
               isEmailVerified={isEmailVerified || false}
@@ -114,6 +128,7 @@ export function DynamicSection({
               onSendEmailOTP={onSendEmailOTP || (() => {})}
               onSendPhoneOTP={onSendPhoneOTP || (() => {})}
               fieldConfig={fieldConfig}
+              emailLocked={!!emailLocked}
             />
           </div>
         );
@@ -162,6 +177,7 @@ export function DynamicSection({
             </div>
 
             <IdentityDocumentForm
+              key={`docs-${docsVersion ?? 0}`}  // NEW: force remount when docsVersion bumps
               onComplete={onIdentityDocumentComplete || (() => {})}
               documentConfig={documentConfig}
               submissionId={submissionId}
@@ -171,6 +187,9 @@ export function DynamicSection({
               documentFormState={documentFormState}
               setDocumentFormState={setDocumentFormState}
               onDocumentUploaded={onDocumentUploaded}
+              connectionRef={connectionRef}
+              shouldMaintainConnection={shouldMaintainConnection}
+              onHandoffConnected={onHandoffConnected}
             />
           </div>
         );

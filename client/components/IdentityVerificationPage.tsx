@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "./Header";
 import { StepSidebar } from "./StepSidebar";
@@ -8,6 +8,7 @@ import { DynamicSection } from "./DynamicSection";
 import { DesktopDynamicSection } from "./DesktopDynamicSection";
 import { LockedStepComponent } from "./LockedStepComponent";
 import { OTPVerificationDialog } from "./OTPVerificationDialog";
+import { QRCodeDisplay } from "./QRCodeDisplay";
 import { FormData } from "@shared/templates";
 import { TemplateVersionResponse } from "@shared/api";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +21,7 @@ import {
   isValidPostalCode,
 } from "@/lib/validation";
 import { truncate } from "fs";
+import { getDesktopDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 // ---- single source of truth for API base ----
 // const API_BASE = "https://idvapi-test.arconnet.com:1019";
@@ -51,6 +53,10 @@ export function IdentityVerificationPage({
 
   const [templateVersion, setTemplateVersion] =
     useState<TemplateVersionResponse | null>(null);
+
+  useEffect(() => {
+    console.log('[templateVersion] Updated:', templateVersion);
+  }, [templateVersion]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +96,26 @@ export function IdentityVerificationPage({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [submissionId, setSubmissionId] = useState<number | null>(null);
 
+  useEffect(() => {
+    console.log('[submissionId] Updated:', submissionId);
+  }, [submissionId]);
+
+  // eTag for Personal Information section (for optimistic concurrency control with PUT)
+  const [personalInfoETag, setPersonalInfoETag] = useState<string>("AAAAAAAAAAAAAAAAAAAAAA==");
+
+  // Force form remount counter - increment this to force PersonalInformationForm to remount
+  const [formUpdateKey, setFormUpdateKey] = useState(0);
+
+  // Document version counter - increment this to force document sections to remount
+  const [docsVersion, setDocsVersion] = useState(0);
+
+  // Ref to control SignalR connection lifecycle
+  const signalRConnectionRef = useRef<any>(null);
+  const shouldMaintainConnection = useRef<boolean>(true);
+
+  // Track QR/SignalR connection state
+  const [handoffConnected, setHandoffConnected] = useState(false);
+
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -107,7 +133,12 @@ export function IdentityVerificationPage({
     permanentPostalCode: "",
   });
 
-  // Document form state - lift up to preserve across section toggles
+    // Debug: log formData changes
+    useEffect(() => {
+      console.log('🟢 [formData] Updated:', formData);
+    }, [formData]);
+
+  // Document state
   const [documentFormState, setDocumentFormState] = useState({
     country: "",
     selectedDocument: "",
@@ -125,12 +156,12 @@ export function IdentityVerificationPage({
     }>,
   });
 
-  // Wrap setDocumentFormState to add logging
-  const setDocumentFormStateWithLogging = (newState: any) => {
-    console.log('🔧 Parent setDocumentFormState called with:', newState);
-    console.log('🔧 Previous documentFormState:', documentFormState);
-    setDocumentFormState(newState);
-    console.log('🔧 After setState, new documentFormState should be:', newState);
+  const setDocumentFormStateWithLogging = (nextOrUpdater: any) => {
+    setDocumentFormState(prev => {
+      const next = typeof nextOrUpdater === "function" ? nextOrUpdater(prev) : nextOrUpdater;
+      console.log("📄 doc state ->", next);
+      return next;
+    });
   };
 
   // Biometric form state - lift up to preserve across section toggles  
@@ -217,7 +248,10 @@ export function IdentityVerificationPage({
     }
   };
 
-  // ---- fetch version by id (server route uses version id) ----
+  // prefer resolved version id when fetching
+  const effectiveTemplateVersionId = resolvedTemplateVersionId ?? templateId;
+
+  // fetch TemplateVersion by id  
   useEffect(() => {
     if (!templateId) {
       setError("No template/version ID provided");
@@ -258,7 +292,18 @@ export function IdentityVerificationPage({
     }
   }, [templateVersion, userId, submissionId]);
 
-  // ---- fetch and populate submission values if submissionId exists ----
+  // Load Personal Information eTag from localStorage when submissionId is available
+  useEffect(() => {
+    if (submissionId) {
+      const savedETag = localStorage.getItem(`personalInfoETag_${submissionId}`);
+      if (savedETag) {
+        console.log('📦 Loaded Personal Info eTag from localStorage:', savedETag);
+        setPersonalInfoETag(savedETag);
+      }
+    }
+  }, [submissionId]);
+
+  // fetch and hydrate submission values
   useEffect(() => {
     if (!submissionId || !templateVersion) return;
 
@@ -298,28 +343,47 @@ export function IdentityVerificationPage({
           completedSectionIds.add(submission.templateSectionId);
 
           try {
-            const parsedValue = JSON.parse(submission.fieldValue);
+            // Parse fieldValue - it might be a string or already an object
+            let parsedValue: any;
+            if (typeof submission.fieldValue === 'string') {
+              parsedValue = JSON.parse(submission.fieldValue);
+            } else {
+              parsedValue = submission.fieldValue;
+            }
 
             // Populate personal information section
             if (section.sectionType === "personalInformation") {
-              setFormData((prev) => ({
-                ...prev,
-                firstName: parsedValue.firstName || prev.firstName,
-                lastName: parsedValue.lastName || prev.lastName,
-                middleName: parsedValue.middleName || prev.middleName,
-                dateOfBirth: parsedValue.dateOfBirth || prev.dateOfBirth,
-                email: parsedValue.email || prev.email,
-                countryCode: parsedValue.countryCode || prev.countryCode,
-                phoneNumber: parsedValue.phoneNumber || prev.phoneNumber,
-                gender: parsedValue.gender || prev.gender,
-                address: parsedValue.address || prev.address,
-                city: parsedValue.city || prev.city,
-                postalCode: parsedValue.postalCode || prev.postalCode,
-                permanentAddress: parsedValue.permanentAddress || prev.permanentAddress,
-                permanentCity: parsedValue.permanentCity || prev.permanentCity,
-                permanentPostalCode: parsedValue.permanentPostalCode || prev.permanentPostalCode,
-              }));
-              console.log("✅ Populated personal information from submission");
+              console.log('🟡 [fetchSubmissionValues] Updating personal info fields:', parsedValue);
+              setFormData((prev) => {
+                const updated = {
+                  ...prev,
+                  firstName: parsedValue.firstName ?? prev.firstName,
+                  lastName: parsedValue.lastName ?? prev.lastName,
+                  middleName: parsedValue.middleName ?? prev.middleName,
+                  dateOfBirth: parsedValue.dateOfBirth ?? prev.dateOfBirth,
+                  email: parsedValue.email ?? prev.email,
+                  countryCode: parsedValue.countryCode ?? prev.countryCode,
+                  phoneNumber: parsedValue.phoneNumber ?? prev.phoneNumber,
+                  gender: parsedValue.gender ?? prev.gender,
+                  address: parsedValue.address ?? prev.address,
+                  city: parsedValue.city ?? prev.city,
+                  postalCode: parsedValue.postalCode ?? prev.postalCode,
+                  permanentAddress: parsedValue.permanentAddress ?? prev.permanentAddress,
+                  permanentCity: parsedValue.permanentCity ?? prev.permanentCity,
+                  permanentPostalCode: parsedValue.permanentPostalCode ?? prev.permanentPostalCode,
+                };
+                console.log('🟡 [fetchSubmissionValues] setFormData called with:', updated);
+                return updated;
+              });
+              
+              // Extract and store eTag for Personal Information section
+              if (submission.eTag) {
+                const cleanedETag = submission.eTag.replace(/^W\/"|"$/g, '');
+                console.log('📦 Extracted Personal Info eTag from GET:', submission.eTag);
+                console.log('📦 Cleaned eTag:', cleanedETag);
+                setPersonalInfoETag(cleanedETag);
+                localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+              }
             }
 
             // Populate document section
@@ -360,13 +424,8 @@ export function IdentityVerificationPage({
               if (documentsArray.length > 0) {
                 setIsIdentityDocumentCompleted(true);
               }
-              
-              console.log("✅ Populated document information from submission");
-              console.log("📄 Restored country:", parsedValue.country);
-              console.log("📄 Restored uploadedDocuments (docIds):", uploadedDocIds);
-              console.log("📄 Restored documentUploadIds:", rebuiltDocumentUploadIds);
-              console.log("📄 Restored documentsDetails:", documentsArray);
-              console.log(`📊 Total documents uploaded: ${documentsArray.length}`);
+
+              setDocsVersion(v => v + 1);
             }
 
             // Populate biometric section
@@ -422,7 +481,234 @@ export function IdentityVerificationPage({
     fetchSubmissionValues();
   }, [submissionId, templateVersion]);
 
-  // Show welcome-back toast for already-completed sections on page load
+  // SignalR: Listen for cross-device updates
+  useEffect(() => {
+    console.log('[SignalR useEffect] RUNNING:', {
+      signalRConnection: !!signalRConnectionRef.current,
+      submissionId,
+      templateVersionLoaded: !!templateVersion
+    });
+    if (!signalRConnectionRef.current || !submissionId || !templateVersion) {
+      console.log('[SignalR useEffect] EARLY RETURN:', {
+        signalRConnection: !!signalRConnectionRef.current,
+        submissionId,
+        templateVersionLoaded: !!templateVersion
+      });
+      return;
+    }
+
+    const connection = signalRConnectionRef.current;
+    const currentDeviceId = getDesktopDeviceFingerprint();
+
+    console.log('🔌 IdentityVerificationPage - SignalR listeners active (Device ID:', currentDeviceId + ')');
+
+    // Handler for personal.updated event
+    const handlePersonalUpdated = async (message: any) => {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔔 SignalR Event: personal.updated received');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📨 RAW Data:', JSON.stringify(message, null, 2));
+      console.log('🆔 Message Device ID:', message?.deviceId);
+      console.log('🆔 Current Device ID:', currentDeviceId);
+      console.log('🔍 Device IDs Match?', message?.deviceId === currentDeviceId);
+      console.log('🔍 Should Update?', message.deviceId && message.deviceId !== currentDeviceId);
+      
+      // Only refresh if the update came from a different device
+      if (message.deviceId && message.deviceId !== currentDeviceId) {
+        console.log('✅ Different device detected - fetching updated data...');
+        
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+            { method: "GET", headers: { Accept: "application/json" } }
+          );
+
+          if (response.ok) {
+            const submissionValues = await response.json();
+            const personalInfoSubmission = submissionValues.find((s: any) => {
+              const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+              return section?.sectionType === "personalInformation";
+            });
+
+            if (personalInfoSubmission) {
+              // Parse fieldValue - it might be a string or already an object
+              let parsedValue: any;
+              if (typeof personalInfoSubmission.fieldValue === 'string') {
+                parsedValue = JSON.parse(personalInfoSubmission.fieldValue);
+              } else {
+                parsedValue = personalInfoSubmission.fieldValue;
+              }
+              
+              console.log('✅ Updating Personal Information form from other device');
+              console.log('📋 Parsed personal info data:', parsedValue);
+              
+              // Create completely new form data object to force re-render
+              const newFormData = {
+                firstName: parsedValue.firstName || "",
+                lastName: parsedValue.lastName || "",
+                middleName: parsedValue.middleName || "",
+                dateOfBirth: parsedValue.dateOfBirth || "",
+                email: parsedValue.email || "",
+                countryCode: parsedValue.countryCode || "",
+                phoneNumber: parsedValue.phoneNumber || "",
+                gender: parsedValue.gender || "",
+                address: parsedValue.address || "",
+                city: parsedValue.city || "",
+                postalCode: parsedValue.postalCode || "",
+                permanentAddress: parsedValue.permanentAddress || "",
+                permanentCity: parsedValue.permanentCity || "",
+                permanentPostalCode: parsedValue.permanentPostalCode || "",
+              };
+              
+              console.log('📝 New formData object:', newFormData);
+              
+              // Replace entire formData object to trigger re-render
+              setFormData(newFormData);
+              
+              console.log('✅ setFormData called - form should update now');
+              
+              // Force form remount by incrementing the key counter
+              setFormUpdateKey(prev => prev + 1);
+              console.log('🔄 Incremented formUpdateKey to force remount');
+
+              // Update eTag from the notification
+              if (message.data?.eTag) {
+                const cleanedETag = message.data.eTag.replace(/^W\/"|"$/g, '');
+                console.log('🏷️ Updating eTag:', cleanedETag);
+                setPersonalInfoETag(cleanedETag);
+                localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+              }
+
+              toast({
+                title: "📱 Update from other device",
+                description: "Personal information has been updated from another device.",
+                duration: 3000,
+              });
+              
+              console.log('✅ Personal information update completed');
+            } else {
+              console.warn('⚠️ No personal information submission found in response');
+            }
+          } else {
+            console.error('❌ Failed to fetch submission values:', response.status);
+          }
+        } catch (error) {
+          console.error('❌ Error refreshing personal info:', error);
+        }
+      } else {
+        console.log('⏭️ Same device - skipping update');
+        console.log('   Reason: deviceId match or missing');
+      }
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    };
+
+    // Handler for file.upload.completed event
+    const handleFileUploadCompleted = async (message: any) => {
+      console.log(
+        "🔔 IdentityVerificationPage - file.upload.completed:",
+        JSON.stringify(message, null, 2)
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const isSameDevice =
+        message.deviceId && message.deviceId === currentDeviceId;
+
+      console.log("🆔 Message Device ID:", message?.deviceId);
+      console.log("🆔 Current Device ID:", currentDeviceId);
+      console.log("🔍 Device IDs Match?", isSameDevice);
+      console.log(
+        "🔍 Should Update?",
+        !message.deviceId || !isSameDevice
+      );
+
+      // If deviceId is missing, assume different device and refresh
+      if (!message.deviceId || !isSameDevice) {
+        console.log("✅ Refreshing documents after file.upload.completed...");
+
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+            { method: "GET", headers: { Accept: "application/json" } }
+          );
+
+          if (response.ok) {
+            const submissionValues = await response.json();
+            const documentsSubmission = submissionValues.find((s: any) => {
+              const section = templateVersion.sections.find(
+                (sec) => sec.id === s.templateSectionId
+              );
+              return section?.sectionType === "documents";
+            });
+
+            if (documentsSubmission) {
+              const parsedValue =
+                typeof documentsSubmission.fieldValue === "string"
+                  ? JSON.parse(documentsSubmission.fieldValue)
+                  : documentsSubmission.fieldValue;
+
+              const documentsArray = parsedValue?.documents || [];
+              console.log("✅ Updating Documents from other/missing device");
+              const uploadedDocIds: string[] = [];
+              const rebuiltDocumentUploadIds: Record<
+                string,
+                { front?: number; back?: number; frontETag?: string; backETag?: string }
+              > = {};
+
+              documentsArray.forEach((doc: any) => {
+                const docName = doc.documentName;
+                const docId = docName.toLowerCase().replace(/\s+/g, "_");
+                uploadedDocIds.push(docId);
+                rebuiltDocumentUploadIds[docId] = {
+                  front: doc.frontFileId,
+                  ...(doc.backFileId && { back: doc.backFileId }),
+                  ...(doc.frontETag && { frontETag: doc.frontETag }),
+                  ...(doc.backETag && { backETag: doc.backETag }),
+                };
+              });
+
+              setDocumentFormState((prev) => ({
+                ...prev,
+                country: parsedValue.country || prev.country,
+                uploadedDocuments: uploadedDocIds,
+                documentUploadIds: rebuiltDocumentUploadIds,
+                documentsDetails: documentsArray,
+              }));
+
+              if (documentsArray.length > 0) {
+                setIsIdentityDocumentCompleted(true);
+              }
+
+              toast({
+                title: "📱 Update from other device",
+                description:
+                  "Documents have been updated from another device or session.",
+                duration: 3000,
+              });
+
+              setDocsVersion((v) => v + 1);
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error refreshing documents:", error);
+        }
+      } else {
+        console.log("⏭️ Same device - skipping update");
+      }
+    };
+
+    // Register event listeners
+    connection.on('personal.updated', handlePersonalUpdated);
+    connection.on('file.upload.completed', handleFileUploadCompleted);
+
+    // Cleanup
+    return () => {
+      connection.off('personal.updated', handlePersonalUpdated);
+      connection.off('file.upload.completed', handleFileUploadCompleted);
+    };
+  }, [signalRConnectionRef.current, submissionId, templateVersion, API_BASE, toast, setFormData, setDocumentFormState, setIsIdentityDocumentCompleted, setPersonalInfoETag]);
+
+  // welcome back toast and expand logic
   useEffect(() => {
     if (!templateVersion || Object.keys(completedSections).length === 0) return;
     if (hasShownWelcomeBackToast) return; // Prevent showing multiple times
@@ -485,10 +771,11 @@ export function IdentityVerificationPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedSections, templateVersion, hasShownWelcomeBackToast]); // Only run when completedSections is populated
 
-  // Helper: POST section data
-  const postSectionData = async (section: any) => {
+  // POST section data helper
+  const postSectionData = async (section: any, updatedDocuments?: any[]) => {
     if (!templateVersion || !userId || !submissionId) return;
-    let fieldValue = "";
+    
+    // Special handling for Personal Information section - use PUT with eTag
     if (section.sectionType === "personalInformation") {
       const personalInfo = getPersonalInfoConfig();
       const mappedData: any = {};
@@ -512,12 +799,104 @@ export function IdentityVerificationPage({
         mappedData.permanentCity = formData.permanentCity;
         mappedData.permanentPostalCode = formData.permanentPostalCode;
       }
-      fieldValue = JSON.stringify(mappedData);
-    } else if (section.sectionType === "documents") {
-      // Build clean document data structure
+      
+      const fieldValueJson = JSON.stringify(mappedData);
+      const deviceFingerprint = getDesktopDeviceFingerprint();
+      const token = getToken();
+      
+      try {
+        console.log('🔄 PUT Personal Information with eTag:', personalInfoETag);
+        const response = await fetch(
+          `${API_BASE}/api/personal-info/${submissionId}/${section.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "text/plain",
+              "If-Match": personalInfoETag,
+              "X-Device-Fingerprint": deviceFingerprint,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ fieldValueJson }),
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`PUT failed: ${response.statusText}`);
+        }
+        
+        // Extract new eTag from response headers or body
+        let newETag: string | null = null;
+        
+        // First try to get eTag from response headers
+        const eTagHeader = response.headers.get('etag') || response.headers.get('ETag');
+        if (eTagHeader) {
+          newETag = eTagHeader;
+          console.log('📥 Received eTag from headers:', eTagHeader);
+        } else {
+          // Fallback: try to parse from response body
+          try {
+            const responseText = await response.text();
+            const responseData = JSON.parse(responseText);
+            newETag = responseData?.eTag || null;
+            console.log('📥 Received eTag from body:', newETag);
+          } catch (e) {
+            console.warn('Could not parse PUT response:', e);
+          }
+        }
+        
+        // Update eTag if we got a new one
+        if (newETag) {
+          // Clean eTag format: remove W/"" wrapper if present
+          // Example: W/"+NPEw6bCX0e4AGuC/u8s8g==" becomes +NPEw6bCX0e4AGuC/u8s8g==
+          const cleanedETag = newETag.replace(/^W\/"|"$/g, '');
+          console.log('✅ Cleaned eTag for storage/next request:', cleanedETag);
+          setPersonalInfoETag(cleanedETag);
+          // Save cleaned eTag to localStorage for persistence
+          if (submissionId) {
+            localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
+          }
+        }
+        
+        console.log('✅ Personal Information saved successfully');
+        // Always re-fetch latest personal info after PUT, even if deviceId matches
+        // This ensures Desktop page shows updated data immediately
+        try {
+          const response = await fetch(
+            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+            { method: "GET", headers: { Accept: "application/json" } }
+          );
+          if (response.ok) {
+            const submissionValues = await response.json();
+            submissionValues.forEach((submission: any) => {
+  const sec = templateVersion.sections.find((s) => s.id === submission.templateSectionId);
+  if (sec?.sectionType === "personalInformation" && submission.fieldValue) {
+    try {
+      const parsedData = typeof submission.fieldValue === "string"
+        ? JSON.parse(submission.fieldValue)
+        : submission.fieldValue;
+      setFormData({ ...parsedData }); // ensure new object ref
+    } catch {}
+  }
+});
+
+
+          }
+        } catch (err) {
+          console.error("Failed to re-fetch personal info after PUT", err);
+        }
+      } catch (err) {
+        console.error("Failed to PUT personal information section", err);
+      }
+      return;
+    }
+    
+    // For other sections (documents, biometrics) - use POST as before
+    let fieldValue = "";
+    if (section.sectionType === "documents") {
       const documentData = {
         country: documentFormState.country,
-        documents: documentFormState.documentsDetails,
+        documents: updatedDocuments || documentFormState.documentsDetails,
       };
       
       fieldValue = JSON.stringify(documentData);
@@ -528,6 +907,7 @@ export function IdentityVerificationPage({
         completedAt: new Date().toISOString(),
       });
     }
+    
     try {
       await fetch(
         `${API_BASE}/api/UserTemplateSubmissionValues/${submissionId}/${section.id}`,
@@ -589,13 +969,12 @@ export function IdentityVerificationPage({
     // If switching from one section to another and the previous section has data
     if (activeSectionIndex !== newSectionIndex && activeSectionIndex > 0) {
       const previousSection = sections[activeSectionIndex - 1];
-      
-      // Auto-save the previous section if it has any data
+
       if (previousSection && sectionHasData(activeSectionIndex)) {
-        console.log(`Auto-saving section ${activeSectionIndex} data before switching to section ${newSectionIndex}`);
-        await postSectionData(previousSection);
-        
-        // Show a subtle notification
+        // ❌ do not POST documents here
+        if (previousSection.sectionType !== "documents") {
+          await postSectionData(previousSection);
+        }
         toast({
           title: "Progress Saved",
           description: `Your ${previousSection.name.toLowerCase()} data has been saved.`,
@@ -611,9 +990,12 @@ export function IdentityVerificationPage({
   // Mark section as filled when completed and send POST
   const handleSectionComplete = async (sectionIndex: number, section: any) => {
     setCompletedSections((prev) => ({ ...prev, [sectionIndex]: true }));
-    await postSectionData(section);
-    
-    // Check if this is the last section
+
+    // ❌ do not POST documents here; other sections can still save
+    if (section.sectionType !== "documents") {
+      await postSectionData(section);
+    }
+
     const isLastSection = sectionIndex === activeSections.length;
     
     // Provide specific feedback based on section type
@@ -721,7 +1103,43 @@ export function IdentityVerificationPage({
     }
   }
 
-  // ---- PHONE OTP API calls ----
+  // Send a session heartbeat to backend. Uses stored access token and a per-device
+  // fingerprint header. The fingerprint is persisted to localStorage as
+  // 'device_fingerprint' so it remains stable per device/session.
+  async function sendSessionHeartbeat() {
+    const token = getToken();
+
+    // Get desktop device fingerprint (Device 1)
+    const fingerprint = getDesktopDeviceFingerprint();
+
+    const res = await fetch(`${API_BASE}/api/session/heartbeat`, {
+      method: "POST",
+      headers: {
+        Accept: "*/*",
+        "X-Device-Fingerprint": fingerprint || "",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: "",
+    });
+
+    if (!res.ok) {
+      const status = res.status;
+      const text = await res.text().catch(() => "");
+      const err: any = new Error(text || `Failed to send heartbeat`);
+      err.status = status;
+      throw err;
+    }
+
+    // return parsed body if any
+    const bodyText = await res.text().catch(() => "");
+    try {
+      return bodyText ? JSON.parse(bodyText) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // PHONE OTP API calls
   async function startPhoneOtp(
     phoneCountryCode: string,
     phoneNationalNumber: string,
@@ -792,11 +1210,13 @@ export function IdentityVerificationPage({
     const requiredToggles = personalInfo?.requiredToggles || {};
     const checks: boolean[] = [];
 
-    // Required fields - always validated
-    if (personalInfo.firstName) checks.push(isValidName(formData.firstName));
-    if (personalInfo.lastName) checks.push(isValidName(formData.lastName));
-    
-    // Conditionally required fields based on requiredToggles
+    if (personalInfo.firstName) {
+      checks.push(isValidName(formData.firstName));
+    }
+    if (personalInfo.lastName) {
+      checks.push(isValidName(formData.lastName));
+    }
+
     if (personalInfo.middleName) {
       if (requiredToggles.middleName) {
         checks.push(isValidName(formData.middleName));
@@ -815,20 +1235,27 @@ export function IdentityVerificationPage({
     }
     
     if (personalInfo.email) {
-      checks.push(isValidEmail(formData.email));
-      checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified); // 🚀 Bypass OTP in dev
+      const emailValid = isValidEmail(formData.email);
+      const emailVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isEmailVerified;
+      checks.push(emailValid);
+      checks.push(emailVerifiedOrBypassed);
     }
     
     if (personalInfo.phoneNumber) {
       if (requiredToggles.phoneNumber) {
-        checks.push(!!formData.countryCode);
-        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified); // 🚀 Bypass OTP in dev
+        const countryCodeValid = !!formData.countryCode;
+        const phoneValid = isValidPhoneForCountry(formData.countryCode, formData.phoneNumber);
+        const phoneVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified;
+        checks.push(countryCodeValid);
+        checks.push(phoneValid);
+        checks.push(phoneVerifiedOrBypassed);
       } else if (formData.phoneNumber) {
-        // If phone is shown but not required, validate only if entered
-        checks.push(!!formData.countryCode);
-        checks.push(isValidPhoneForCountry(formData.countryCode, formData.phoneNumber));
-        checks.push(BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified);
+        const countryCodeValid = !!formData.countryCode;
+        const phoneValid = isValidPhoneForCountry(formData.countryCode, formData.phoneNumber);
+        const phoneVerifiedOrBypassed = BYPASS_OTP_FOR_DEVELOPMENT || isPhoneVerified;
+        checks.push(countryCodeValid);
+        checks.push(phoneValid);
+        checks.push(phoneVerifiedOrBypassed);
       }
     }
     
@@ -972,7 +1399,7 @@ export function IdentityVerificationPage({
       // Mark section 2 as completed
       if (!completedSections[2] && sections[1]) {
         setCompletedSections((prev) => ({ ...prev, 2: true }));
-        postSectionData(sections[1]);
+        // ❌ removed: postSectionData(sections[1]);
       }
       
       const nextSection = sections[2];
@@ -1021,10 +1448,9 @@ export function IdentityVerificationPage({
     if (sections.length === 0) return;
 
     const isSectionComplete = (type: string) => {
-      if (type === "personalInformation") return isStep1Complete();
-      if (type === "documents") return isIdentityDocumentCompleted;
-      if (type === "biometrics") return isSelfieCompleted;
-      return true;
+      return type === "personalInformation" ? isStep1Complete() :
+             type === "documents" ? isIdentityDocumentCompleted :
+             type === "biometrics" ? isSelfieCompleted : true;
     };
 
     const firstIncompleteIdx = sections.findIndex(
@@ -1050,6 +1476,7 @@ export function IdentityVerificationPage({
     formData.email,
     formData.countryCode,
     formData.phoneNumber,
+    formData.gender,
     formData.address,
     formData.city,
     formData.postalCode,
@@ -1317,17 +1744,22 @@ export function IdentityVerificationPage({
     }
   };
 
-  // Callback to auto-save document section data after each document upload
-  const handleDocumentUploaded = async () => {
-    console.log('📤 Document state changed, triggering auto-save...');
+  // Auto-save documents right after upload/add
+  const handleDocumentUploaded = async (updatedDocuments?: any[]) => {
     const documentsSection = activeSections.find(s => s.sectionType === "documents");
     if (documentsSection) {
-      console.log('📋 Current documents state:', {
-        uploadedDocuments: documentFormState.uploadedDocuments,
-        documentsDetails: documentFormState.documentsDetails,
-      });
-      await postSectionData(documentsSection);
-      console.log('✅ Document section auto-saved successfully');
+      // If updatedDocuments is provided, permanently update the state
+      if (updatedDocuments) {
+        console.log('📤 handleDocumentUploaded called with updated documents:', updatedDocuments);
+        setDocumentFormState(prev => ({
+          ...prev,
+          documentsDetails: updatedDocuments
+        }));
+      } else {
+        console.log('📤 handleDocumentUploaded called without updated documents, using current state');
+      }
+
+      await postSectionData(documentsSection, updatedDocuments);
     }
   };
 
@@ -1340,13 +1772,9 @@ export function IdentityVerificationPage({
     
     // Mark the correct section as completed
     setCompletedSections((prev) => ({ ...prev, [documentsSectionIndex]: true }));
-    
-    // Post section data immediately
-    if (documentsSection) {
-      postSectionData(documentsSection);
-    }
-    
-    // Check if this is the last section
+
+    // ❌ removed: postSectionData(documentsSection)
+
     const isLastSection = documentsSectionIndex === activeSections.length;
     
     if (!hasShownStep2Toast) {
@@ -1410,6 +1838,18 @@ export function IdentityVerificationPage({
     }
 
     try {
+      // Close SignalR connection before submitting
+      shouldMaintainConnection.current = false;
+      if (signalRConnectionRef.current) {
+        console.log('🔌 Closing SignalR connection on form submission');
+        try {
+          await signalRConnectionRef.current.stop();
+          console.log('✅ SignalR connection closed successfully');
+        } catch (err) {
+          console.error('❌ Error closing SignalR:', err);
+        }
+      }
+
       toast({
         title: "Submitting Form",
         description: "Please wait while we submit your information...",
@@ -1895,7 +2335,7 @@ export function IdentityVerificationPage({
               <div className="space-y-4">
                 {activeSections.map((section, index) => (
                   <DynamicSection
-                    key={section.id}
+                    key={`${section.id}-${formUpdateKey}-${docsVersion}`}
                     section={section}
                     sectionIndex={index + 1}
                     currentStep={currentStep}
@@ -1920,10 +2360,12 @@ export function IdentityVerificationPage({
                     onDocumentUploaded={handleDocumentUploaded}
                     biometricFormState={biometricFormState}
                     setBiometricFormState={setBiometricFormState}
-                    // personalInfoConfig={personalCfg}
-                    // personalInfoRequired={personalInfoRequired}
-                    // documentsConfig={docsCfg}
-                    // biometricsConfig={bioCfg}
+                    emailLocked={emailLocked}
+                    formVersion={formUpdateKey}
+                    docsVersion={docsVersion}
+                    connectionRef={signalRConnectionRef}
+                    shouldMaintainConnection={shouldMaintainConnection}
+                    onHandoffConnected={() => setHandoffConnected(true)}
                   />
                 ))}
               </div>
@@ -1935,7 +2377,7 @@ export function IdentityVerificationPage({
                 <div className="flex flex-col items-center gap-6 self-stretch">
                   {activeSections.map((section, index) => (
                     <DesktopDynamicSection
-                      key={section.id}
+                      key={`${section.id}-${formUpdateKey}-${docsVersion}`}
                       section={section}
                       sectionIndex={index + 1}
                       currentStep={currentStep}
@@ -1960,11 +2402,12 @@ export function IdentityVerificationPage({
                       onDocumentUploaded={handleDocumentUploaded}
                       biometricFormState={biometricFormState}
                       setBiometricFormState={setBiometricFormState}
-                      // personalInfoConfig={personalCfg}
-                      // personalInfoRequired={personalInfoRequired}
-                      // documentsConfig={docsCfg}
-                      // biometricsConfig={bioCfg}
-
+                      emailLocked={emailLocked}
+                      formVersion={formUpdateKey}
+                      docsVersion={docsVersion}
+                      connectionRef={signalRConnectionRef}
+                      shouldMaintainConnection={shouldMaintainConnection}
+                      onHandoffConnected={() => setHandoffConnected(true)}
                     />
                   ))}
                 </div>

@@ -8,6 +8,7 @@ import { QRCodeDisplay } from "./QRCodeDisplay";
 import { useSessionSync } from "@/hooks/useSessionSync";
 import { extractSessionFromURL } from "@/lib/qr-utils";
 import { CloseIcon, Spinner } from "./SVG_Files";
+import { getDeviceFingerprint } from "@/lib/deviceFingerprint";
 
 // read API base from env; avoid hardcoding
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
@@ -36,12 +37,14 @@ interface IdentityDocumentFormProps {
     selectedDocument: string;
     uploadedDocuments: string[];
     uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
-    documentUploadIds: Record<string, { front?: number; back?: number }>;
+    documentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>;
     documentsDetails: Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
+      frontETag?: string;
+      backETag?: string;
       status: "uploaded" | "pending";
       uploadedAt: string;
     }>;
@@ -51,20 +54,35 @@ interface IdentityDocumentFormProps {
     selectedDocument: string;
     uploadedDocuments: string[];
     uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
-    documentUploadIds: Record<string, { front?: number; back?: number }>;
+    documentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>;
     documentsDetails: Array<{
       documentName: string;
-      documentDefinitionId: number;
+      documentDefinitionId: number | string;
       frontFileId: number;
       backFileId?: number;
+      frontETag?: string;
+      backETag?: string;
       status: "uploaded" | "pending";
       uploadedAt: string;
     }>;
   }>>;
   // Callback to trigger auto-save after document upload
-  onDocumentUploaded?: () => void;
+  onDocumentUploaded?: (updatedDocuments?: Array<{
+    documentName: string;
+    documentDefinitionId: number | string;
+    frontFileId: number;
+    backFileId?: number;
+    frontETag?: string;
+    backETag?: string;
+    status: "uploaded" | "pending";
+    uploadedAt: string;
+  }>) => void;
   // Added prop to control identity document completion state
   setIsIdentityDocumentCompleted?: (completed: boolean) => void;
+  // SignalR/QR connection props
+  connectionRef?: React.MutableRefObject<any>;
+  shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onHandoffConnected?: () => void;
 }
 
 export function IdentityDocumentForm({
@@ -78,6 +96,9 @@ export function IdentityDocumentForm({
   setDocumentFormState,
   onDocumentUploaded,
   setIsIdentityDocumentCompleted,
+  connectionRef,
+  shouldMaintainConnection,
+  onHandoffConnected,
 }: IdentityDocumentFormProps) {
   // Use lifted state directly if available, otherwise local state
   const [localCountry, setLocalCountry] = useState("");
@@ -87,7 +108,7 @@ export function IdentityDocumentForm({
   const [localUploadedDocuments, setLocalUploadedDocuments] = useState<string[]>([]);
   const [localUploadedFiles, setLocalUploadedFiles] = useState<UploadedFile[]>([]);
   const [localDocumentUploadIds, setLocalDocumentUploadIds] = useState<
-    Record<string, { front?: number; back?: number }>
+    Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>
   >({});
   const [isDigilockerLoading, setIsDigilockerLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -135,13 +156,13 @@ export function IdentityDocumentForm({
   // Determine if we're using lifted state or local state
   const isUsingLiftedState = !!(documentFormState && setDocumentFormState);
   
-  console.log('🏗️ IdentityDocumentForm render:', {
-    isUsingLiftedState,
-    hasDocumentFormState: !!documentFormState,
-    hasSetDocumentFormState: !!setDocumentFormState,
-    currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
-    currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
-  });
+  // console.log('🏗️ IdentityDocumentForm render:', {
+  //   isUsingLiftedState,
+  //   hasDocumentFormState: !!documentFormState,
+  //   hasSetDocumentFormState: !!setDocumentFormState,
+  //   currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
+  //   currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
+  // });
 
   // Get current state values
   const country = isUsingLiftedState ? documentFormState!.country : localCountry;
@@ -174,10 +195,10 @@ export function IdentityDocumentForm({
   };
 
   const setUploadedDocuments = (value: string[] | ((prev: string[]) => string[])) => {
-    console.log('🔧 setUploadedDocuments called, isUsingLiftedState:', isUsingLiftedState);
+    // console.log('🔧 setUploadedDocuments called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedDocuments) : value;
-      console.log('🔧 Setting lifted uploadedDocuments:', newValue);
+      // console.log('🔧 Setting lifted uploadedDocuments:', newValue);
       setDocumentFormState!((prevState) => ({
         ...prevState,
         uploadedDocuments: newValue,
@@ -188,15 +209,15 @@ export function IdentityDocumentForm({
       } else {
         setLocalUploadedDocuments(value);
       }
-      console.log('🔧 Setting local uploadedDocuments');
+      // console.log('🔧 Setting local uploadedDocuments');
     }
   };
 
   const setUploadedFiles = (value: UploadedFile[] | ((prev: UploadedFile[]) => UploadedFile[])) => {
-    console.log('🔧 setUploadedFiles called, isUsingLiftedState:', isUsingLiftedState);
+    // console.log('🔧 setUploadedFiles called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedFiles) : value;
-      console.log('🔧 Setting lifted uploadedFiles:', newValue);
+      // console.log('🔧 Setting lifted uploadedFiles:', newValue);
       setDocumentFormState!((prevState) => ({
         ...prevState,
         uploadedFiles: newValue,
@@ -211,7 +232,7 @@ export function IdentityDocumentForm({
     }
   };
 
-  const setDocumentUploadIds = (value: Record<string, { front?: number; back?: number }> | ((prev: Record<string, { front?: number; back?: number }>) => Record<string, { front?: number; back?: number }>)) => {
+  const setDocumentUploadIds = (value: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }> | ((prev: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>) => Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }>)) => {
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.documentUploadIds) : value;
       setDocumentFormState!((prevState) => ({
@@ -230,9 +251,11 @@ export function IdentityDocumentForm({
   // Helper to add/update document details after upload
   const addDocumentDetail = (
     documentName: string,
-    documentDefinitionId: number,
+    documentDefinitionId: number | string,
     frontFileId: number,
-    backFileId?: number
+    backFileId?: number,
+    frontETag?: string,
+    backETag?: string
   ) => {
     if (!isUsingLiftedState) return; // Only use this with lifted state
     
@@ -246,6 +269,8 @@ export function IdentityDocumentForm({
         documentDefinitionId,
         frontFileId,
         backFileId,
+        frontETag,
+        backETag,
         status: "uploaded" as const,
         uploadedAt: new Date().toISOString(),
       };
@@ -279,20 +304,20 @@ export function IdentityDocumentForm({
     
     // Only trigger if length increased (new document added)
     if (currentLength > previousDocsLength && currentLength > 0) {
-      console.log('🔔 documentsDetails changed! Length:', currentLength);
-      console.log('📋 Current documentsDetails:', documentFormState.documentsDetails);
+      // console.log('🔔 documentsDetails changed! Length:', currentLength);
+      // console.log('📋 Current documentsDetails:', documentFormState.documentsDetails);
+      
+      // Update previous length BEFORE triggering callback
+      setPreviousDocsLength(currentLength);
       
       // Trigger POST request in background after short delay
       setTimeout(() => {
-        console.log('⏰ Triggering auto-save after document upload...');
-        console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
-        onDocumentUploaded?.();
+        // console.log('⏰ Triggering auto-save after document upload...');
+        // console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
+        onDocumentUploaded?.(documentFormState.documentsDetails);
       }, 200);
     }
-    
-    // Update previous length
-    setPreviousDocsLength(currentLength);
-  }, [documentFormState?.documentsDetails, isUsingLiftedState, onDocumentUploaded, previousDocsLength]);
+  }, [documentFormState?.documentsDetails, isUsingLiftedState, onDocumentUploaded]);
 
   // Initialize session sync for cross-device functionality
   const { sessionState, updateSession } = useSessionSync({
@@ -623,16 +648,16 @@ export function IdentityDocumentForm({
     formData.append("DocumentDefinitionId", documentDefinitionId);
     formData.append("Bucket", "string");
     const submissionIdToUse = submissionId?.toString() || "1";
-    console.log(
-      "IdentityDocumentForm: Using UserTemplateSubmissionId:",
-      submissionIdToUse,
-    );
-    console.log(
-      "IdentityDocumentForm: Using DocumentDefinitionId:",
-      documentDefinitionId,
-      "for document:",
-      selectedDocumentName,
-    );
+    // console.log(
+    //   "IdentityDocumentForm: Using UserTemplateSubmissionId:",
+    //   submissionIdToUse,
+    // );
+    // console.log(
+    //   "IdentityDocumentForm: Using DocumentDefinitionId:",
+    //   documentDefinitionId,
+    //   "for document:",
+    //   selectedDocumentName,
+    // );
     formData.append("UserTemplateSubmissionId", submissionIdToUse);
     return formData;
   };
@@ -641,11 +666,18 @@ export function IdentityDocumentForm({
     file: Blob,
     filename: string,
     existingId?: number,
-  ) => {
+  ): Promise<{ id: number; eTag: string | null }> => {
     // Always use POST for uploads, never PUT
     const url = `${API_BASE}/api/Files/upload`;
     const formData = buildFormData(file, filename);
-    const res = await fetch(url, { method: "POST", body: formData });
+    const deviceFingerprint = getDeviceFingerprint(); // Auto-detects Desktop vs Mobile
+    const res = await fetch(url, { 
+      method: "POST", 
+      body: formData,
+      headers: {
+        'X-Device-Fingerprint': deviceFingerprint
+      }
+    });
 
     // Check for 201 Created or 200 OK
     if (!res.ok && res.status !== 201) {
@@ -665,7 +697,11 @@ export function IdentityDocumentForm({
         result.mapping.fileId) ||
       null;
     if (!returnedId) throw new Error("Upload did not return an id");
-    return returnedId as number;
+    
+    // Extract eTag from response
+    const returnedETag = result?.file?.eTag || null;
+    
+    return { id: returnedId as number, eTag: returnedETag as string | null };
   };
 
   const uploadFileToServer = async (file: Blob, filename: string) => {
@@ -816,13 +852,46 @@ export function IdentityDocumentForm({
     if (isUsingLiftedState) {
       const documentDefinitionId = getCurrentDocumentDefinitionId();
       if (documentDefinitionId && typeof fileId === "number") {
+        // Calculate the new document detail
+        const newDetail = {
+          documentName: displayName,
+          documentDefinitionId: typeof documentDefinitionId === 'string' ? documentDefinitionId : documentDefinitionId,
+          frontFileId: fileId,
+          backFileId: undefined,
+          frontETag: undefined,
+          backETag: undefined,
+          status: 'uploaded' as const,
+          uploadedAt: new Date().toISOString(),
+        };
+
+        // Get current state and calculate new documents array
+        const currentDetails = documentFormState?.documentsDetails || [];
+        const newDetails = [...currentDetails, newDetail];
+        
+        // Update state
         addDocumentDetail(displayName, documentDefinitionId, fileId);
+        
+        // Schedule POST request with updated documents
+        queueMicrotask(() => {
+          setTimeout(() => {
+            if (onDocumentUploaded) {
+              console.log('📤 POST request triggered after DigiLocker upload:', displayName);
+              console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
+              onDocumentUploaded(newDetails);
+            }
+          }, 200);
+        });
+      } else {
+        // Still call onDocumentUploaded even if no document details added
+        onDocumentUploaded?.();
       }
+    } else {
+      // Still call onDocumentUploaded even if not using lifted state
+      onDocumentUploaded?.();
     }
 
     // 5) Advance flow
     setIsIdentityDocumentCompleted?.(true);
-    onDocumentUploaded?.();
     onComplete?.();
 
     // Collapse the upload methods panel
@@ -830,17 +899,27 @@ export function IdentityDocumentForm({
   };
 
   // Function to delete a file from server
-  const deleteFileFromServer = async (fileId: number) => {
+  const deleteFileFromServer = async (fileId: number, eTag?: string) => {
     try {
-      console.log('🗑️ Deleting file ID:', fileId);
+      console.log('🗑️ Deleting file ID:', fileId, 'with eTag:', eTag);
       const deleteUrl = `${API_BASE}/api/Files/${fileId}`;
       console.log('🗑️ Delete URL:', deleteUrl);
       
+      const headers: Record<string, string> = {
+        Accept: '*/*',
+      };
+      
+      // Add If-Match header with eTag if available (for optimistic concurrency control)
+      if (eTag) {
+        // Clean eTag format: remove W/"" wrapper if present
+        const cleanETag = eTag.replace(/^W\/"|"$/g, '');
+        headers['If-Match'] = cleanETag;
+        console.log('🔒 Using If-Match header:', cleanETag);
+      }
+      
       const response = await fetch(deleteUrl, {
         method: 'DELETE',
-        headers: {
-          Accept: '*/*',
-        },
+        headers,
       });
 
       console.log('🗑️ Delete response status:', response.status);
@@ -876,14 +955,14 @@ export function IdentityDocumentForm({
 
       // Delete front side if exists
       if (fileIds.front) {
-        console.log('🗑️ Deleting front file, ID:', fileIds.front);
-        deletePromises.push(deleteFileFromServer(fileIds.front));
+        console.log('🗑️ Deleting front file, ID:', fileIds.front, 'eTag:', fileIds.frontETag);
+        deletePromises.push(deleteFileFromServer(fileIds.front, fileIds.frontETag));
       }
 
       // Delete back side if exists
       if (fileIds.back) {
-        console.log('🗑️ Deleting back file, ID:', fileIds.back);
-        deletePromises.push(deleteFileFromServer(fileIds.back));
+        console.log('🗑️ Deleting back file, ID:', fileIds.back, 'eTag:', fileIds.backETag);
+        deletePromises.push(deleteFileFromServer(fileIds.back, fileIds.backETag));
       }
 
       // Wait for all deletions to complete
@@ -902,32 +981,43 @@ export function IdentityDocumentForm({
       setDocumentUploadIds((prev) => {
         const newIds = { ...prev };
         delete newIds[docId];
+        
+        // Update localStorage to remove the deleted document's IDs and eTags
+        if (submissionId) {
+          localStorage.setItem(`documentUploadIds_${submissionId}`, JSON.stringify(newIds));
+        }
+        
         return newIds;
       });
 
       // Remove from documentsDetails array (if using lifted state) and trigger POST
       if (isUsingLiftedState) {
         setDocumentFormState!((prevState) => {
-          const newDetails = prevState.documentsDetails.filter(
-            (doc) => doc.documentName !== documentName
-          );
-          console.log('🗑️ Removed from documentsDetails:', documentName);
+          // Remove any documents that reference the deleted file IDs (front/back)
+          // This is more robust than matching display names which may vary.
+          const newDetails = prevState.documentsDetails.filter((doc) => {
+            const removedFrontMatch = fileIds.front ? doc.frontFileId === fileIds.front : false;
+            const removedBackMatch = fileIds.back ? doc.backFileId === fileIds.back : false;
+            const nameMatch = doc.documentName === documentName; // fallback
+            // keep the doc only if it does NOT match any of the removal criteria
+            return !(removedFrontMatch || removedBackMatch || nameMatch);
+          });
+
+          console.log('🗑️ Removed from documentsDetails (by fileId/name):', documentName);
           console.log('📋 Updated documentsDetails after deletion:', newDetails);
           console.log('📊 Remaining documents count:', newDetails.length);
-          
-          // Schedule POST request to run after this state update completes
-          // Use queueMicrotask + setTimeout to ensure React has updated parent state
-          queueMicrotask(() => {
-            setTimeout(() => {
-              if (onDocumentUploaded) {
-                console.log('📤 POST request triggered after deleting:', documentName);
-                console.log('📋 Remaining documents to be sent:', newDetails.map(doc => doc.documentName));
-                onDocumentUploaded();
-              }
-            }, 150); // Delay to ensure parent state is updated
-          });
-          
-          return {
+
+    // Schedule POST request to run after this state update completes
+    // Use queueMicrotask + setTimeout to ensure React has flushed the update
+    queueMicrotask(() => {
+      setTimeout(() => {
+        if (onDocumentUploaded) {
+          console.log('📤 POST request triggered after deleting:', documentName);
+          console.log('📋 Remaining documents to be sent:', newDetails.map(doc => doc.documentName));
+          onDocumentUploaded(newDetails);
+        }
+      }, 200); // Slightly longer delay to be safer
+    });          return {
             ...prevState,
             documentsDetails: newDetails,
           };
@@ -986,25 +1076,54 @@ export function IdentityDocumentForm({
   };
 
   // Helper to get documentDefinitionId for current selected document
-  const getCurrentDocumentDefinitionId = (): number | null => {
-    if (!country || !selectedDocument) return null;
+  const getCurrentDocumentDefinitionId = (): string | number | null => {
+    // console.log('🔍 getCurrentDocumentDefinitionId called:', {
+    //   country,
+    //   selectedDocument,
+    // });
+    
+    if (!country || !selectedDocument) {
+      // console.log('❌ Missing country or selectedDocument');
+      return null;
+    }
     
     // Get the human-readable document name
     const documentName = currentDocuments.find(
       (docName) => docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
     );
     
+    // console.log('🔍 Found document name:', documentName);
+    
     if (!documentName) return null;
     
     // Try to get from config first
     let documentDefinitionId = getDocumentDefinitionIdFromConfig(country, documentName);
     
+    // console.log('🔍 From config:', documentDefinitionId);
+    
     // Fallback to hardcoded IDs if not in config
     if (!documentDefinitionId) {
       documentDefinitionId = getDocumentDefinitionId(country, documentName);
+      // console.log('🔍 From hardcoded:', documentDefinitionId);
     }
     
-    return documentDefinitionId ? parseInt(documentDefinitionId, 10) : null;
+    // Return as-is if it's a UUID string, or parse as int if it's numeric
+    if (!documentDefinitionId) {
+      // console.log('🔍 No documentDefinitionId found');
+      return null;
+    }
+    
+    // Check if it's a UUID (contains hyphens and hex characters)
+    if (typeof documentDefinitionId === 'string' && documentDefinitionId.includes('-')) {
+      // console.log('🔍 Returning UUID as-is:', documentDefinitionId);
+      return documentDefinitionId;
+    }
+    
+    // Otherwise parse as integer
+    const result = parseInt(documentDefinitionId, 10);
+    // console.log('🔍 Final documentDefinitionId (parsed as int):', result);
+    
+    return result;
   };
 
   // Get current documents to display (titles only)
@@ -1386,6 +1505,9 @@ export function IdentityDocumentForm({
                           submissionId={submissionId}
                           size="large"
                           showUrl={false}
+                          connectionRef={connectionRef}
+                          shouldMaintainConnection={shouldMaintainConnection}
+                          onConnected={onHandoffConnected}
                         />
                         <div className="text-[#676879] text-center font-roboto text-[12px] font-normal leading-4 max-w-[200px]">
                           Scan this QR code with your other device to continue verification.
@@ -1425,12 +1547,12 @@ export function IdentityDocumentForm({
       {/* Files Uploaded Section */}
       {(() => {
         const hasUploadedDocs = uploadedDocuments && uploadedDocuments.length > 0;
-        console.log('🔍 Documents Uploaded section:', {
-          uploadedFiles,
-          uploadedDocuments,
-          hasUploadedDocs,
-          documentUploadIds
-        });
+        // console.log('🔍 Documents Uploaded section:', {
+        //   uploadedFiles,
+        //   uploadedDocuments,
+        //   hasUploadedDocs,
+        //   documentUploadIds
+        // });
         return hasUploadedDocs;
       })() && (
         <div className="flex flex-col items-start gap-4 self-stretch">
@@ -1572,11 +1694,35 @@ export function IdentityDocumentForm({
             // Add document details for backend storage (if using lifted state)
             // Use the fileIds passed from CameraDialog to ensure we have the correct uploaded IDs
             const documentDefinitionId = getCurrentDocumentDefinitionId();
+            console.log('🔍 Camera Dialog - Checking addDocumentDetail conditions:', {
+              documentDefinitionId,
+              frontFileId: uploadedFileIds?.front,
+              backFileId: uploadedFileIds?.back,
+              isUsingLiftedState,
+              shouldAdd: !!(documentDefinitionId && uploadedFileIds?.front),
+            });
             if (documentDefinitionId && uploadedFileIds?.front) {
               const documentName = currentDocuments.find(
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
               ) || docId.replace(/_/g, " ");
               
+              // Calculate the new document detail
+              const newDetail = {
+                documentName,
+                documentDefinitionId: typeof documentDefinitionId === 'string' ? documentDefinitionId : documentDefinitionId,
+                frontFileId: uploadedFileIds.front,
+                backFileId: uploadedFileIds.back,
+                frontETag: undefined,
+                backETag: undefined,
+                status: 'uploaded' as const,
+                uploadedAt: new Date().toISOString(),
+              };
+
+              // Get current state and calculate new documents array
+              const currentDetails = documentFormState?.documentsDetails || [];
+              const newDetails = [...currentDetails, newDetail];
+              
+              // Update state
               addDocumentDetail(
                 documentName,
                 documentDefinitionId,
@@ -1589,6 +1735,21 @@ export function IdentityDocumentForm({
                 frontFileId: uploadedFileIds.front,
                 backFileId: uploadedFileIds.back,
               });
+
+              // Schedule POST request with updated documents
+              queueMicrotask(() => {
+                setTimeout(() => {
+                  if (onDocumentUploaded) {
+                    console.log('📤 POST request triggered after camera upload:', documentName);
+                    console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
+                    onDocumentUploaded(newDetails);
+                  }
+                }, 200);
+              });
+            } else {
+              console.log('❌ Skipping addDocumentDetail (Camera) - conditions not met');
+              // Still call onDocumentUploaded even if no document details added
+              onDocumentUploaded?.();
             }
 
             setSelectedDocument("");
@@ -1612,9 +1773,13 @@ export function IdentityDocumentForm({
           const docId = selectedDocument;
 
           try {
+            // Get documentDefinitionId BEFORE clearing selectedDocument
+            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            // console.log('🔍 Upload Dialog - Got documentDefinitionId:', documentDefinitionId);
+
             const prevIds = documentUploadIds[docId];
 
-            const [frontId, backId] = await Promise.all([
+            const [frontResult, backResult] = await Promise.all([
               uploadOrUpdateFile(
                 frontFile,
                 `${docId}-front.${frontFile.type.includes("pdf") ? "pdf" : "jpg"}`,
@@ -1627,14 +1792,40 @@ export function IdentityDocumentForm({
               ),
             ]);
 
+            const frontId = frontResult.id;
+            const backId = backResult.id;
+            const frontETag = frontResult.eTag;
+            const backETag = backResult.eTag;
+
+            // console.log('🔍 Upload Dialog - File IDs:', { frontId, backId, frontETag, backETag });
+
+            // Save eTags to localStorage
+            if (submissionId) {
+              const uploadData = {
+                ...documentUploadIds,
+                [docId]: { 
+                  front: frontId, 
+                  back: backId,
+                  frontETag: frontETag || undefined,
+                  backETag: backETag || undefined
+                },
+              };
+              localStorage.setItem(`documentUploadIds_${submissionId}`, JSON.stringify(uploadData));
+            }
+
             setDocumentUploadIds((prev) => ({
               ...prev,
-              [docId]: { front: frontId, back: backId },
+              [docId]: { 
+                front: frontId, 
+                back: backId,
+                frontETag: frontETag || undefined,
+                backETag: backETag || undefined
+              },
             }));
 
             setUploadedDocuments((prevDocs) => {
               const newDocs = prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId];
-              console.log('📄 Updated uploadedDocuments:', newDocs);
+              // console.log('📄 Updated uploadedDocuments:', newDocs);
               return newDocs;
             });
 
@@ -1649,29 +1840,70 @@ export function IdentityDocumentForm({
                 (f) => f.id.replace(/-\d+$/, "") !== docId,
               );
               const newFiles = [...filtered, newFile];
-              console.log('📁 Updated uploadedFiles:', newFiles);
+              // console.log('📁 Updated uploadedFiles:', newFiles);
               return newFiles;
             });
 
             // Add document details for backend storage (if using lifted state)
-            const documentDefinitionId = getCurrentDocumentDefinitionId();
+            // Use the documentDefinitionId we got earlier (before any state changes)
+            // console.log('🔍 Upload Dialog - Checking addDocumentDetail conditions:', {
+            //   documentDefinitionId,
+            //   frontId,
+            //   backId,
+            //   isUsingLiftedState,
+            //   shouldAdd: !!(documentDefinitionId && frontId),
+            // });
             if (documentDefinitionId && frontId) {
               const documentName = currentDocuments.find(
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
               ) || docId.replace(/_/g, " ");
               
+              // Calculate the new document detail
+              const newDetail = {
+                documentName,
+                documentDefinitionId: typeof documentDefinitionId === 'string' ? documentDefinitionId : documentDefinitionId,
+                frontFileId: frontId,
+                backFileId: backId,
+                frontETag: frontETag || undefined,
+                backETag: backETag || undefined,
+                status: 'uploaded' as const,
+                uploadedAt: new Date().toISOString(),
+              };
+
+              // Get current state and calculate new documents array
+              const currentDetails = documentFormState?.documentsDetails || [];
+              const newDetails = [...currentDetails, newDetail];
+              
+              // Update state
               addDocumentDetail(
                 documentName,
                 documentDefinitionId,
                 frontId,
-                backId
+                backId,
+                frontETag || undefined,
+                backETag || undefined
               );
-              console.log('✅ Added document detail (Upload Dialog):', {
-                documentName,
-                documentDefinitionId,
-                frontFileId: frontId,
-                backFileId: backId,
+              // console.log('✅ Added document detail (Upload Dialog):', {
+              //   documentName,
+              //   documentDefinitionId,
+              //   frontFileId: frontId,
+              //   backFileId: backId,
+              // });
+
+              // Schedule POST request with updated documents
+              queueMicrotask(() => {
+                setTimeout(() => {
+                  if (onDocumentUploaded) {
+                    console.log('📤 POST request triggered after file upload:', documentName);
+                    console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
+                    onDocumentUploaded(newDetails);
+                  }
+                }, 200);
               });
+            } else {
+              // console.log('❌ Skipping addDocumentDetail - conditions not met');
+              // Still call onDocumentUploaded even if no document details added
+              onDocumentUploaded?.();
             }
 
             setSelectedDocument("");

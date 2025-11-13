@@ -1,6 +1,11 @@
-import { useState, useEffect } from 'react';
-import { ErrorOutline, Spinner } from './SVG_Files';
+import { useState, useEffect, useRef } from 'react';
+import { ErrorOutline, Spinner, CloseIcon } from './SVG_Files';
 import { generateQRCodeDataURL, QRCodeOptions } from '@/lib/qr-utils';
+import { useToast } from '@/hooks/use-toast';
+import * as signalR from '@microsoft/signalr';
+import { getDeviceFingerprint } from '@/lib/deviceFingerprint';
+
+// API base & IDV_VERIFICATION base
 
 interface QRCodeDisplayProps {
   shortCode: string;
@@ -12,6 +17,10 @@ interface QRCodeDisplayProps {
   size?: 'small' | 'medium' | 'large';
   showUrl?: boolean;
   className?: string;
+  // Props for controlling SignalR connection lifecycle from parent
+  connectionRef?: React.MutableRefObject<any>;
+  shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onConnected?: () => void; // 👈 NEW
 }
 
 export function QRCodeDisplay(props: QRCodeDisplayProps) {
@@ -25,12 +34,19 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
     size = 'medium',
     showUrl = true,
     className = '',
+    connectionRef: externalConnectionRef,
+    shouldMaintainConnection,
   } = props;
 
+  const { toast } = useToast();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [verificationUrl, setVerificationUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const internalConnectionRef = useRef<signalR.HubConnection | null>(null);
+  
+  // Use external ref if provided, otherwise use internal ref
+  const connectionRef = externalConnectionRef || internalConnectionRef;
 
   // Steps:
   // 0: blurred placeholder → click generates QR
@@ -99,7 +115,7 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         console.log('Join Code:', joinCode);
         
         // Generate QR code with join code URL
-        const baseUrl = 'http://localhost:4200';
+        const baseUrl = 'http://10.10.5.231:4200';
         const qrUrl = `${baseUrl}/HandoffPage/${joinCode}`;
         
         const options: QRCodeOptions = {
@@ -114,6 +130,9 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
 
         // Build human-readable URL with join code
         setVerificationUrl(qrUrl);
+
+        // Connect to SignalR WebSocket
+        await connectToSignalR(accessToken, submissionId);
       } catch (err) {
         console.error('Failed to generate QR code:', err);
         setError('Failed to generate QR code');
@@ -124,6 +143,223 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
 
     generateQRCode();
   }, [clickStep, shortCode, templateVersionId, userId, sessionId, currentStep, submissionId]);
+
+  // SignalR WebSocket connection
+  const connectToSignalR = async (accessToken: string, submissionId: number) => {
+    try {
+      // Close existing connection if any
+      if (connectionRef.current) {
+        await connectionRef.current.stop();
+      }
+
+      // Auto-detect device fingerprint (Desktop vs Mobile)
+      const deviceFingerprint = getDeviceFingerprint();
+      const deviceType = window.location.pathname.includes('/HandoffPage/') ? 'Mobile (Device 2)' : 'Desktop (Device 1)';
+      console.log(`🔑 ${deviceType} Device Fingerprint for SignalR:`, deviceFingerprint);
+
+      // Build SignalR connection
+      // Build SignalR connection. Note:
+      // - The 'timeout' option passed into withUrl is not a valid option for
+      //   the SignalR client and causes unexpected behavior. We therefore
+      //   remove it and instead configure the client's timeout/keep-alive
+      //   properties directly after building the connection.
+      const connection = new signalR.HubConnectionBuilder()
+        .withUrl(`ws://10.10.5.231:5027/hubs/handoff?access_token=${accessToken}`, {
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets,
+          // Add custom headers including device fingerprint
+          headers: {
+            'X-Device-Fingerprint': deviceFingerprint
+          }
+        })
+        .configureLogging(signalR.LogLevel.Debug)
+        .build();
+
+      // Increase client-side timeouts to reduce spurious "Server timeout"
+      // disconnects. These values are client-side only and don't change
+      // any server behaviour. Keep them reasonable; extremely large values
+      // hide real connectivity problems.
+      // Default serverTimeoutInMilliseconds is 30_000 (30s). We'll increase
+      // to 5 minutes here. keepAliveIntervalInMilliseconds controls how
+      // often the client will send keepalives; set to 15s.
+      try {
+        (connection as any).serverTimeoutInMilliseconds = 5 * 60 * 1000; // 5 minutes
+        (connection as any).keepAliveIntervalInMilliseconds = 15 * 1000; // 15 seconds
+      } catch (e) {
+        // Some SignalR builds may not allow writing these properties; ignore
+        // if not present and rely on a manual heartbeat below.
+        console.warn('Could not set client timeout/keep-alive properties', e);
+      }
+
+      // Handle reconnection
+      connection.onreconnecting((error) => {
+        console.log('🔄 SignalR reconnecting...', error);
+        console.log('🔄 Reconnection attempt due to:', error?.message || 'Unknown reason');
+        toast({
+          title: "Reconnecting...",
+          description: "Connection lost, attempting to reconnect.",
+          duration: 3000,
+        });
+      });
+
+      connection.onreconnected((connectionId) => {
+        console.log('✅ SignalR reconnected with connectionId:', connectionId);
+        toast({
+          title: "✅ Reconnected",
+          description: "Connection restored successfully.",
+          duration: 3000,
+        });
+      });
+
+      connection.onclose((error) => {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.error('❌ SignalR CONNECTION CLOSED');
+        console.error('❌ Close reason:', error?.message || 'No error provided');
+        console.error('❌ Error details:', error);
+        console.error('❌ Connection was in state:', connection.state);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
+        // Clear heartbeat interval when connection closes
+        const interval = (connection as any)._heartbeatInterval;
+        if (interval) {
+          clearInterval(interval);
+          console.log('🛑 Heartbeat interval cleared on connection close');
+        }
+        
+        if (error) {
+          toast({
+            title: "❌ Connection Lost",
+            description: `Connection closed: ${error.message}`,
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else {
+          console.log('ℹ️ Connection closed gracefully (no error)');
+        }
+      });
+
+      // Listen for personal information update events
+      connection.on('personal.updated', (data: any) => {
+        console.log('🔔 personal.updated - RAW Data:', JSON.stringify(data, null, 2));
+        
+        toast({
+          title: "📝 Personal Info Updated",
+          description: `Personal information has been updated from another device`,
+          duration: 4000,
+        });
+      });
+
+      // Listen for file upload completed events
+      connection.on('file.upload.completed', (data: any) => {
+        console.log('🔔 file.upload.completed - RAW Data:', JSON.stringify(data, null, 2));
+        
+        toast({
+          title: "📎 File Uploaded",
+          description: `Document uploaded: ${data.data?.fileName || 'Unknown file'}`,
+          duration: 4000,
+        });
+      });
+
+      // Listen for generic notifications (if backend sends any)
+      connection.on('ReceiveNotification', (message: string) => {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🔔 SignalR Updated: ReceiveNotification');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📨 RAW Message:', message);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        
+        toast({
+          title: "📨 Notification",
+          description: message.length > 100 ? message.substring(0, 100) + '...' : message,
+          duration: 3000,
+        });
+      });
+
+      console.log('📡 Registered handlers for: personal.updated, file.upload.completed, ReceiveNotification');
+
+      // Start connection
+      await connection.start();
+      // expose connection and notify parent
+      if (props.connectionRef) props.connectionRef.current = connection;
+      if (props.onConnected) props.onConnected(); // 👈 NEW
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✅ SignalR CONNECTED to handoff hub');
+      console.log('✅ Connection State:', connection.state);
+      console.log('✅ Connection ID:', connection.connectionId);
+      console.log('✅ Transport:', 'WebSockets');
+      console.log('✅ Submission ID:', submissionId);
+      console.log('✅ Device Fingerprint:', deviceFingerprint);
+      console.log('✅ Access Token (first 50 chars):', accessToken.substring(0, 50) + '...');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // Try to explicitly subscribe to notifications for this submission
+      // The backend might auto-register based on the JWT token, but let's try explicitly
+      try {
+        console.log('📞 Attempting to invoke JoinSubmission on hub with submissionId:', submissionId);
+        await connection.invoke('JoinSubmission', submissionId);
+        console.log('✅ Successfully joined submission:', submissionId);
+      } catch (invokeError: any) {
+        console.warn('⚠️ JoinSubmission method not available or failed:', invokeError.message);
+        console.log('ℹ️ Backend might auto-register based on JWT token in URL');
+      }
+      
+      // Connection successful - the server should automatically associate this connection
+      // with the submission based on the access token in the URL
+      toast({
+        title: "🔗 Connected",
+        description: `Real-time updates enabled for submission:${submissionId}`,
+        duration: 3000,
+      });
+
+      // Optional: Send periodic heartbeat to keep connection alive.
+      // A local console-only heartbeat is insufficient to prevent
+      // "Server timeout elapsed without receiving a message from the server".
+      // If the server exposes a lightweight ping method (e.g. 'Ping'), we
+      // attempt to invoke it periodically. If the server does not expose
+      // such a method the invoke will fail and we silently ignore the
+      // error — this is safe and keeps behaviour robust across backends.
+      const heartbeatInterval = setInterval(async () => {
+        if (connection.state === signalR.HubConnectionState.Connected) {
+          try {
+            // Try a no-op/ping invoke. If server doesn't support it, we'll
+            // receive an error which we ignore — the goal is to create
+            // outbound activity so both sides consider the connection active.
+            await connection.invoke('Ping');
+            console.log('💓 Heartbeat - Ping invoked');
+          } catch (err) {
+            // Ignore errors from missing server method; still useful to
+            // have the attempt logged for diagnostics.
+            console.log('💓 Heartbeat - ping invoke failed or not supported', err?.message || err);
+          }
+        } else {
+          console.warn('⚠️ Heartbeat - Connection not in Connected state:', connection.state);
+          clearInterval(heartbeatInterval);
+        }
+      }, 30000); // Every 30 seconds
+
+      // Store interval reference for cleanup
+      (connection as any)._heartbeatInterval = heartbeatInterval;
+    } catch (err) {
+      console.error('❌ SignalR connection failed:', err);
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to real-time updates.",
+        variant: "destructive",
+        duration: 4000,
+      });
+    }
+  };
+
+  // DON'T cleanup SignalR connection on unmount - keep it alive!
+  // This allows the connection to persist when closing/reopening document dialogs
+  // Connection will only close when user submits the form or navigates away from page
+  useEffect(() => {
+    return () => {
+      console.log('⚠️ QRCodeDisplay unmounting - keeping SignalR connection alive');
+      // Intentionally NOT stopping the connection here
+      // The connection will persist in memory and continue receiving events
+    };
+  }, []);
 
   // Close enlarged modal on Escape
   useEffect(() => {

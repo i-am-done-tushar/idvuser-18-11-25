@@ -14,7 +14,7 @@ export interface QRCodeOptions {
 export async function generateQRCodeDataURL(options: QRCodeOptions): Promise<string> {
   try {
     // For join codes, use the baseUrl from the options or fallback
-    const baseUrl = 'http://localhost:4200';
+    const baseUrl = 'http://10.10.5.231:4200';
     
     // If shortCode looks like a join code (contains underscores or special chars), 
     // use the joincode route directly
