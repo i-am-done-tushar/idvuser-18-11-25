@@ -144,6 +144,8 @@ export default function HandoffPage() {
   // SignalR connection ref
   const signalRConnectionRef = useRef<signalR.HubConnection | null>(null);
 
+  const [signalRConnected, setSignalRConnected] = useState(false);
+
   const getPersonalInfoConfig = () => {
     if (!templateVersion) return {};
     const personalInfoSection = templateVersion.sections.find(
@@ -330,30 +332,27 @@ export default function HandoffPage() {
         await signalRConnectionRef.current.stop();
       }
 
-      // Get mobile device fingerprint (Device 2 - Handoff)
       const deviceFingerprint = getMobileDeviceFingerprint();
       console.log('🔑 Mobile Device Fingerprint (Device 2) for SignalR:', deviceFingerprint);
 
-      // Build SignalR connection
+      // Use normal HTTP URL + accessTokenFactory, NOT manual ws:// + skipNegotiation
+      const base = API_BASE.replace(/\/$/, "");
+      const hubUrl = `${base}/hubs/handoff`;
+
       const connection = new signalR.HubConnectionBuilder()
-        .withUrl(`ws://10.10.5.231:5027/hubs/handoff?access_token=${accessToken}`, {
-          skipNegotiation: true,
-          transport: signalR.HttpTransportType.WebSockets,
-          timeout: 60000000, // 60 seconds timeout
-          keepAliveIntervalInMilliseconds: 30000, // Send keep-alive every 30 seconds
-          // Add custom headers including device fingerprint
+        .withUrl(hubUrl, {
+          accessTokenFactory: () => accessToken,
+          transport: signalR.HttpTransportType.WebSockets, // optional
           headers: {
-            'X-Device-Fingerprint': deviceFingerprint
-          }
+            "X-Device-Fingerprint": deviceFingerprint,
+          },
         })
-  
+        .withAutomaticReconnect([0, 2000, 10000, 30000])
         .configureLogging(signalR.LogLevel.Debug)
         .build();
 
-      // Handle reconnection
       connection.onreconnecting((error) => {
-        console.log('🔄 SignalR reconnecting...', error);
-        console.log('🔄 Reconnection attempt due to:', error?.message || 'Unknown reason');
+        console.log("🔄 SignalR reconnecting...", error);
         toast({
           title: "Reconnecting...",
           description: "Connection lost, attempting to reconnect.",
@@ -361,29 +360,31 @@ export default function HandoffPage() {
         });
       });
 
-      connection.onreconnected((connectionId) => {
-        console.log('✅ SignalR reconnected with connectionId:', connectionId);
+      connection.onreconnected(async (connectionId) => {
+        console.log("✅ SignalR reconnected with connectionId:", connectionId);
         toast({
           title: "✅ Reconnected",
           description: "Connection restored successfully.",
           duration: 3000,
         });
+
+        // 🔁 IMPORTANT: re-join submission group after reconnect
+        try {
+          console.log("📞 Re-joining submission after reconnect:", submissionId);
+          await connection.invoke("JoinSubmission", submissionId);
+          console.log("✅ Rejoined submission:", submissionId);
+        } catch (e: any) {
+          console.warn("❌ Failed to rejoin submission after reconnect:", e?.message || e);
+        }
       });
 
       connection.onclose((error) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.error('❌ SignalR CONNECTION CLOSED');
-        console.error('❌ Close reason:', error?.message || 'No error provided');
-        console.error('❌ Error details:', error);
-        console.error('❌ Connection was in state:', connection.state);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
-        // Clear heartbeat interval when connection closes
-        const interval = (connection as any)._heartbeatInterval;
-        if (interval) {
-          clearInterval(interval);
-          console.log('🛑 Heartbeat interval cleared on connection close');
-        }
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.error("❌ SignalR CONNECTION CLOSED");
+        console.error("❌ Close reason:", error?.message || "No error provided");
+        console.error("❌ Error details:", error);
+        console.error("❌ Connection was in state:", connection.state);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         
         if (error) {
           toast({
@@ -393,71 +394,37 @@ export default function HandoffPage() {
             duration: 5000,
           });
         } else {
-          console.log('ℹ️ Connection closed gracefully (no error)');
+          console.log("ℹ️ Connection closed gracefully (no error)");
         }
+
+        // optional: you can clear the flag here if you want
+        setSignalRConnected(false);
       });
 
-      // Listen for personal information update events
-      connection.on('personal.updated', (data: any) => {
-        console.log('🔔 personal.updated - RAW Data:', JSON.stringify(data, null, 2));
-        
-        toast({
-          title: "📝 Personal Info Updated",
-          description: `Personal information has been updated from another device`,
-          duration: 4000,
-        });
-      });
+      // ❌ REMOVE the old handlers here for:
+      // connection.on('personal.updated', ...)
+      // connection.on('file.upload.completed', ...)
+      // connection.on('ReceiveNotification', ...)
+      // Those will be attached in the useEffect below, with proper data refresh.
 
-      // Listen for file upload completed events
-      connection.on('file.upload.completed', (data: any) => {
-        console.log('🔔 file.upload.completed - RAW Data:', JSON.stringify(data, null, 2));
-        
-        toast({
-          title: "📎 File Uploaded",
-          description: `Document uploaded: ${data.data?.fileName || 'Unknown file'}`,
-          duration: 4000,
-        });
-      });
-
-      // Listen for generic notifications (if backend sends any)
-      connection.on('ReceiveNotification', (message: string) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔔 SignalR Updated: ReceiveNotification');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📨 RAW Message:', message);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-        
-        toast({
-          title: "📨 Notification",
-          description: message.length > 100 ? message.substring(0, 100) + '...' : message,
-          duration: 3000,
-        });
-      });
-
-      console.log('📡 Registered handlers for: personal.updated, file.upload.completed, ReceiveNotification');
-
-      // Start connection
+      console.log("📡 Starting SignalR connection...");
       await connection.start();
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('✅ SignalR CONNECTED to handoff hub');
-      console.log('✅ Connection State:', connection.state);
-      console.log('✅ Connection ID:', connection.connectionId);
-      console.log('✅ Transport:', 'WebSockets');
-      console.log('✅ Submission ID:', submissionId);
-      console.log('✅ Device Fingerprint:', deviceFingerprint);
-      console.log('✅ Access Token (first 50 chars):', accessToken.substring(0, 50) + '...');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
-      // Try to explicitly subscribe to notifications for this submission
+      console.log("✅ SignalR CONNECTED to handoff hub");
+      console.log("✅ Connection State:", connection.state);
+      console.log("✅ Connection ID:", connection.connectionId);
+      console.log("✅ Submission ID:", submissionId);
+      console.log("✅ Device Fingerprint:", deviceFingerprint);
+      console.log("✅ Access Token (first 50 chars):", accessToken.substring(0, 50) + "...");
+
+      // Join group for this submission on initial connect
       try {
-        console.log('📞 Attempting to invoke JoinSubmission on hub with submissionId:', submissionId);
-        await connection.invoke('JoinSubmission', submissionId);
-        console.log('✅ Successfully joined submission:', submissionId);
+        console.log("📞 Attempting to invoke JoinSubmission on hub with submissionId:", submissionId);
+        await connection.invoke("JoinSubmission", submissionId);
+        console.log("✅ Successfully joined submission:", submissionId);
       } catch (invokeError: any) {
-        console.warn('⚠️ JoinSubmission method not available or failed:', invokeError.message);
-        console.log('ℹ️ Backend might auto-register based on JWT token in URL');
+        console.warn("⚠️ JoinSubmission method not available or failed:", invokeError.message);
       }
-      
+
       toast({
         title: "🔗 Connected",
         description: `Real-time updates enabled for submission:${submissionId}`,
@@ -465,21 +432,10 @@ export default function HandoffPage() {
       });
 
       signalRConnectionRef.current = connection;
+      setSignalRConnected(true); // 👈 tell React the connection is ready
 
-      // Heartbeat to keep connection alive
-      const heartbeatInterval = setInterval(() => {
-        if (connection.state === signalR.HubConnectionState.Connected) {
-          console.log('💓 Heartbeat - Connection still alive');
-        } else {
-          console.warn('⚠️ Heartbeat - Connection not in Connected state:', connection.state);
-          clearInterval(heartbeatInterval);
-        }
-      }, 30000); // Every 30 seconds
-
-      // Store interval reference for cleanup
-      (connection as any)._heartbeatInterval = heartbeatInterval;
     } catch (err) {
-      console.error('❌ SignalR connection failed:', err);
+      console.error("❌ SignalR connection failed:", err);
       toast({
         title: "Connection Error",
         description: "Failed to connect to real-time updates.",
@@ -1367,19 +1323,17 @@ export default function HandoffPage() {
 
   // SignalR: Listen for cross-device updates
   useEffect(() => {
-    if (!signalRConnectionRef.current || !submissionId || !templateVersion) return;
-
     const connection = signalRConnectionRef.current;
+    if (!connection || !submissionId || !templateVersion || !signalRConnected) return;
+
     const currentDeviceId = getMobileDeviceFingerprint();
 
-    // Handler for personal.updated event
     const handlePersonalUpdated = async (message: any) => {
-      console.log('🔔 SignalR: personal.updated received:', message);
-      
-      // Only refresh if the update came from a different device
+      console.log("🔔 SignalR: personal.updated received:", message);
+
       if (message.deviceId && message.deviceId !== currentDeviceId) {
-        console.log('🔄 Update from different device, refreshing Personal Information...');
-        
+        console.log("🔄 Update from different device, refreshing Personal Information...");
+
         try {
           const response = await fetch(
             `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
@@ -1394,14 +1348,13 @@ export default function HandoffPage() {
             });
 
             if (personalInfoSubmission) {
-              // Parse fieldValue - it might be a string or already an object
               let parsedValue: any;
-              if (typeof personalInfoSubmission.fieldValue === 'string') {
+              if (typeof personalInfoSubmission.fieldValue === "string") {
                 parsedValue = JSON.parse(personalInfoSubmission.fieldValue);
               } else {
                 parsedValue = personalInfoSubmission.fieldValue;
               }
-              
+
               setFormData((prev) => ({
                 ...prev,
                 firstName: parsedValue.firstName ?? prev.firstName,
@@ -1420,10 +1373,9 @@ export default function HandoffPage() {
                 permanentPostalCode: parsedValue.permanentPostalCode ?? prev.permanentPostalCode,
               }));
 
-              // Update eTag from the notification
               if (message.data?.eTag) {
-                const cleanedETag = message.data.eTag.replace(/^W\/"|"$/g, '');
-                console.log('📦 Updated Personal Info eTag from SignalR:', cleanedETag);
+                const cleanedETag = message.data.eTag.replace(/^W\/"|"$/g, "");
+                console.log("📦 Updated Personal Info eTag from SignalR:", cleanedETag);
                 setPersonalInfoETag(cleanedETag);
                 localStorage.setItem(`personalInfoETag_${submissionId}`, cleanedETag);
               }
@@ -1436,62 +1388,67 @@ export default function HandoffPage() {
             }
           }
         } catch (error) {
-          console.error('Error refreshing personal info:', error);
+          console.error("Error refreshing personal info:", error);
         }
       }
     };
 
-    // Handler for file.upload.completed event
     const handleFileUploadCompleted = async (message: any) => {
-      console.log('🔔 SignalR: file.upload.completed received:', message);
-      
-      // Only refresh if the upload came from a different device
-      if (message.deviceId && message.deviceId !== currentDeviceId) {
-        console.log('🔄 Upload from different device, refreshing Documents...');
-        
-        try {
-          const response = await fetch(
-            `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
-            { method: "GET", headers: { Accept: "application/json" } }
-          );
+      console.log("🔔 SignalR: file.upload.completed received:", message);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
+          { method: "GET", headers: { Accept: "application/json" } }
+        );
 
-          if (response.ok) {
-            const submissionValues = await response.json();
-            const documentsSubmission = submissionValues.find((s: any) => {
-              const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
-              return section?.sectionType === "documents";
+        if (response.ok) {
+          const submissionValues = await response.json();
+          const documentsSubmission = submissionValues.find((s: any) => {
+            const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+            return section?.sectionType === "documents";
+          });
+
+          if (documentsSubmission) {
+            const parsedValue = JSON.parse(documentsSubmission.fieldValue);
+            const documentsArray = parsedValue.documents || [];
+            const uploadedDocIds: string[] = [];
+            const rebuiltDocumentUploadIds: Record<
+              string,
+              { front?: number; back?: number; frontETag?: string; backETag?: string }
+            > = {};
+
+            documentsArray.forEach((doc: any) => {
+              const docName = doc.documentName;
+              const docId = docName.toLowerCase().replace(/\s+/g, "_");
+              uploadedDocIds.push(docId);
+              rebuiltDocumentUploadIds[docId] = {
+                front: doc.frontFileId,
+                ...(doc.backFileId && { back: doc.backFileId }),
+                ...(doc.frontETag && { frontETag: doc.frontETag }),
+                ...(doc.backETag && { backETag: doc.backETag }),
+              };
             });
 
-            if (documentsSubmission) {
-              const parsedValue = JSON.parse(documentsSubmission.fieldValue);
-              const documentsArray = parsedValue.documents || [];
-              const uploadedDocIds: string[] = [];
-              const rebuiltDocumentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }> = {};
+            setDocumentFormState((prev) => ({
+              ...prev,
+              country: parsedValue.country || prev.country,
+              uploadedDocuments: uploadedDocIds,
+              documentUploadIds: rebuiltDocumentUploadIds,
+              documentsDetails: documentsArray,
+            }));
 
-              documentsArray.forEach((doc: any) => {
-                const docName = doc.documentName;
-                const docId = docName.toLowerCase().replace(/\s+/g, "_");
-                uploadedDocIds.push(docId);
-                rebuiltDocumentUploadIds[docId] = {
-                  front: doc.frontFileId,
-                  ...(doc.backFileId && { back: doc.backFileId }),
-                  ...(doc.frontETag && { frontETag: doc.frontETag }),
-                  ...(doc.backETag && { backETag: doc.backETag }),
-                };
+            if (documentsArray.length > 0) {
+              setIsIdentityDocumentCompleted(true);
+            }
+
+            if (message.status === "Deleted") {
+              toast({
+                title: "🗑️ File Deleted",
+                description: "A document has been deleted.",
+                duration: 3000,
               });
-
-              setDocumentFormState((prev) => ({
-                ...prev,
-                country: parsedValue.country || prev.country,
-                uploadedDocuments: uploadedDocIds,
-                documentUploadIds: rebuiltDocumentUploadIds,
-                documentsDetails: documentsArray,
-              }));
-
-              if (documentsArray.length > 0) {
-                setIsIdentityDocumentCompleted(true);
-              }
-
+            } else if (message.deviceId && message.deviceId !== currentDeviceId) {
               toast({
                 title: "📱 Update from other device",
                 description: "Documents have been uploaded from another device.",
@@ -1499,22 +1456,20 @@ export default function HandoffPage() {
               });
             }
           }
-        } catch (error) {
-          console.error('Error refreshing documents:', error);
         }
+      } catch (error) {
+        console.error("Error refreshing documents:", error);
       }
     };
 
-    // Register event listeners
-    connection.on('personal.updated', handlePersonalUpdated);
-    connection.on('file.upload.completed', handleFileUploadCompleted);
+    connection.on("personal.updated", handlePersonalUpdated);
+    connection.on("file.upload.completed", handleFileUploadCompleted);
 
-    // Cleanup
     return () => {
-      connection.off('personal.updated', handlePersonalUpdated);
-      connection.off('file.upload.completed', handleFileUploadCompleted);
+      connection.off("personal.updated", handlePersonalUpdated);
+      connection.off("file.upload.completed", handleFileUploadCompleted);
     };
-  }, [signalRConnectionRef.current, submissionId, templateVersion, toast]);
+  }, [signalRConnected, submissionId, templateVersion, toast]);
 
   // Welcome back toast and expand logic
   useEffect(() => {
@@ -1707,6 +1662,26 @@ export default function HandoffPage() {
     setExpandedSections(prev => ({ ...prev, [currentStep]: true }));
     if (currentStep >= 2) setShowMobileMenu(false);
   }, [currentStep]);
+
+  // Handle visibility change to resume SignalR connection when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && signalRConnectionRef.current) {
+        const connection = signalRConnectionRef.current;
+        if (connection.state === signalR.HubConnectionState.Disconnected) {
+          console.log('🔄 Tab became visible, attempting to resume SignalR connection...');
+          connection.start().catch(err => {
+            console.error('❌ Failed to resume SignalR connection on visibility change:', err);
+          });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const postSectionData = async (section: any, updatedDocuments?: any[]) => {
     if (!templateVersion || !userId || !submissionId) return;

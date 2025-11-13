@@ -616,12 +616,28 @@ export function IdentityVerificationPage({
 
     // Handler for file.upload.completed event
     const handleFileUploadCompleted = async (message: any) => {
-      console.log('🔔 IdentityVerificationPage - file.upload.completed:', JSON.stringify(message, null, 2));
-      
-      // Only refresh if the upload came from a different device
-      if (message.deviceId && message.deviceId !== currentDeviceId) {
-        console.log('✅ Different device - fetching updated documents...');
-        
+      console.log(
+        "🔔 IdentityVerificationPage - file.upload.completed:",
+        JSON.stringify(message, null, 2)
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const isSameDevice =
+        message.deviceId && message.deviceId === currentDeviceId;
+
+      console.log("🆔 Message Device ID:", message?.deviceId);
+      console.log("🆔 Current Device ID:", currentDeviceId);
+      console.log("🔍 Device IDs Match?", isSameDevice);
+      console.log(
+        "🔍 Should Update?",
+        !message.deviceId || !isSameDevice
+      );
+
+      // If deviceId is missing, assume different device and refresh
+      if (!message.deviceId || !isSameDevice) {
+        console.log("✅ Refreshing documents after file.upload.completed...");
+
         try {
           const response = await fetch(
             `${API_BASE}/api/UserTemplateSubmissionValues/submissions/${submissionId}/values`,
@@ -631,16 +647,25 @@ export function IdentityVerificationPage({
           if (response.ok) {
             const submissionValues = await response.json();
             const documentsSubmission = submissionValues.find((s: any) => {
-              const section = templateVersion.sections.find(sec => sec.id === s.templateSectionId);
+              const section = templateVersion.sections.find(
+                (sec) => sec.id === s.templateSectionId
+              );
               return section?.sectionType === "documents";
             });
 
             if (documentsSubmission) {
-              const parsedValue = JSON.parse(documentsSubmission.fieldValue);
-              const documentsArray = parsedValue.documents || [];
-              console.log('✅ Updating Documents from other device');
+              const parsedValue =
+                typeof documentsSubmission.fieldValue === "string"
+                  ? JSON.parse(documentsSubmission.fieldValue)
+                  : documentsSubmission.fieldValue;
+
+              const documentsArray = parsedValue?.documents || [];
+              console.log("✅ Updating Documents from other/missing device");
               const uploadedDocIds: string[] = [];
-              const rebuiltDocumentUploadIds: Record<string, { front?: number; back?: number; frontETag?: string; backETag?: string }> = {};
+              const rebuiltDocumentUploadIds: Record<
+                string,
+                { front?: number; back?: number; frontETag?: string; backETag?: string }
+              > = {};
 
               documentsArray.forEach((doc: any) => {
                 const docName = doc.documentName;
@@ -668,18 +693,19 @@ export function IdentityVerificationPage({
 
               toast({
                 title: "📱 Update from other device",
-                description: "Documents have been uploaded from another device.",
+                description:
+                  "Documents have been updated from another device or session.",
                 duration: 3000,
               });
 
-              setDocsVersion(v => v + 1);
+              setDocsVersion((v) => v + 1);
             }
           }
         } catch (error) {
-          console.error('❌ Error refreshing documents:', error);
+          console.error("❌ Error refreshing documents:", error);
         }
       } else {
-        console.log('⏭️ Same device - skipping update');
+        console.log("⏭️ Same device - skipping update");
       }
     };
 
