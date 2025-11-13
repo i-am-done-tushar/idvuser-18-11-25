@@ -18,6 +18,7 @@ interface DynamicSectionProps {
   setFormData?: (data: FormData) => void;
   isEmailVerified?: boolean;
   isPhoneVerified?: boolean;
+  emailLocked?: boolean;
   onSendEmailOTP?: () => void;
   onSendPhoneOTP?: () => void;
   onIdentityDocumentComplete?: () => void;
@@ -76,6 +77,7 @@ export function DynamicSection({
   setFormData,
   isEmailVerified,
   isPhoneVerified,
+  emailLocked,
   onSendEmailOTP,
   onSendPhoneOTP,
   onIdentityDocumentComplete,

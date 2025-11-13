@@ -1,4 +1,4 @@
-import { defineConfig, Plugin } from "vite";
+import { defineConfig, Plugin, PluginOption } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { createServer } from "./server";
@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: "dist/spa",
   },
-  plugins: [react(), expressPlugin(), tsconfigPaths()],
+  plugins: [react(), expressPlugin(), tsconfigPaths()] as PluginOption[],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./client"),

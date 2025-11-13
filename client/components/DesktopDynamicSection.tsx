@@ -19,6 +19,7 @@ interface DesktopDynamicSectionProps {
   setFormData?: (data: FormData) => void;
   isEmailVerified?: boolean;
   isPhoneVerified?: boolean;
+  emailLocked?: boolean;
   onSendEmailOTP?: () => void;
   onSendPhoneOTP?: () => void;
   onIdentityDocumentComplete?: () => void;
@@ -73,6 +74,7 @@ export function DesktopDynamicSection({
   setFormData,
   isEmailVerified,
   isPhoneVerified,
+  emailLocked,
   onSendEmailOTP,
   onSendPhoneOTP,
   onIdentityDocumentComplete,
