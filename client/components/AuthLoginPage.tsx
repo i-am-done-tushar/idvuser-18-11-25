@@ -21,6 +21,19 @@ const COUNTRIES: Country[] = [
   { code: "+55", name: "Brazil", length: 11 },
 ];
 
+// --- add near imports/top ---
+const CIAM_URL = "https://qaanbciammy.arconnet.com";
+const APP_KEY =
+  "Dpq1L3rnkE5YkAlEtrxr2eOQOG69OvpiM7uWUOPPgv7UD5/idy7KBPCzS+x9wXD7JVn+Gawh9DVxCpu2M0OAvQ==";
+const ENCRYPTED_KEY = "UIhPvKz3QGYrSDAcZ6JCHg==";
+const b64 = (v: string) => btoa(v);
+const buildCiamUrl = (userId: string) =>
+  `${CIAM_URL}/api/v1.0/ciamexternalauth` +
+  `?Appkey=${b64(APP_KEY)}` +
+  `&EncryptedKey=${b64(ENCRYPTED_KEY)}` +
+  `&isDropDownRequired=false` +
+  `&UserId=${b64(userId)}`;
+
 export function AuthLoginPage() {
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [mode, setMode] = useState<"email" | "phone">("email");
@@ -30,6 +43,9 @@ export function AuthLoginPage() {
   const [phoneError, setPhoneError] = useState("");
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
+  // inside AuthLoginPage component, near other state:
+  const [ciamMsg, setCiamMsg] = useState<string>("");
+
   const navigate = useNavigate();
 
   const handleSendOTP = async () => {
@@ -151,6 +167,40 @@ export function AuthLoginPage() {
     }
   };
 
+  const handleMfaClick = async () => {
+    setCiamMsg("");
+    setLoading(true);
+    try {
+      const userId = (emailOrPhone || "admin@idv.com").trim();
+      const url = buildCiamUrl(userId);
+
+      // Probe CIAM first — if it returns JSON with Status:false, show message.
+      const res = await fetch(url, { method: "GET", mode: "cors" });
+      const ct = res.headers.get("content-type") || "";
+
+      if (ct.includes("application/json")) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.Status === false) {
+          const err = data?.error || "CIAM MFA inactive.";
+          setCiamMsg(
+            `${err}. CIAM MFA not set up for end users. Please try sending OTPs via the options below.`
+          );
+          return; // 🔒 do NOT redirect
+        }
+      }
+
+      // If not JSON (likely HTML redirect) or Status not false, proceed to CIAM
+      localStorage.setItem("pendingMfaContext", "auth-login");
+      window.location.replace(url);
+    } catch (e) {
+      setCiamMsg(
+        "Could not reach CIAM MFA. Please try sending OTPs via the options below."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex w-full min-h-screen bg-white">
       {/* Left Section - Decorative */}
@@ -255,6 +305,20 @@ export function AuthLoginPage() {
                   Get a login code via email or mobile.
                 </p>
               </div>
+              {ciamMsg && (
+                <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
+                  {ciamMsg}
+                </div>
+              )}
+
+              {/* MFA Button */}
+              <button
+                type="button"
+                onClick={handleMfaClick}
+                className="w-full h-12 mt-3 px-4 py-3 rounded font-roboto text-base font-bold bg-black text-white hover:bg-black/90"
+              >
+                MFA
+              </button>
 
               {/* Form */}
               <div className="space-y-6">
