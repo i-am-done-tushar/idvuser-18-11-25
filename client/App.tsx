@@ -23,6 +23,7 @@ import { ContactAdminPage } from "./components/ContactAdminPage";
 //1st change
 
 import { createBrowserRouter } from "react-router-dom";
+import ReLoginUserPage from "./components/ReLoginUserPage";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ const App = () => (
           />
           <Route path="/password-setup" element={<PasswordSetupPage />} />
           <Route path="/auth/login" element={<AuthLoginPage />} />
+          <Route path="/login" element={<ReLoginUserPage />} />
           <Route path="/auth/otp" element={<AuthOtpPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route
