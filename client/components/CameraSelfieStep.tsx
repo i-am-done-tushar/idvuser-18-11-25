@@ -558,7 +558,6 @@ const drawFaceGuideOverlay = useCallback((brightness: number) => {
 
   const outerRadius = Math.min(w, h) * 0.35;      // Inner transparent circle radius
   const biggerRadius = outerRadius * 1.2;         // Outer circle radius
-  const boundaryRadius = biggerRadius + 20;       // Outermost 7px solid border circle
 
   // Step 1: Background fill logic based on brightness
   if (brightness < 60) {
@@ -602,14 +601,6 @@ const drawFaceGuideOverlay = useCallback((brightness: number) => {
   ctx.arc(cx, cy, outerRadius, 0, 2 * Math.PI);
   ctx.setLineDash([8, 6]);
   ctx.lineWidth = 3;
-  ctx.strokeStyle = '#ffffff';
-  ctx.stroke();
-
-  // Outermost boundary circle (7px solid border)
-  ctx.beginPath();
-  ctx.arc(cx, cy, boundaryRadius, 0, 2 * Math.PI);
-  ctx.setLineDash([]);
-  ctx.lineWidth = 7;
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
@@ -3167,6 +3158,3 @@ const checkVideoResolution = useCallback(() => {
     </div>
   );
 };
-
-
-
