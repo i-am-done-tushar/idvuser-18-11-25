@@ -2423,6 +2423,17 @@ export default function CameraCapture({
               type: options?.mimeType ?? "video/webm",
             });
             setCompletedSegments((prev) => [...prev, blob]);
+
+            // Update progress based on completed segment
+            // Segments: 1 (20%), 2 (60%), 3 (100%)
+            if (segment === 1) {
+              setOverallProgressPercentage(20);
+            } else if (segment === 2) {
+              setOverallProgressPercentage(60);
+            } else if (segment === 3) {
+              setOverallProgressPercentage(100);
+            }
+
             console.log(
               "info",
               `✅ Segment ${segment} COMPLETED and saved. Blob size: ${blob.size} bytes, Chunk count: ${chunks.length}`,
@@ -3813,7 +3824,7 @@ export default function CameraCapture({
                   !isRecording &&
                   completedSegments.length < totalSegments && (
                     <p>
-                      ✔ Ready – Keep your face inside the oval (75–85% height),
+                      ✔ Ready – Keep your face inside the oval (75���85% height),
                       then hit <strong>Start</strong>.
                     </p>
                   )}
