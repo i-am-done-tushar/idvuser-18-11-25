@@ -334,10 +334,10 @@ export function DesktopDynamicSection({
                     <BiometricCaptureUI onScanFace={handleScanFace} />
                   ) : (
                     <div className="flex p-4 flex-col justify-center items-center self-stretch bg-background">
-                      <div className="flex w-full items-center gap-6">
-                        {/* Left Box - Camera Selfie */}
-                        <div className="flex-1 flex flex-col">
-                          <div className="flex h-[380px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4">
+                      <div className="flex w-full flex-col xl:flex-row justify-center items-stretch gap-6 p-2">
+                        {/* Camera Selfie Section */}
+                        <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
+                          <div className="flex min-h-[400px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4 px-2">
                             <CameraSelfieStep
                               onStepComplete={onSelfieComplete || (() => {})}
                               userId={submissionId}
@@ -346,24 +346,33 @@ export function DesktopDynamicSection({
                           <div className="flex w-full px-4 py-2 items-center justify-end gap-2 rounded-b border-t-0 border-[1.5px] border-dashed border-[#C3C6D4] bg-[#F6F7FB]"></div>
                         </div>
 
-                        {/* Separator with "or" */}
-                        <div className="flex flex-col items-center justify-center gap-1 h-[428px]">
-                          <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
+                        {/* Vertical Divider - Desktop */}
+                        <div className="hidden xl:flex flex-col items-center justify-center gap-1 h-[100px]">
+                          <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
                           <div className="text-[#676879] font-roboto text-[13px] font-normal">
                             or
                           </div>
-                          <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
+                          <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
                         </div>
 
-                        {/* Right Box - QR Code */}
-                        <div className="flex-1 flex flex-col">
-                          <div className="flex h-[380px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white">
+                        {/* Horizontal Divider - Mobile/Tablet */}
+                        <div className="flex xl:hidden w-full justify-center items-center gap-2 py-4">
+                          <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+                          <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                            or
+                          </div>
+                          <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+                        </div>
+
+                        {/* QR Code Section */}
+                        <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
+                          <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white px-4 py-6">
                             <img
                               src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=https://id.xyz/verify"
                               alt="QR Code"
-                              className="w-32 h-32"
+                              className="w-32 h-32 flex-shrink-0"
                             />
-                            <div className="flex flex-col items-center gap-3 max-w-[214px]">
+                            <div className="flex flex-col items-center gap-3 max-w-[300px] px-2">
                               <p className="text-[#676879] text-center font-roboto text-[13px] font-normal leading-5">
                                 Continue on another device by scanning the QR
                                 code or opening{" "}

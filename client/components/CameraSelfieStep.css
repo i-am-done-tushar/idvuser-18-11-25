@@ -317,3 +317,111 @@
   outline: none;
   box-shadow: 0 0 0 3px rgba(38, 98, 255, 0.7);
 }
+
+.selfie-app-root .note {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+/* Captured Frame in Video Area */
+.selfie-captured-frame-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.selfie-captured-frame {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  display: block;
+}
+
+.selfie-frame-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(128, 128, 128, 0.5);
+  pointer-events: none;
+  border-radius: 10px;
+}
+
+.selfie-capture-complete-message {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.selfie-capture-complete-message p {
+  font-size: 16px;
+  font-weight: 600;
+  color: #16a34a;
+  margin: 0;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 1023px) {
+  .selfie-video-area {
+    max-width: 100%;
+  }
+
+  .selfie-app-root video {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .selfie-captured-frame {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .selfie-app-root .note {
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .selfie-recording-panel {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
+
+  .selfie-capture-complete-message p {
+    font-size: 14px;
+  }
+
+  .selfie-video-container {
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .selfie-video-wrapper {
+    padding: 0 10px;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 640px) {
+  .selfie-app-root video {
+    border-radius: 8px;
+  }
+
+  .selfie-captured-frame {
+    border-radius: 8px;
+  }
+
+  .selfie-recording-panel {
+    margin-top: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .selfie-capture-complete-message p {
+    font-size: 13px;
+  }
+}

@@ -70,6 +70,7 @@ const [verificationMessage, setVerificationMessage] = useState('');
 const [showFaceMismatchModal, setShowFaceMismatchModal] = useState(false);
 const [mobileStatusMessage, setMobileStatusMessage] = useState('');
 const [showSuccessScreen, setShowSuccessScreen] = useState(false);
+const [capturedFrameUrl, setCapturedFrameUrl] = useState<string | null>(null);
 const [isMobile, setIsMobile] = useState(false);
 const [modelsLoaded, setModelsLoaded] = useState(false);
 // OpenCV readiness
@@ -557,6 +558,7 @@ const drawFaceGuideOverlay = useCallback((brightness: number) => {
 
   const outerRadius = Math.min(w, h) * 0.35;      // Inner transparent circle radius
   const biggerRadius = outerRadius * 1.2;         // Outer circle radius
+  const boundaryRadius = biggerRadius + 20;       // Outermost 7px solid border circle
 
   // Step 1: Background fill logic based on brightness
   if (brightness < 60) {
@@ -603,6 +605,14 @@ const drawFaceGuideOverlay = useCallback((brightness: number) => {
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
+  // Outermost boundary circle (7px solid border)
+  ctx.beginPath();
+  ctx.arc(cx, cy, boundaryRadius, 0, 2 * Math.PI);
+  ctx.setLineDash([]);
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+
   // --- BLINKING ARC ---
   if (blinkingDirectionRef.current && blinkVisibleRef.current) {
     ctx.beginPath();
@@ -615,7 +625,10 @@ const drawFaceGuideOverlay = useCallback((brightness: number) => {
     ctx.shadowColor = 'rgba(0, 191, 255, 0.7)';
     ctx.shadowBlur = 20;
 
-    const radius = biggerRadius + 10;
+    // Set dashed line pattern
+    ctx.setLineDash([8, 6]);
+
+    const radius = outerRadius; // Blinking arc on the dashed circle
 
     let startAngle: number;
     let endAngle: number;
@@ -652,15 +665,16 @@ const drawFaceGuideOverlay = useCallback((brightness: number) => {
     ctx.arc(cx, cy, radius, startAngle, endAngle);
     ctx.stroke();
 
-    // Reset shadowBlur for next draw calls
+    // Reset shadowBlur and line dash for next draw calls
     ctx.shadowBlur = 0;
+    ctx.setLineDash([]);
   }
 
   // Instruction text (moved slightly higher for visibility)
   ctx.font = '18px Arial';
   ctx.fillStyle = '#ffffffff';
   ctx.textAlign = 'center';
-  ctx.fillText('Align your face within the white circles', cx, cy + biggerRadius + 20);
+  ctx.fillText('Align your face within the white circles', cx, cy + boundaryRadius + 20);
 
   // Step 5: Recording progress arc (green arc on inner alignment circle)
   if (isRecording) {
@@ -1640,8 +1654,7 @@ const downloadAllBlobs = useCallback(() => {
   stopCamera();
   
   console.log("✅ Session fully completed. Camera stopped.");
-  console.log("➡️ Calling onStepComplete(7)");
-  onStepComplete?.(7);
+  // Don't call onStepComplete yet - wait for user to click submit
 }, [
   completedSegments,
   partialSegmentBlobsPerSegment,
@@ -1649,10 +1662,29 @@ const downloadAllBlobs = useCallback(() => {
   headTurnAttemptsPerSegment,
   setStatusMessage,
   _resetAll,
-  onStepComplete,
   stopCamera
 ]);
 
+const captureLastFrame = useCallback(() => {
+  if (!videoRef.current) return;
+  
+  const video = videoRef.current;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  
+  // Draw the video frame (mirrored to match the display)
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+  // Convert to data URL
+  const frameUrl = canvas.toDataURL('image/png');
+  setCapturedFrameUrl(frameUrl);
+}, []);
 
 
 const onSegmentComplete = useCallback(async () => {
@@ -1697,9 +1729,11 @@ const onSegmentComplete = useCallback(async () => {
       // showMessage('recordingMessage', '✅ All 3 segments recorded successfully!');
       // downloadLogs();
       
-      // Immediately download all blobs and stop camera (no delay)
+      // Capture the last frame before stopping camera
+      captureLastFrame();
+      
+      // Immediately download all blobs
       downloadAllBlobs();
-      setShowSuccessScreen(true);
     }
   }
 }, [
@@ -1714,7 +1748,7 @@ const onSegmentComplete = useCallback(async () => {
   setIsRecording,
   // downloadLogs,
   downloadAllBlobs,
-  setShowSuccessScreen
+  captureLastFrame
 ]);
 
 
@@ -3011,8 +3045,6 @@ const checkVideoResolution = useCallback(() => {
 
   return(
   <div className="selfie-app-root">
-      <h2>Face Recording App 🎥</h2>
-
       <h3 className="note">⚠️ Please remove any accessories on your face (e.g. glasses)</h3>
 
       {/* Error messages only, positioned above video and below 'remove any accessories' */}
@@ -3045,17 +3077,23 @@ const checkVideoResolution = useCallback(() => {
       <div className="selfie-video-wrapper">
         <div className="selfie-video-container">
           <div className="selfie-video-area">
-            <video ref={videoRef} autoPlay playsInline muted />
-            <canvas ref={overlayRef} />
-            <div className="oval-overlay"></div>
+            {capturedFrameUrl ? (
+              <div className="selfie-captured-frame-wrapper">
+                <img src={capturedFrameUrl} alt="Captured frame" className="selfie-captured-frame" />
+                <div className="selfie-frame-overlay"></div>
+              </div>
+            ) : (
+              <>
+                <video ref={videoRef} autoPlay playsInline muted />
+                <canvas ref={overlayRef} />
+                <div className="oval-overlay"></div>
+              </>
+            )}
           </div>
 
-          {/* Message directly below the video box */}
-          {(recordingMessage || isRecording) && (
-            <div className="below-video-message" style={{ marginTop: '8px', textAlign: 'center' }}>
-              <span style={{ color: '#dc2626', fontWeight: 600 }}>
-                {recordingMessage || '🔴 Recording in progress — keep your face in the required direction until the video is captured.'}
-              </span>
+          {capturedFrameUrl && (
+            <div className="selfie-capture-complete-message">
+              <p>Capture complete</p>
             </div>
           )}
 
@@ -3069,9 +3107,7 @@ const checkVideoResolution = useCallback(() => {
                   </p>
                 )}
               </div>
-              {statusMessage && <div className="selfie-global-status">{statusMessage}</div>}
               <p>⏺️ Recording </p>
-              <p>⏳ Time left: {timeRemaining}s</p>
             </div>
           )}
         </div>
@@ -3089,7 +3125,6 @@ const checkVideoResolution = useCallback(() => {
             ✅ All {totalSegments} segments recorded.<br />
             Please complete <strong>head-turn verification</strong> before download.
           </p>
-          {headTurnAttemptStatus && <div className="attempt">{headTurnAttemptStatus}</div>}
         </div>
       )}
 

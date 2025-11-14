@@ -40,9 +40,9 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
 
         {/* Main Content Area */}
         <div className="flex w-full flex-col justify-center items-center border-t border-[#DEDEDD] bg-white p-4">
-          <div className="flex w-full justify-center items-center gap-6 p-2">
+          <div className="flex w-full flex-col xl:flex-row justify-center items-stretch gap-6 p-2">
             {/* Left Side - Illustration */}
-            <div className="flex w-[460px] h-[460px] pt-10 flex-col justify-between items-center flex-shrink-0 rounded-lg bg-white">
+            <div className="flex flex-1 min-w-0 pt-10 flex-col justify-between items-center rounded-lg bg-white">
               <style>
                 {`
                   @keyframes headTilt {
@@ -60,9 +60,7 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
                 `}
               </style>
               <svg
-                className="flex flex-col items-center gap-3 self-stretch"
-                width="460"
-                height="353"
+                className="flex flex-col items-center gap-3 self-stretch w-full h-auto"
                 viewBox="0 0 460 353"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
@@ -163,33 +161,40 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
               </div>
             </div>
 
-            {/* Vertical Divider */}
-            <div className="flex flex-col justify-center items-center gap-1 h-[100px]">
+            {/* Vertical Divider - Desktop */}
+            <div className="hidden xl:flex flex-col justify-center items-center gap-1 h-[100px]">
               <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
               <div className="text-[#676879] font-roboto text-[13.6px]">or</div>
               <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
             </div>
 
+            {/* Horizontal Divider - Mobile/Tablet */}
+            <div className="flex xl:hidden w-full justify-center items-center gap-2 py-4">
+              <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+              <div className="text-[#676879] font-roboto text-[13.6px]">or</div>
+              <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+            </div>
+
             {/* Right Side - QR Code */}
-            <div className="flex h-[449px] flex-col justify-center items-start flex-1">
-              <div className="flex h-[399px] flex-col items-center gap-2 flex-shrink-0 self-stretch">
+            <div className="flex flex-1 min-w-0 flex-col justify-center items-stretch">
+              <div className="flex flex-col items-center gap-2 flex-1 self-stretch">
                 <div className="flex pt-4 flex-col justify-between items-center flex-1 self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
-                  <div className="flex flex-col justify-center items-center gap-2 flex-1">
-                    <div className="flex justify-center items-center gap-4">
+                  <div className="flex flex-col justify-center items-center gap-2 flex-1 px-4">
+                    <div className="flex flex-col xl:flex-row justify-center items-center gap-4 max-w-full">
                       <img
                         src="https://api.qrserver.com/v1/create-qr-code/?size=134x138&data=https://id.xyz/verify"
                         alt="QR Code"
-                        className="w-[134px] h-[138px]"
+                        className="w-[120px] h-[120px] sm:w-[134px] sm:h-[138px] flex-shrink-0"
                       />
-                      <div className="flex flex-col justify-center items-center gap-2">
-                        <div className="flex w-[225px] flex-col items-center gap-3">
-                          <div className="flex w-[225px] flex-col items-start">
-                            <div className="self-stretch text-center font-roboto text-[14px] font-normal leading-[21px]">
+                      <div className="flex flex-col justify-center items-center gap-2 max-w-full">
+                        <div className="flex max-w-[300px] xl:w-[225px] flex-col items-center gap-3 px-4">
+                          <div className="flex w-full flex-col items-start">
+                            <div className="self-stretch text-center font-roboto text-[13px] sm:text-[14px] font-normal leading-[21px]">
                               <span className="text-[#676879]">
                                 Continue on another device by scanning the QR
                                 code or opening
                               </span>
-                              <span className="text-[#0073EA]">
+                              <span className="text-[#0073EA] break-all">
                                 {" "}
                                 https://id.xyz/verify
                               </span>
@@ -201,8 +206,8 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
                   </div>
                 </div>
               </div>
-              <div className="flex w-[462px] h-[50px] px-4 py-4 items-center gap-2 flex-shrink-0 rounded-b bg-[#F6F7FB]">
-                <div className="flex w-[142px] justify-end items-center gap-1 flex-shrink-0">
+              <div className="flex w-full h-[50px] px-4 py-4 items-center gap-2 flex-shrink-0 rounded-b bg-[#F6F7FB]">
+                <div className="flex justify-end items-center gap-1 flex-shrink-0">
                   <svg
                     width="21"
                     height="21"
