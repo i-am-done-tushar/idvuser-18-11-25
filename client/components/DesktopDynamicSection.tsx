@@ -337,7 +337,7 @@ export function DesktopDynamicSection({
                       <div className="flex w-full flex-col xl:flex-row justify-center items-stretch gap-6 p-2">
                         {/* Camera Selfie Section */}
                         <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
-                          <div className="flex min-h-[400px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4 px-2">
+                          <div className="flex h-[480px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4 px-2">
                             <CameraSelfieStep
                               onStepComplete={onSelfieComplete || (() => {})}
                               userId={submissionId}
@@ -366,7 +366,7 @@ export function DesktopDynamicSection({
 
                         {/* QR Code Section */}
                         <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
-                          <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white px-4 py-6">
+                          <div className="flex h-[480px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white px-4 py-6">
                             <img
                               src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=https://id.xyz/verify"
                               alt="QR Code"
