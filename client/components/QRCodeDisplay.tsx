@@ -115,7 +115,8 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         console.log('Join Code:', joinCode);
         
         // Generate QR code with join code URL
-        const baseUrl = 'http://10.10.5.231:4200';
+        //QR code URL
+        const baseUrl = 'https://idvuser-test.arconnet.com:1017 ';
         const qrUrl = `${baseUrl}/HandoffPage/${joinCode}`;
         
         const options: QRCodeOptions = {
@@ -163,8 +164,16 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
       //   the SignalR client and causes unexpected behavior. We therefore
       //   remove it and instead configure the client's timeout/keep-alive
       //   properties directly after building the connection.
+
+      // const websocketBaseUrl = 'wss://idvapi-test.arconnet.com:1019/hubs/handoff';
+      // const connection = new signalR.HubConnectionBuilder()
+      //   .withUrl(`${websocketBaseUrl}?access_token=${accessToken}`, {
+
+
+      // Websocket base URL
+      const websocketBaseUrl = 'wss://idvapi-test.arconnet.com:1019/hubs/handoff';
       const connection = new signalR.HubConnectionBuilder()
-        .withUrl(`ws://10.10.5.231:5027/hubs/handoff?access_token=${accessToken}`, {
+        .withUrl(`${websocketBaseUrl}?access_token=${accessToken}`, {
           skipNegotiation: true,
           transport: signalR.HttpTransportType.WebSockets,
           // Add custom headers including device fingerprint
@@ -174,6 +183,7 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         })
         .configureLogging(signalR.LogLevel.Debug)
         .build();
+
 
       // Increase client-side timeouts to reduce spurious "Server timeout"
       // disconnects. These values are client-side only and don't change
