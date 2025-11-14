@@ -177,8 +177,8 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
 
             {/* Right Side - QR Code */}
             <div className="flex flex-1 min-w-0 flex-col justify-center items-stretch">
-              <div className="flex flex-col items-center gap-2 flex-1 self-stretch">
-                <div className="flex pt-4 flex-col justify-between items-center flex-1 self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
+              <div className="flex flex-col items-center gap-2 self-stretch">
+                <div className="flex pt-4 flex-col justify-center items-center h-[400px] self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
                   <div className="flex flex-col justify-center items-center gap-2 flex-1 px-4">
                     <div className="flex flex-col xl:flex-row justify-center items-center gap-4 max-w-full">
                       <img
