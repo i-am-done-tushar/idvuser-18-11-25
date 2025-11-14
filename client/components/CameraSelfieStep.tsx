@@ -631,24 +631,38 @@ export default function CameraCapture({
       // Reset compositing to normal
       ctx.globalCompositeOperation = "source-over";
 
-      // Step 3: Determine outer circle stroke color based on recording and timer
-      let outerStrokeColor = "#ffffff"; // default white
-      if (
-        isRecording &&
-        ((timeRemainingRef.current < 6 && timeRemainingRef.current > 0) ||
-          isFaceDetected)
-      ) {
-        outerStrokeColor = "#16a34a"; // green while recording and timer counting down
-      }
-
-      // Step 4: Draw outlines for biggerRadius and outerRadius circles
-      // Outer bigger circle (solid)
-      ctx.beginPath();
-      ctx.arc(cx, cy, biggerRadius, 0, 2 * Math.PI);
+      // Step 3: Draw outer circle with progress indicator
       ctx.setLineDash([]);
       ctx.lineWidth = 5;
-      ctx.strokeStyle = outerStrokeColor; // use dynamic stroke color here!
-      ctx.stroke();
+
+      const startAngle = -Math.PI / 2; // Start from top
+
+      // Draw green progress arc if progress exists
+      if (overallProgressPercentage > 0) {
+        const progressRatio = overallProgressPercentage / 100;
+        const progressEndAngle = startAngle + 2 * Math.PI * progressRatio;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, biggerRadius, startAngle, progressEndAngle);
+        ctx.strokeStyle = "#16a34a"; // Green for completed progress
+        ctx.stroke();
+
+        // Draw white arc for remaining progress (if not 100%)
+        if (overallProgressPercentage < 100) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, biggerRadius, progressEndAngle, startAngle + 2 * Math.PI);
+          ctx.strokeStyle = "#ffffff"; // White for remaining
+          ctx.stroke();
+        }
+      } else {
+        // No progress yet - draw full white circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, biggerRadius, 0, 2 * Math.PI);
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+      }
+
+      // Step 4: Draw outlines for innerRadius circle (dashed alignment guide)
 
       // Inner alignment circle (white dashed)
       ctx.beginPath();
@@ -2671,7 +2685,7 @@ export default function CameraCapture({
       stoppingForRestartRef.current = true;
       showMessage(
         "verificationMessage",
-        "���️ Recording reset due to face loss. Continuing from current progress...",
+        "⚠️ Recording reset due to face loss. Continuing from current progress...",
       );
       console.log(
         "warn",
