@@ -613,8 +613,8 @@ export default function CameraCapture({
         // Too bright: fill outside bigger circle with black
         ctx.fillStyle = "black";
       } else {
-        // Normal brightness: fill outside bigger circle with dimmed black
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        // Normal brightness: fill outside bigger circle with fully opaque black
+        ctx.fillStyle = "rgba(0, 0, 0, 1)";
       }
       ctx.fillRect(0, 0, w, h);
 
