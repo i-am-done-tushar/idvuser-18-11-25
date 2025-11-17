@@ -344,6 +344,15 @@ export function DynamicSection({
     }
   };
 
+  // For biometrics section, render directly without accordion wrapper
+  if (section.sectionType === "biometrics") {
+    return (
+      <div onClick={() => onSectionFocus?.(sectionIndex)} onFocus={() => onSectionFocus?.(sectionIndex)}>
+        {renderSectionContent()}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-start gap-4 bg-background rounded border border-[#DEDEDD]">
       <div className="flex p-0.5 flex-col items-start self-stretch rounded-t border border-[#DEDEDD]">
@@ -370,7 +379,7 @@ export function DynamicSection({
                 />
               </svg>
               <div className="text-text-primary font-roboto text-base font-bold leading-3">
-                {section.sectionType === "biometrics" ? "Biometric Verification" : section.name}
+                {section.name}
               </div>
             </button>
           </div>
