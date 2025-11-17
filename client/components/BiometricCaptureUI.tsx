@@ -180,27 +180,21 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
             <div className="flex flex-1 flex-col justify-stretch items-stretch">
               <div className="flex flex-col items-center gap-0 self-stretch h-full">
                 <div className="flex flex-col justify-center items-center flex-1 self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
-                  <div className="flex flex-col justify-center items-center gap-2 flex-1 px-4">
-                    <div className="flex flex-col xl:flex-row justify-center items-center gap-4 max-w-full">
-                      <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=134x138&data=https://id.xyz/verify"
-                        alt="QR Code"
-                        className="w-[120px] h-[120px] sm:w-[134px] sm:h-[138px] flex-shrink-0"
-                      />
-                      <div className="flex flex-col justify-center items-center gap-2 max-w-full">
-                        <div className="flex max-w-[300px] xl:w-[225px] flex-col items-center gap-3 px-4">
-                          <div className="flex w-full flex-col items-start">
-                            <div className="self-stretch text-center font-roboto text-[13px] sm:text-[14px] font-normal leading-[21px]">
-                              <span className="text-[#676879]">
-                                Continue on another device by scanning the QR
-                                code or opening
-                              </span>
-                              <span className="text-[#0073EA] break-all">
-                                {" "}
-                                https://id.xyz/verify
-                              </span>
-                            </div>
-                          </div>
+                  <div className="flex flex-col justify-center items-center gap-4 flex-1 px-4 py-4">
+                    <img
+                      src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://id.xyz/verify"
+                      alt="QR Code"
+                      className="w-[134px] h-[134px] flex-shrink-0"
+                    />
+                    <div className="flex flex-col justify-center items-center gap-2 max-w-[280px]">
+                      <div className="flex w-full flex-col items-center">
+                        <div className="w-full text-center font-roboto text-[13px] font-normal leading-[20px]">
+                          <span className="text-[#676879]">
+                            Continue on another device by scanning the QR code or opening
+                          </span>
+                          <span className="text-[#0073EA] break-all block">
+                            https://id.xyz/verify
+                          </span>
                         </div>
                       </div>
                     </div>
