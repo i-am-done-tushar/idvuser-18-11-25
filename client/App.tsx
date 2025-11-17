@@ -63,6 +63,7 @@ const App = () => (
             element={<VerifiedCredentialsPage />}
           />
           <Route path="/contact-admin" element={<ContactAdminPage />} />
+          <Route path="/contact-admin" element={<ContactAdminPage />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/HandoffPage/:joincode" element={<HandoffPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

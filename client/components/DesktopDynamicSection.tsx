@@ -4,6 +4,8 @@ import { IdentityDocumentForm } from "./IdentityDocumentForm";
 import CameraSelfieStep from "./CameraSelfieStep";
 import { LockedStepComponent } from "./LockedStepComponent";
 import { FormData } from "@shared/templates";
+import { BiometricCaptureUI } from "./BiometricCaptureUI";
+import { useState } from "react";
 
 interface DesktopDynamicSectionProps {
   // SignalR/QR connection props
@@ -38,7 +40,12 @@ interface DesktopDynamicSectionProps {
     country: string;
     selectedDocument: string;
     uploadedDocuments: string[];
-    uploadedFiles: Array<{id: string, name: string, size: string, type: string}>;
+    uploadedFiles: Array<{
+      id: string;
+      name: string;
+      size: string;
+      type: string;
+    }>;
     documentUploadIds: Record<string, { front?: number; back?: number }>;
     documentsDetails: Array<{
       documentName: string;
@@ -97,6 +104,12 @@ export function DesktopDynamicSection({
   shouldMaintainConnection,
   onHandoffConnected,
 }: DesktopDynamicSectionProps) {
+  const [isBiometricScanStarted, setIsBiometricScanStarted] = useState(false);
+
+  const handleScanFace = () => {
+    setIsBiometricScanStarted(true);
+  };
+
   const renderSectionHeader = () => (
     <div className="flex p-4 flex-col justify-center items-center gap-2 self-stretch bg-background">
       <div className="flex pb-1 items-center gap-2 self-stretch">
@@ -121,14 +134,18 @@ export function DesktopDynamicSection({
             />
           </svg>
           <div className="text-text-primary font-roboto text-base font-bold leading-3">
-            {section.name}
+            {section.sectionType === "biometrics"
+              ? "Biometric Verification"
+              : section.name}
           </div>
         </button>
       </div>
       <div className="flex pl-7 justify-center items-center gap-2.5 self-stretch">
         <div className="flex-1 text-text-primary font-roboto text-[13px] font-normal leading-5">
           {!isExpanded && isFilled ? (
-            <span className="text-green-600 font-medium">This section has been filled</span>
+            <span className="text-green-600 font-medium">
+              This section has been filled
+            </span>
           ) : (
             section.description ||
             `Complete the ${section.name.toLowerCase()} section.`
@@ -158,7 +175,11 @@ export function DesktopDynamicSection({
       case "personalInformation": {
         if (!formData || !setFormData) return null;
 
-        const legacyPI = section.fieldMappings?.[0]?.structure?.personalInfo ?? {};
+        // read legacy mapping
+        const legacyPI =
+          section.fieldMappings?.[0]?.structure?.personalInfo ?? {};
+
+        // enrich fieldConfig: ensure camelCase requiredToggles is present
         const fieldConfig = {
           ...legacyPI,
           requiredToggles: legacyPI?.requiredToggles ?? {},
@@ -169,7 +190,7 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div 
+                <div
                   className="flex py-5 px-[34px] flex-col items-start self-stretch border-t border-border bg-background"
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}
@@ -224,7 +245,7 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-[#DEDEDD] bg-white">
               {renderSectionHeader()}
               {isExpanded && (
-                <div 
+                <div
                   className="flex py-4 px-[34px] flex-col items-start self-stretch border-t border-[#DEDEDD] bg-white"
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}
@@ -232,10 +253,16 @@ export function DesktopDynamicSection({
                   {/* summary chips */}
                   <div className="text-xs text-muted-foreground flex flex-wrap gap-2 mb-3">
                     <span className="px-2 py-1 rounded-full border bg-white">
-                      Upload: {documentConfig.allowUploadFromDevice ? "Device ✓" : "Device ✗"}
+                      Upload:{" "}
+                      {documentConfig.allowUploadFromDevice
+                        ? "Device ✓"
+                        : "Device ✗"}
                     </span>
                     <span className="px-2 py-1 rounded-full border bg-white">
-                      Capture: {documentConfig.allowCaptureWebcam ? "Webcam ✓" : "Webcam ✗"}
+                      Capture:{" "}
+                      {documentConfig.allowCaptureWebcam
+                        ? "Webcam ✓"
+                        : "Webcam ✗"}
                     </span>
                     <span className="px-2 py-1 rounded-full border bg-white">
                       Handling: {documentConfig.documentHandling || "—"}
@@ -247,7 +274,10 @@ export function DesktopDynamicSection({
                     )}
                     {!!documentConfig.allowedFileTypes.length && (
                       <span className="px-2 py-1 rounded-full border bg-white">
-                        File types: {documentConfig.allowedFileTypes.join(", ").toUpperCase()}
+                        File types:{" "}
+                        {documentConfig.allowedFileTypes
+                          .join(", ")
+                          .toUpperCase()}
                       </span>
                     )}
                   </div>
@@ -288,48 +318,164 @@ export function DesktopDynamicSection({
         };
 
         return (
-          <div className="flex flex-col items-start gap-4 self-stretch rounded bg-background">
-            <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
-              {renderSectionHeader()}
-              {isExpanded && (
-                <div
-                  onClick={() => onSectionFocus?.(sectionIndex)}
-                  onFocus={() => onSectionFocus?.(sectionIndex)}
-                >
-                  {/* summary chips */}
-                  <div className="flex w-full py-3 px-[34px] border-t border-border bg-background">
-                    <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Max retries: {bioCfg.maxRetries}
-                      </span>
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Liveness ≥ {bioCfg.livenessThreshold}%
-                      </span>
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        Face match ≥ {bioCfg.faceMatchThreshold}%
-                      </span>
-                      <span className="px-2 py-1 rounded-full border bg-white">
-                        On low score: {bioCfg.askUserRetry ? "Ask to retry" : bioCfg.blockAfterRetries ? "Block after retries" : "—"}
-                      </span>
-                      {bioCfg.dataRetention && (
-                        <span className="px-2 py-1 rounded-full border bg-white">
-                          Retention: {bioCfg.dataRetention}
-                        </span>
-                      )}
+          <div
+            className="w-full self-stretch"
+            onClick={() => onSectionFocus?.(sectionIndex)}
+            onFocus={() => onSectionFocus?.(sectionIndex)}
+          >
+            {/* summary chips */}
+            <div className="flex w-full py-3 px-[34px] border-t border-border bg-background">
+              <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
+                <span className="px-2 py-1 rounded-full border bg-white">
+                  Max retries: {bioCfg.maxRetries}
+                </span>
+                <span className="px-2 py-1 rounded-full border bg-white">
+                  Liveness ≥ {bioCfg.livenessThreshold}%
+                </span>
+                <span className="px-2 py-1 rounded-full border bg-white">
+                  Face match ≥ {bioCfg.faceMatchThreshold}%
+                </span>
+                <span className="px-2 py-1 rounded-full border bg-white">
+                  On low score:{" "}
+                  {bioCfg.askUserRetry
+                    ? "Ask to retry"
+                    : bioCfg.blockAfterRetries
+                      ? "Block after retries"
+                      : "—"}
+                </span>
+                {bioCfg.dataRetention && (
+                  <span className="px-2 py-1 rounded-full border bg-white">
+                    Retention: {bioCfg.dataRetention}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {!isBiometricScanStarted ? (
+              <BiometricCaptureUI onScanFace={handleScanFace} />
+            ) : (
+              <div className="flex w-full flex-col gap-4 rounded bg-white">
+                {/* Header Section */}
+                <div className="flex flex-col items-start self-stretch rounded border border-[#DEDEDD]">
+                  <div className="flex flex-col justify-center items-center gap-2 self-stretch bg-white px-3 py-4">
+                    <div className="flex items-center gap-2 self-stretch pb-1">
+                      <svg
+                        width="19"
+                        height="19"
+                        viewBox="0 0 19 19"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-[19px] h-[19px]"
+                      >
+                        <path
+                          d="M6.30071 9.44844H12.6001M17.3246 9.44844C17.3246 13.7972 13.7992 17.3227 9.4504 17.3227C5.10158 17.3227 1.57617 13.7972 1.57617 9.44844C1.57617 5.09963 5.10158 1.57422 9.4504 1.57422C13.7992 1.57422 17.3246 5.09963 17.3246 9.44844Z"
+                          stroke="#323238"
+                          strokeWidth="1.57484"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <div className="text-[#172B4D] font-roboto text-[17px] font-bold leading-[12.6px]">
+                        Biometric Capture
+                      </div>
+                    </div>
+                    <div className="flex justify-center items-center gap-2.5 self-stretch pl-[29px]">
+                      <div className="flex-1 text-[#172B4D] font-roboto text-[14px] font-normal leading-[21px]">
+                        Take a live selfie to confirm you are the person in the
+                        ID document. Make sure you're in a well-lit area and
+                        your face is clearly visible.
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex p-3 flex-col justify-center items-center self-stretch bg-background">
-                    <div className="flex w-full flex-col items-center gap-2">
-                      <CameraSelfieStep
-                        onComplete={onSelfieComplete || (() => {})}
-                        userId={submissionId}
-                      />
+                  {/* Main Content Area */}
+                  <div className="flex w-full flex-col justify-center items-center border-t border-[#DEDEDD] bg-white p-4">
+                    <div className="flex w-full flex-col xl:flex-row justify-center items-stretch gap-6 p-2">
+                      {/* Camera Selfie Section */}
+                      <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
+                        <div className="flex h-[480px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4 px-2">
+                          <CameraSelfieStep
+                            onStepComplete={onSelfieComplete || (() => {})}
+                            userId={submissionId}
+                          />
+                        </div>
+                        <div className="flex w-full px-4 py-2 items-center justify-end gap-2 rounded-b border-t-0 border-[1.5px] border-dashed border-[#C3C6D4] bg-[#F6F7FB]"></div>
+                      </div>
+
+                      {/* Vertical Divider - Desktop */}
+                      <div className="hidden xl:flex flex-col items-center justify-center gap-1 h-[100px]">
+                        <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
+                        <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                          or
+                        </div>
+                        <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
+                      </div>
+
+                      {/* Horizontal Divider - Mobile/Tablet */}
+                      <div className="flex xl:hidden w-full justify-center items-center gap-2 py-4">
+                        <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+                        <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                          or
+                        </div>
+                        <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+                      </div>
+
+                      {/* QR Code Section */}
+                      <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
+                        <div className="flex h-[480px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white px-4 py-6">
+                          <img
+                            src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=https://id.xyz/verify"
+                            alt="QR Code"
+                            className="w-32 h-32 flex-shrink-0"
+                          />
+                          <div className="flex flex-col items-center gap-3 max-w-[300px] px-2">
+                            <p className="text-[#676879] text-center font-roboto text-[13px] font-normal leading-5">
+                              Continue on another device by scanning the QR code
+                              or opening{" "}
+                              <a
+                                href="https://id.xyz/verify"
+                                className="text-[#0073EA]"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                https://id.xyz/verify
+                              </a>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex w-full px-4 py-2 items-center gap-2 rounded-b border-t-0 border-[1.5px] border-dashed border-[#C3C6D4] bg-[#F6F7FB]">
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <g clipPath="url(#clip0_info)">
+                              <path
+                                d="M10.0013 13.3307V9.9974M10.0013 6.66406H10.0096M18.3346 9.9974C18.3346 14.5997 14.6036 18.3307 10.0013 18.3307C5.39893 18.3307 1.66797 14.5997 1.66797 9.9974C1.66797 5.39502 5.39893 1.66406 10.0013 1.66406C14.6036 1.66406 18.3346 5.39502 18.3346 9.9974Z"
+                                stroke="#0073EA"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </g>
+                            <defs>
+                              <clipPath id="clip0_info">
+                                <rect width="20" height="20" fill="white" />
+                              </clipPath>
+                            </defs>
+                          </svg>
+                          <span className="text-[#0073EA] font-roboto text-[12px] font-normal leading-5">
+                            How does this work?
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -340,7 +486,7 @@ export function DesktopDynamicSection({
             <div className="flex py-0 px-0.5 flex-col items-start self-stretch rounded border border-border">
               {renderSectionHeader()}
               {isExpanded && (
-                <div 
+                <div
                   className="flex p-4 flex-col items-start self-stretch border-t border-border bg-background"
                   onClick={() => onSectionFocus?.(sectionIndex)}
                   onFocus={() => onSectionFocus?.(sectionIndex)}

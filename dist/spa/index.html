@@ -4,12 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>USER FRONTEND</title>
+<<<<<<< HEAD
     <script type="module" crossorigin src="/assets/index-X9iSBKIW.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-BwY7UlBa.css">
+=======
+    <!-- Preconfigure OpenCV.js wasm loader to fetch from the same CDN path -->
+    <script>
+      // Ensure Emscripten module config exists before loading OpenCV
+      window.Module = window.Module || {};
+      // Help OpenCV find its WASM and worker files when served from CDN
+      window.Module.locateFile = function(file) {
+        return 'https://docs.opencv.org/4.x/' + file;
+      };
+      // Global readiness flag for app code
+      window.__cvReady = false;
+      window.Module.onRuntimeInitialized = function() {
+        try { window.__cvReady = true; } catch {}
+        try { console.log('[OpenCV] onRuntimeInitialized (global)'); } catch {}
+      };
+    </script>
+    <!-- Load OpenCV.js early and globally (blocking) so it's ready before the app runs -->
+    <script src="https://docs.opencv.org/4.x/opencv.js" crossorigin="anonymous"></script>
+    <script>
+      // Fallback: mark ready if cv is already initialized by the time this runs
+      (function(){
+        try {
+          if (window.cv && window.cv.Mat && !window.__cvReady) {
+            window.__cvReady = true;
+            console.log('[OpenCV] Ready (cv.Mat present)');
+          }
+        } catch {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-C3PNGJrW.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BKiKea4v.css">
+>>>>>>> tushar_17-11-25
   </head>
 
   <body>
     <div id="root"></div>
 
+
   </body>
 </html>
