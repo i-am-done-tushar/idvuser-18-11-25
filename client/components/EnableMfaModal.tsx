@@ -29,6 +29,7 @@ export default function EnableMfaModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const url = import.meta.env.VITE_API_BASE;
 
   const updateUserMfaStatus = async () => {
     try {
@@ -63,7 +64,7 @@ export default function EnableMfaModal({
     try {
       if (mfaVerificationMethod === "email") {
         // Email OTP generation
-        const response = await fetch("/api/Otp/generate", {
+        const response = await fetch(`${url}/api/Otp/generate`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -85,7 +86,7 @@ export default function EnableMfaModal({
         setVerificationStep("verify-otp");
       } else {
         // Phone OTP generation
-        const response = await fetch("/api/Otp/phone/start", {
+        const response = await fetch(`${url}/api/Otp/phone/start`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -129,7 +130,7 @@ export default function EnableMfaModal({
     try {
       if (mfaVerificationMethod === "email") {
         // Email OTP validation
-        const response = await fetch("/api/Otp/validate", {
+        const response = await fetch(`${url}/api/Otp/validate`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -164,7 +165,7 @@ export default function EnableMfaModal({
           throw new Error("OTP ID not found. Please request a new code.");
         }
 
-        const response = await fetch("/api/Otp/phone/verify", {
+        const response = await fetch(`${url}/api/Otp/phone/verify`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

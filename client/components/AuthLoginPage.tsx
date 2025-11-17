@@ -85,7 +85,6 @@ export function AuthLoginPage() {
         }
 
         const data = await response.json();
-        console.log("Email OTP sent:", data);
 
         // Navigate to OTP page with email
         navigate("/auth/otp", { 
@@ -149,7 +148,6 @@ export function AuthLoginPage() {
       }
 
       const data = await response.json();
-      console.log("Phone OTP sent:", data);
 
       // Navigate to OTP page with phone number and otpId
       navigate("/auth/otp", {
