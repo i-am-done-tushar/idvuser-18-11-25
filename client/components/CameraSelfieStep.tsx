@@ -28,7 +28,7 @@ declare var cv: any; // OpenCV.js
 
 type CameraCaptureProps = {
   userId: number; // required input
-  onStepComplete?: (step: number) => void; // output as callback
+  onStepComplete?: (step?: number) => void; // output as callback
 };
 
 // function Step6({ userId, onStepComplete }: Step6Props) {
@@ -2058,6 +2058,8 @@ export default function CameraCapture({
     stopCamera();
 
     console.log("✅ Session fully completed. Camera stopped.");
+    // Call onStepComplete to notify parent that selfie step is completed
+    onStepComplete?.();
     // Don't call onStepComplete yet - wait for user to click submit
   }, [
     completedSegments,

@@ -20,6 +20,7 @@ import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
 import { VerifiedCredentialsPage } from "./components/VerifiedCredentialsPage";
 import { ContactAdminPage } from "./components/ContactAdminPage";
 import HandoffPage from "./pages/HandoffPage";
+import { PasswordSetupPage as PWSetUp } from "./components/PasswordSetupPage";
 
 //1st change
 
@@ -46,8 +47,8 @@ const App = () => (
             element={<VerificationSuccessPage />}
           />
           <Route path="/password-setup" element={<PasswordSetupPage />} />
-          <Route path="/auth/login" element={<AuthLoginPage />} />
-          <Route path="/login" element={<ReLoginUserPage />} />
+          <Route path="/auth/login" element={<PWSetUp />} />
+          <Route path="/login" element={<PWSetUp />} />
           <Route path="/auth/otp" element={<AuthOtpPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route
