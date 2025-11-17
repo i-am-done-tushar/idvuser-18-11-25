@@ -75,8 +75,6 @@ export function AuthOtpPage() {
           const errorData = await response.json();
           throw new Error(errorData.message || "Failed to resend OTP");
         }
-
-        console.log("Email OTP resent successfully");
       } else {
         // Resend phone OTP
         // Extract country code and phone number
@@ -118,7 +116,6 @@ export function AuthOtpPage() {
             replace: true,
           });
         }
-        console.log("Phone OTP resent successfully");
       }
     } catch (err: any) {
       console.error("Error resending OTP:", err);
@@ -156,7 +153,6 @@ export function AuthOtpPage() {
         }
 
         const data = await response.json();
-        console.log("Email OTP verified:", data);
 
         // Navigate to dashboard on success
         navigate("/dashboard");
@@ -183,7 +179,6 @@ export function AuthOtpPage() {
         }
 
         const data = await response.json();
-        console.log("Phone OTP verified:", data);
 
         // Navigate to dashboard on success
         navigate("/dashboard");

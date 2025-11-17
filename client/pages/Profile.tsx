@@ -497,7 +497,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex px-4 py-3 items-start gap-2.5 self-stretch">
-                <button className="flex h-8 px-3 py-2 justify-center items-center gap-2 rounded bg-[#D83A52]">
+                <button  onClick={() => navigate("/login")} className="flex h-8 px-3 py-2 justify-center items-center gap-2 rounded bg-[#D83A52]">
                   <span className="text-white font-roboto text-[13px] font-medium leading-4">
                     Logout from All Sessions
                   </span>
@@ -692,7 +692,6 @@ export default function ProfilePage() {
             </button>
             <button
               onClick={() => {
-                console.log("Update password logic here");
                 setIsPasswordModalOpen(false);
               }}
               className="flex h-[38px] px-4 py-2.25 justify-center items-center gap-0.5 rounded border border-[#0073EA] bg-[#0073EA]"

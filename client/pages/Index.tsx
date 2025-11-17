@@ -28,9 +28,7 @@ export default function Index() {
     const jti = searchParams.get("jti");
 
     // If this is a DigiLocker callback (has code and state), handle it
-    if (code && state) {
-      console.log("🔐 DigiLocker callback detected at root URL");
-      
+    if (code && state) {      
       try {
         // Parse state to extract shortCode and submissionId
         const [shortCodeFromState, submissionIdFromState] = state.split(":");
@@ -46,8 +44,6 @@ export default function Index() {
         sessionStorage.setItem("digilocker_callback_state", state);
         sessionStorage.setItem("digilocker_jti", jti || "");
         sessionStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
-
-  console.log("✅ DigiLocker data stored, redirecting to /form?code=" + shortCodeFromState);
 
   // Redirect to the form page with the shortCode in query string
   navigate(`/form?code=${encodeURIComponent(shortCodeFromState)}`, { replace: true });
@@ -80,7 +76,6 @@ export default function Index() {
 
       const resolveData: ShortCodeResolveResponse =
         await resolveResponse.json();
-      console.log("Shortcode resolved:", resolveData);
 
       setTemplateVersionId(resolveData.templateVersionId);
       setUserId(resolveData.userId);
