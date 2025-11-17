@@ -152,7 +152,7 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
               </svg>
 
               {/* Button Footer */}
-              <div className="flex px-4 py-2 flex-col items-end gap-2 self-stretch rounded-b bg-[#F6F7FB]">
+              <div className="flex px-4 py-2 flex-col items-end gap-2 self-stretch bg-[#F6F7FB]">
                 <button
                   onClick={onScanFace}
                   className="flex h-[34px] px-3 py-2 justify-center items-center gap-2 rounded bg-[#0073EA] text-white font-roboto text-[14px] font-medium hover:bg-[#0060C0] transition-colors"
@@ -163,23 +163,23 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
             </div>
 
             {/* Vertical Divider - Desktop */}
-            <div className="hidden xl:flex flex-col justify-center items-center gap-1 h-[100px]">
-              <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
-              <div className="text-[#676879] font-roboto text-[13.6px]">or</div>
-              <div className="h-[36px] w-px bg-[#D0D4E4]"></div>
+            <div className="hidden xl:flex flex-col justify-center items-center gap-1">
+              <div className="flex-1 w-px bg-[#D0D4E4]"></div>
+              <div className="text-[#676879] font-roboto text-[13.6px] px-2">or</div>
+              <div className="flex-1 w-px bg-[#D0D4E4]"></div>
             </div>
 
             {/* Horizontal Divider - Mobile/Tablet */}
             <div className="flex xl:hidden w-full justify-center items-center gap-2 py-4">
-              <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+              <div className="flex-1 h-px bg-[#D0D4E4]"></div>
               <div className="text-[#676879] font-roboto text-[13.6px]">or</div>
-              <div className="w-[36px] h-px bg-[#D0D4E4]"></div>
+              <div className="flex-1 h-px bg-[#D0D4E4]"></div>
             </div>
 
             {/* Right Side - QR Code */}
-            <div className="flex flex-1 min-w-0 flex-col justify-center items-stretch">
-              <div className="flex flex-col items-center gap-2 self-stretch">
-                <div className="flex pt-4 flex-col justify-center items-center h-[400px] self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
+            <div className="flex flex-1 flex-col justify-stretch items-stretch">
+              <div className="flex flex-col items-center gap-0 self-stretch h-full">
+                <div className="flex flex-col justify-center items-center flex-1 self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
                   <div className="flex flex-col justify-center items-center gap-2 flex-1 px-4">
                     <div className="flex flex-col xl:flex-row justify-center items-center gap-4 max-w-full">
                       <img
