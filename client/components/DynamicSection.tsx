@@ -241,7 +241,7 @@ export function DynamicSection({
               </div>
             </div>
 
-            <BiometricCaptureUI onScanFace={handleScanFace} />
+            <BiometricCaptureUI onScanFace={handleScanFace} isScanning={isBiometricScanStarted} />
 
             {isBiometricScanStarted && (
               <div className="flex p-4 flex-col justify-center items-center self-stretch bg-background">
