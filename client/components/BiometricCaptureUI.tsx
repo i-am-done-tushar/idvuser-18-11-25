@@ -40,9 +40,9 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
 
         {/* Main Content Area */}
         <div className="flex w-full flex-col justify-center items-center border-t border-[#DEDEDD] bg-white p-4">
-          <div className="flex w-full flex-col xl:flex-row justify-center items-stretch gap-6 p-2">
+          <div className="flex w-full h-[500px] flex-col xl:flex-row justify-center items-stretch gap-0 p-2">
             {/* Left Side - Illustration */}
-            <div className="flex flex-1 min-w-0 pt-10 flex-col justify-between items-center rounded-lg bg-white">
+            <div className="flex flex-1 flex-col justify-between items-center rounded-lg bg-white">
               <style>
                 {`
                   @keyframes headTilt {
@@ -60,10 +60,11 @@ export function BiometricCaptureUI({ onScanFace }: BiometricCaptureUIProps) {
                 `}
               </style>
               <svg
-                className="flex flex-col items-center gap-3 self-stretch w-full h-auto"
+                className="flex flex-col items-center gap-3 self-stretch w-full h-full"
                 viewBox="0 0 460 353"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
+                preserveAspectRatio="xMidYMid meet"
               >
                 <g className="animated-head">
                   <path
