@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, beforeEach, afterEach, vi, expect } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import CameraSelfieStep from '@/components/CameraSelfieStep';
+import CameraCapture from '../components/CameraSelfieStep';
 
 // ------------------ Global/DOM Mocks ------------------
 const rafCbs: FrameRequestCallback[] = [];
@@ -19,7 +19,7 @@ beforeEach(() => {
     rafCbs.push(cb);
     return rafCbs.length as unknown as number;
   });
-  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {} as any);
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -169,7 +169,7 @@ vi.mock('face-api.js', () => {
 
 // ------------------ Helper to render component ------------------
 function renderComponent() {
-  const { container } = render(<CameraSelfieStep userId={1} onComplete={() => {}} />);
+  const { container } = render(<CameraCapture userId={1} onStepComplete={() => {}} />);
 
   // Attach a fake video element to satisfy refs and playback
   const videoEl = container.querySelector('video') as HTMLVideoElement | null;

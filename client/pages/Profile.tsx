@@ -1,11 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
-  DialogClose,
   DialogClose,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -15,16 +12,13 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const [activeNav, setActiveNav] = useState("");
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const navigate = useNavigate();
-  const [activeNav, setActiveNav] = useState("");
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
+
   // MFA modal state
   const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
 
@@ -268,80 +262,6 @@ export default function ProfilePage() {
                   </h1>
                 </div>
               </div>
-    <div className="flex flex-col w-full h-screen bg-white">
-      <div className="flex w-full h-11 px-3 lg:px-4 justify-between items-center border-b border-[#DEDEDD] bg-white">
-        <img
-          src="https://api.builder.io/api/v1/image/assets/TEMP/4566b1e4f2b69299156b1f1c61472e06e0ad9666?width=180"
-          alt="Logo"
-          className="w-[90px] h-7 object-contain"
-        />
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate("/profile")}
-            className="flex w-8 h-8 p-2 justify-center items-center gap-2 rounded-full bg-[#F65F7C]"
-          >
-            <span className="text-white font-roboto text-xs font-medium leading-[10px]">
-              OS
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex h-full bg-white overflow-hidden">
-        <div className="flex w-[248px] px-2 py-2 flex-col items-start gap-1 border-r border-[#D0D4E4] bg-white overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = activeNav === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveNav(item.id);
-                  item.onClick?.();
-                }}
-                className={`flex h-[38px] items-center gap-2 self-stretch rounded ${
-                  isActive ? "bg-[#E6F1FD] pl-1 pr-2.25" : "pl-3 pr-2.25"
-                }`}
-              >
-                {isActive && (
-                  <svg
-                    className="w-0.5 h-[28.5px]"
-                    width="2"
-                    height="31"
-                    viewBox="0 0 2 31"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M1 1V29.5"
-                      stroke="#0073EA"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                )}
-                {item.icon(isActive)}
-                <span
-                  className={`font-roboto text-[13px] font-medium leading-normal ${
-                    isActive ? "text-[#172B4D]" : "text-[#505258]"
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-1 flex-col items-start bg-white overflow-y-auto">
-          <div className="flex w-full h-14 flex-col items-start border-b border-[#DEDEDD]">
-            <div className="flex h-14 flex-col items-start self-stretch">
-              <div className="flex px-4 py-2 items-center gap-2 flex-1 self-stretch">
-                <div className="flex items-start gap-2">
-                  <h1 className="text-[#172B4D] font-roboto text-xl font-bold leading-[30px]">
-                    Profile
-                  </h1>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -394,76 +314,7 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-          <div className="flex flex-col items-start gap-2 self-stretch p-4">
-            <div className="flex flex-col items-start gap-2 self-stretch rounded border border-[#DEDEDD]">
-              <div className="flex px-4 py-3 items-center gap-2.5 self-stretch">
-                <h2 className="text-[#172B4D] font-roboto text-base font-bold leading-6">
-                  User Information
-                </h2>
-              </div>
-              <div className="w-full h-px bg-[#DEDEDD]"></div>
-              <div className="flex px-4 py-3 items-start gap-2.5 self-stretch">
-                <p className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
-                  Fetched from Lorem Ipsum
-                </p>
-              </div>
-              <div className="w-full h-px bg-[#DEDEDD]"></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 py-3 w-full">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[#172B4D] font-roboto text-[13px] font-bold leading-5">
-                    Full Name
-                  </label>
-                  <div className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
-                    Opinder Singh
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[#172B4D] font-roboto text-[13px] font-bold leading-5">
-                    Employee ID
-                  </label>
-                  <div className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
-                    EMP-2345
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[#172B4D] font-roboto text-[13px] font-bold leading-5">
-                    Email Address
-                  </label>
-                  <div className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
-                    Opinder.singh@company.com
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[#172B4D] font-roboto text-[13px] font-bold leading-5">
-                    Department / Role
-                  </label>
-                  <div className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
-                    Information Technology - Senior Software Engineer
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <div className="flex h-16 flex-col justify-center items-start gap-2 self-stretch rounded border border-[#DEDEDD]">
-              <div className="flex px-4 py-3 justify-between items-center self-stretch">
-                <div className="flex flex-col items-start gap-1">
-                  <h2 className="text-[#172B4D] font-roboto text-base font-bold leading-6">
-                    Change Password
-                  </h2>
-                  <p className="text-[#505258] font-roboto text-[13px] font-normal leading-5">
-                    Update your password to keep your account secure
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsPasswordModalOpen(true)}
-                  className="flex h-8 px-3 py-2 justify-center items-center gap-2 rounded bg-[#0073EA]"
-                >
-                  <span className="text-white font-roboto text-[13px] font-medium leading-4">
-                    Change Password
-                  </span>
-                </button>
-              </div>
-            </div>
             <div className="flex h-16 flex-col justify-center items-start gap-2 self-stretch rounded border border-[#DEDEDD]">
               <div className="flex px-4 py-3 justify-between items-center self-stretch">
                 <div className="flex flex-col items-start gap-1">
@@ -651,55 +502,12 @@ export default function ProfilePage() {
                     Logout from All Sessions
                   </span>
                 </button>
-
-              <div className="flex px-4 py-3 items-start gap-2.5 self-stretch">
-                <button className="flex h-8 px-3 py-2 justify-center items-center gap-2 rounded bg-[#D83A52]">
-                  <span className="text-white font-roboto text-[13px] font-medium leading-4">
-                    Logout from All Sessions
-                  </span>
-                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
-          </div>
-        </div>
-      </div>
 
-      <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
-        <DialogContent className="max-w-[420px] p-0 gap-0 rounded-lg overflow-hidden">
-          <div className="flex h-[52px] px-5 py-2.5 justify-between items-center border-b border-[#D0D4E4] bg-white">
-            <DialogTitle className="text-[#172B4D] font-roboto text-lg font-bold leading-[26px]">
-              Change Password
-            </DialogTitle>
-            <DialogClose className="flex w-7 h-7 p-2 flex-col justify-center items-center rounded-full bg-white hover:bg-gray-100">
-              <svg
-                className="w-4 h-4"
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M12 4L4 12M4 4L12 12"
-                  stroke="#676879"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </DialogClose>
-          </div>
-
-          <div className="flex px-5 py-5 flex-col items-start bg-white">
-            <div className="flex flex-col items-start self-stretch gap-0">
-              <div className="flex flex-col items-start self-stretch">
-                <label className="flex pb-2 items-start gap-2 self-stretch">
-                  <span className="flex h-2.5 flex-col justify-center flex-1 text-[#172B4D] font-roboto text-[13px] font-medium leading-normal">
-                    Current Password
-                  </span>
       <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
         <DialogContent className="max-w-[420px] p-0 gap-0 rounded-lg overflow-hidden">
           <div className="flex h-[52px] px-5 py-2.5 justify-between items-center border-b border-[#D0D4E4] bg-white">
@@ -771,53 +579,9 @@ export default function ProfilePage() {
                       />
                     </svg>
                   </button>
-                <div className="flex h-8 px-2.5 py-[15px] justify-between items-center self-stretch rounded border border-[#C3C6D4] bg-white">
-                  <input
-                    type={showCurrentPassword ? "text" : "password"}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Enter Password"
-                    className="flex-1 text-[#676879] font-roboto text-xs font-normal leading-[22px] outline-none bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="flex justify-end items-center"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M1.61341 8.47807C1.52263 8.33427 1.47723 8.2624 1.45181 8.15154C1.43273 8.06827 1.43273 7.93694 1.45181 7.85367C1.47723 7.7428 1.52263 7.67094 1.61341 7.52714C2.36369 6.33916 4.59694 3.33594 8.00027 3.33594C11.4036 3.33594 13.6369 6.33916 14.3871 7.52714C14.4779 7.67094 14.5233 7.7428 14.5487 7.85367C14.5678 7.93694 14.5678 8.06827 14.5487 8.15154C14.5233 8.2624 14.4779 8.33427 14.3871 8.47807C13.6369 9.66607 11.4036 12.6693 8.00027 12.6693C4.59694 12.6693 2.36369 9.66607 1.61341 8.47807Z"
-                        stroke="#676879"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M8 10C9.1046 10 10 9.1046 10 8C10 6.8954 9.1046 6 8 6C6.8954 6 6 6.8954 6 8C6 9.1046 6.8954 10 8 10Z"
-                        stroke="#676879"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
                 </div>
-                <div className="flex h-6 items-start gap-2 self-stretch"></div>
-                <div className="flex h-6 items-start gap-2 self-stretch"></div>
               </div>
 
-              <div className="flex flex-col items-start self-stretch">
-                <label className="flex pb-2 items-start gap-2 self-stretch">
-                  <span className="flex h-2.5 flex-col justify-center flex-1 text-[#172B4D] font-roboto text-[13px] font-medium leading-normal">
-                    New Password
-                  </span>
               <div className="flex flex-col items-start self-stretch">
                 <label className="flex pb-2 items-start gap-2 self-stretch">
                   <span className="flex h-2.5 flex-col justify-center flex-1 text-[#172B4D] font-roboto text-[13px] font-medium leading-normal">
@@ -861,53 +625,9 @@ export default function ProfilePage() {
                       />
                     </svg>
                   </button>
-                <div className="flex h-8 px-2.5 py-[15px] justify-between items-center self-stretch rounded border border-[#C3C6D4] bg-white">
-                  <input
-                    type={showNewPassword ? "text" : "password"}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Enter Password"
-                    className="flex-1 text-[#676879] font-roboto text-xs font-normal leading-[22px] outline-none bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="flex justify-end items-center"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M1.61341 8.47807C1.52263 8.33427 1.47723 8.2624 1.45181 8.15154C1.43273 8.06827 1.43273 7.93694 1.45181 7.85367C1.47723 7.7428 1.52263 7.67094 1.61341 7.52714C2.36369 6.33916 4.59694 3.33594 8.00027 3.33594C11.4036 3.33594 13.6369 6.33916 14.3871 7.52714C14.4779 7.67094 14.5233 7.7428 14.5487 7.85367C14.5678 7.93694 14.5678 8.06827 14.5487 8.15154C14.5233 8.2624 14.4779 8.33427 14.3871 8.47807C13.6369 9.66607 11.4036 12.6693 8.00027 12.6693C4.59694 12.6693 2.36369 9.66607 1.61341 8.47807Z"
-                        stroke="#676879"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M8 10C9.1046 10 10 9.1046 10 8C10 6.8954 9.1046 6 8 6C6.8954 6 6 6.8954 6 8C6 9.1046 6.8954 10 8 10Z"
-                        stroke="#676879"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
                 </div>
-                <div className="flex h-6 items-start gap-2 self-stretch"></div>
-                <div className="flex h-6 items-start gap-2 self-stretch"></div>
               </div>
 
-              <div className="flex flex-col items-start self-stretch">
-                <label className="flex pb-2 items-start gap-2 self-stretch">
-                  <span className="flex h-2.5 flex-col justify-center flex-1 text-[#172B4D] font-roboto text-[13px] font-medium leading-normal">
-                    Confirm New Password
-                  </span>
               <div className="flex flex-col items-start self-stretch">
                 <label className="flex pb-2 items-start gap-2 self-stretch">
                   <span className="flex h-2.5 flex-col justify-center flex-1 text-[#172B4D] font-roboto text-[13px] font-medium leading-normal">
@@ -951,49 +671,8 @@ export default function ProfilePage() {
                       />
                     </svg>
                   </button>
-                <div className="flex h-8 px-2.5 py-[15px] justify-between items-center self-stretch rounded border border-[#C3C6D4] bg-white">
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Enter Password"
-                    className="flex-1 text-[#676879] font-roboto text-xs font-normal leading-[22px] outline-none bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="flex justify-end items-center"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M1.61341 8.47807C1.52263 8.33427 1.47723 8.2624 1.45181 8.15154C1.43273 8.06827 1.43273 7.93694 1.45181 7.85367C1.47723 7.7428 1.52263 7.67094 1.61341 7.52714C2.36369 6.33916 4.59694 3.33594 8.00027 3.33594C11.4036 3.33594 13.6369 6.33916 14.3871 7.52714C14.4779 7.67094 14.5233 7.7428 14.5487 7.85367C14.5678 7.93694 14.5678 8.06827 14.5487 8.15154C14.5233 8.2624 14.4779 8.33427 14.3871 8.47807C13.6369 9.66607 11.4036 12.6693 8.00027 12.6693C4.59694 12.6693 2.36369 9.66607 1.61341 8.47807Z"
-                        stroke="#676879"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M8 10C9.1046 10 10 9.1046 10 8C10 6.8954 9.1046 6 8 6C6.8954 6 6 6.8954 6 8C6 9.1046 6.8954 10 8 10Z"
-                        stroke="#676879"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
                 </div>
-                <div className="flex h-6 items-start gap-2 self-stretch"></div>
-                <div className="flex h-6 items-start gap-2 self-stretch"></div>
               </div>
-            </div>
-          </div>
             </div>
           </div>
 
