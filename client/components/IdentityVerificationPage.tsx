@@ -66,7 +66,10 @@ export function IdentityVerificationPage({
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
   const [showConsentDialog, setShowConsentDialog] = useState(false);
-  const [hasConsented, setHasConsented] = useState(false);
+  const [hasConsented, setHasConsented] = useState(() => {
+    // Check if user already has accessToken on initial load
+    return typeof window !== "undefined" && !!localStorage.getItem("access");
+  });
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
 
   // shortCode resolve + OTP states
@@ -235,17 +238,23 @@ export function IdentityVerificationPage({
 
   // DigiLocker: optionally skip consent
   useEffect(() => {
+    // If user already has accessToken (set in initial state), skip this logic
+    if (hasConsented) return;
+
     const digilockerAuthCode = sessionStorage.getItem("digilocker_auth_code");
     const skipConsent = sessionStorage.getItem("digilocker_skip_consent");
     const isDigilockerReturn = !!digilockerAuthCode || !!skipConsent;
 
-    if (isDigilockerReturn) {
+    // Check if user already has accessToken
+    const hasAccessToken = typeof window !== "undefined" && localStorage.getItem("access");
+
+    if (isDigilockerReturn || hasAccessToken) {
       setHasConsented(true);
       sessionStorage.removeItem("digilocker_skip_consent");
     } else {
       setShowConsentDialog(true);
     }
-  }, []);
+  }, [hasConsented]);
 
   // prefer resolved version id when fetching
   const effectiveTemplateVersionId = resolvedTemplateVersionId ?? templateId;
@@ -1745,6 +1754,12 @@ export function IdentityVerificationPage({
   const handleConsentAgree = async () => {
     setHasConsented(true);
     setShowConsentDialog(false);
+
+    // If user already has accessToken, skip OTP verification
+    const hasAccessToken = typeof window !== "undefined" && localStorage.getItem("access");
+    if (hasAccessToken) {
+      return;
+    }
 
     const email = (formData.email || "").trim();
     const versionId = getActiveVersionId();

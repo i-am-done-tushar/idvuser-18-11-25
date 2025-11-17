@@ -19,6 +19,7 @@ import { OngoingVerificationPage } from "./components/OngoingVerificationPage";
 import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
 import { VerifiedCredentialsPage } from "./components/VerifiedCredentialsPage";
 import { ContactAdminPage } from "./components/ContactAdminPage";
+import HandoffPage from "./pages/HandoffPage";
 
 //1st change
 
@@ -63,6 +64,7 @@ const App = () => (
           />
           <Route path="/contact-admin" element={<ContactAdminPage />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/HandoffPage/:joincode" element={<HandoffPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
