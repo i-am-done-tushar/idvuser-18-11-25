@@ -5,6 +5,7 @@ import CameraSelfieStep from "./CameraSelfieStep";
 import { LockedStepComponent } from "./LockedStepComponent";
 import { FormData } from "@shared/templates";
 import { BiometricCaptureUI } from "./BiometricCaptureUI";
+import { QRCodeDisplay } from "./QRCodeDisplay";
 import { useState } from "react";
 
 interface DesktopDynamicSectionProps {
@@ -352,7 +353,17 @@ export function DesktopDynamicSection({
             </div>
 
             {!isBiometricScanStarted ? (
-              <BiometricCaptureUI onScanFace={handleScanFace} />
+              <BiometricCaptureUI 
+                onScanFace={handleScanFace}
+                shortCode={shortCode}
+                templateVersionId={templateVersionId}
+                userId={userId}
+                sessionId={'default-session'}
+                submissionId={submissionId}
+                connectionRef={connectionRef}
+                shouldMaintainConnection={shouldMaintainConnection}
+                onHandoffConnected={onHandoffConnected}
+              />
             ) : (
               <div className="flex w-full flex-col gap-4 rounded bg-white">
                 {/* Header Section */}
@@ -423,23 +434,22 @@ export function DesktopDynamicSection({
                       {/* QR Code Section */}
                       <div className="flex flex-1 min-w-0 flex-col flex-shrink-0">
                         <div className="flex h-[480px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white px-4 py-6">
-                          <img
-                            src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=https://id.xyz/verify"
-                            alt="QR Code"
-                            className="w-32 h-32 flex-shrink-0"
+                          <QRCodeDisplay
+                            shortCode={shortCode}
+                            templateVersionId={templateVersionId}
+                            userId={userId}
+                            sessionId={'default-session'}
+                            currentStep="biometric-capture"
+                            submissionId={submissionId}
+                            size="large"
+                            showUrl={false}
+                            connectionRef={connectionRef}
+                            shouldMaintainConnection={shouldMaintainConnection}
+                            onConnected={onHandoffConnected}
                           />
                           <div className="flex flex-col items-center gap-3 max-w-[300px] px-2">
                             <p className="text-[#676879] text-center font-roboto text-[13px] font-normal leading-5">
-                              Continue on another device by scanning the QR code
-                              or opening{" "}
-                              <a
-                                href="https://id.xyz/verify"
-                                className="text-[#0073EA]"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                https://id.xyz/verify
-                              </a>
+                              Scan this QR code with your other device to continue verification.
                             </p>
                           </div>
                         </div>

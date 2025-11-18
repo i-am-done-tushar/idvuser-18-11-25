@@ -1,11 +1,31 @@
+import React from "react";
+import { QRCodeDisplay } from "./QRCodeDisplay";
+
 interface BiometricCaptureUIProps {
   onScanFace: () => void;
   isScanning?: boolean;
+  // QR Code props
+  shortCode?: string;
+  templateVersionId?: number;
+  userId?: number | null;
+  sessionId?: string;
+  submissionId?: number | null;
+  connectionRef?: React.MutableRefObject<any>;
+  shouldMaintainConnection?: React.MutableRefObject<boolean>;
+  onHandoffConnected?: () => void;
 }
 
 export function BiometricCaptureUI({
   onScanFace,
   isScanning = false,
+  shortCode,
+  templateVersionId,
+  userId,
+  sessionId,
+  submissionId,
+  connectionRef,
+  shouldMaintainConnection,
+  onHandoffConnected,
 }: BiometricCaptureUIProps) {
   return (
     <div className="flex w-full flex-col gap-4 rounded bg-white">
@@ -190,20 +210,24 @@ export function BiometricCaptureUI({
                 <div className="flex flex-col items-center gap-0 self-stretch h-full">
                   <div className="flex flex-col justify-center items-center flex-1 self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
                     <div className="flex flex-col justify-center items-center gap-4 flex-1 px-4 py-4">
-                      <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://id.xyz/verify"
-                        alt="QR Code"
-                        className="w-[134px] h-[134px] flex-shrink-0"
+                      <QRCodeDisplay
+                        shortCode={shortCode}
+                        templateVersionId={templateVersionId}
+                        userId={userId}
+                        sessionId={sessionId || 'default-session'}
+                        currentStep="biometric-capture"
+                        submissionId={submissionId}
+                        size="large"
+                        showUrl={false}
+                        connectionRef={connectionRef}
+                        shouldMaintainConnection={shouldMaintainConnection}
+                        onConnected={onHandoffConnected}
                       />
                       <div className="flex flex-col justify-center items-center gap-2 max-w-[280px]">
                         <div className="flex w-full flex-col items-center">
                           <div className="w-full text-center font-roboto text-[13px] font-normal leading-[20px]">
                             <span className="text-[#676879]">
-                              Continue on another device by scanning the QR code
-                              or opening
-                            </span>
-                            <span className="text-[#0073EA] break-all block">
-                              https://id.xyz/verify
+                              Scan this QR code with your other device to continue verification.
                             </span>
                           </div>
                         </div>
