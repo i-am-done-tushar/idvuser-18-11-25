@@ -1971,6 +1971,20 @@ export function IdentityVerificationPage({
             documents: documentFormState.documentsDetails,
           });
         } else if (section.sectionType === "biometrics") {
+          // Trigger download of biometric videos before submitting
+          if (typeof (window as any).__biometricDownloadFn === 'function') {
+            console.log('📥 Triggering biometric video downloads...');
+            try {
+              (window as any).__biometricDownloadFn();
+              // Wait briefly to allow downloads to be initiated
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (err) {
+              console.error('❌ Error downloading biometric videos:', err);
+            }
+          } else {
+            console.warn('⚠️ Biometric download function not found');
+          }
+          
           fieldValue = JSON.stringify({
             selfieUploaded: isSelfieCompleted,
             completedAt: new Date().toISOString(),
