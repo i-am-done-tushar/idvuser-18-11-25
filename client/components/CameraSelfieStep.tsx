@@ -29,6 +29,8 @@ declare var cv: any; // OpenCV.js
 type CameraCaptureProps = {
   userId: number; // required input
   onStepComplete?: (step?: number) => void; // output as callback
+  maxRetries?: number; // maximum number of retry attempts allowed from template config
+  onRequestDownload?: () => void; // called when parent should trigger download (on submit click)
 };
 
 // function Step6({ userId, onStepComplete }: Step6Props) {
@@ -55,6 +57,8 @@ type CameraCaptureProps = {
 export default function CameraCapture({
   userId,
   onStepComplete,
+  maxRetries = 4, // default to 4 if not provided
+  onRequestDownload,
 }: CameraCaptureProps) {
   //-----------------------------useState-------------------------------------
   //UI/Display State (triggers re-renders):
@@ -76,6 +80,11 @@ export default function CameraCapture({
   const [modelsLoaded, setModelsLoaded] = useState(false);
   // OpenCV readiness
   const [openCvReady, setOpenCvReady] = useState(false);
+  
+  // Retry tracking
+  const [currentAttempt, setCurrentAttempt] = useState(1); // Start at attempt 1
+  const [captureCompleted, setCaptureCompleted] = useState(false); // Track if current capture is done
+  const [retryTrigger, setRetryTrigger] = useState(0); // Trigger for restarting camera
 
   //Recording State (affects UI):
   const [isRecording, setIsRecording] = useState(false);
@@ -291,42 +300,45 @@ export default function CameraCapture({
       try {
         checkIsMobile();
 
-        console.log("Setting TensorFlow.js backend to webgl...");
-        await tf.setBackend("webgl");
-        await tf.ready();
-        console.log("TensorFlow backend:", tf.getBackend());
+        // Only load models and OpenCV on first mount (retryTrigger === 0)
+        if (retryTrigger === 0) {
+          console.log("Setting TensorFlow.js backend to webgl...");
+          await tf.setBackend("webgl");
+          await tf.ready();
+          console.log("TensorFlow backend:", tf.getBackend());
 
-        console.log("Loading face-api models...");
-        // logService.log('debug', 'Loading face-api models...');
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
-          faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
-          faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights"),
-          faceapi.nets.faceExpressionNet.loadFromUri("/assets/weights"),
-        ]);
-        console.log("✅ FaceAPI models loaded");
-        // logService.log('debug', '✅ FaceAPI models loaded');
+          console.log("Loading face-api models...");
+          // logService.log('debug', 'Loading face-api models...');
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
+            faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
+            faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights"),
+            faceapi.nets.faceExpressionNet.loadFromUri("/assets/weights"),
+          ]);
+          console.log("✅ FaceAPI models loaded");
+          // logService.log('debug', '✅ FaceAPI models loaded');
 
-        // Ensure OpenCV is loaded and initialized before any cv.* usage
-        console.log("Loading OpenCV.js...");
-        try {
-          await waitForOpenCv();
-          if (!cancelled) setOpenCvReady(true);
-          console.log("✅ OpenCV.js ready");
-        } catch (e) {
-          console.error("Failed to load OpenCV.js", e);
-          // Not fatal for camera start; features using cv will be skipped
+          // Ensure OpenCV is loaded and initialized before any cv.* usage
+          console.log("Loading OpenCV.js...");
+          try {
+            await waitForOpenCv();
+            if (!cancelled) setOpenCvReady(true);
+            console.log("✅ OpenCV.js ready");
+          } catch (e) {
+            console.error("Failed to load OpenCV.js", e);
+            // Not fatal for camera start; features using cv will be skipped
+          }
+
+          // Example: COCO-SSD load removed/commented—keep consistent with Angular
+          // await cocoSsd.load();
+
+          // logService.log('info', 'Step 6 loaded');
+          // if (!cancelled) {
+          //   setLogs(logService.getLogs());
+          // }
         }
 
-        // Example: COCO-SSD load removed/commented—keep consistent with Angular
-        // await cocoSsd.load();
-
-        // logService.log('info', 'Step 6 loaded');
-        // if (!cancelled) {
-        //   setLogs(logService.getLogs());
-        // }
-
-        console.log("Starting camera...");
+        console.log(retryTrigger === 0 ? "Starting camera..." : "Restarting camera...");
         await startCamera(); // fill in inside your React version
       } catch (err: any) {
         console.error("Camera initialization failed:", err);
@@ -371,7 +383,7 @@ export default function CameraCapture({
         streamRef.current = null;
       }
     };
-  }, []); // run once like ngOnInit
+  }, [retryTrigger]); // Re-run when retry is triggered
 
   const showMessage = useCallback(
     (
@@ -1002,15 +1014,15 @@ export default function CameraCapture({
 
             if (success) {
               setVerificationMessage(
-                "✅ Head movement verified — downloading...",
+                "✅ Head movement verified successfully!",
               );
               logServiceRef.current.log(
                 "info",
-                "[HeadVerification] 🎥 Recording complete. Starting download.",
+                "[HeadVerification] 🎥 Recording complete. Stored for later download.",
               );
               showMessage(
                 "headTurnAttemptStatus",
-                "✅ Head movement verified — downloading...",
+                "✅ Head movement verified successfully!",
               );
               resolve(true);
             } else {
@@ -1471,6 +1483,41 @@ export default function CameraCapture({
     recordingFlagRef.current = 0;
   }, []);
 
+  // Handler to retry the entire capture process
+  const handleRetry = useCallback(() => {
+    if (currentAttempt >= maxRetries) {
+      // Max retries reached, show error
+      setStatusMessage(`❌ Maximum retry attempts (${maxRetries}) reached. Please contact support.`);
+      return;
+    }
+
+    // Increment attempt counter
+    setCurrentAttempt(prev => prev + 1);
+    
+    // Reset completion flags
+    setCaptureCompleted(false);
+    setCapturedFrameUrl(null); // Clear the captured frame overlay
+    sessionCompletedRef.current = false;
+    autoStartDisabledRef.current = false;
+    downloadsTriggeredRef.current = false;
+    
+    // Clear stored videos and recording data
+    setCompletedSegments([]);
+    recordedChunksPerSegmentRef.current = {};
+    headDownloadDoneRef.current = {};
+    partialSegmentBlobsPerSegmentRef.current = {};
+    headRecordedChunksRef.current = [];
+    
+    // Reset all capture state
+    _resetAll();
+    
+    // Show retry message and trigger camera restart
+    setStatusMessage(`🔄 Retry attempt ${currentAttempt + 1} of ${maxRetries}. Restarting...`);
+    
+    // Trigger the useEffect to restart camera initialization
+    setRetryTrigger(prev => prev + 1);
+  }, [currentAttempt, maxRetries, _resetAll]);
+
   const performVerificationForCurrentSegment: () => Promise<void> =
     useCallback(async () => {
       const segment = currentSegmentRef.current; // ✅ Use ref to avoid stale closure
@@ -1710,7 +1757,8 @@ export default function CameraCapture({
           `✅ Head turn verified for segment ${segment}.`,
         );
 
-        // ✅ Download head verification video exactly once for segment 1 and 2
+        // ✅ Store head verification video for later download (deferred until submit)
+        // Save the blob in a ref for downloading when submit is clicked
         if (
           (segment === 1 || segment === 2) &&
           !headDownloadDoneRef.current[segment]
@@ -1730,29 +1778,25 @@ export default function CameraCapture({
                 : null;
             }
             if (blobToDownload) {
-              const a = document.createElement("a");
-              a.style.display = "none";
-              a.href = URL.createObjectURL(blobToDownload);
-              a.download = `head${segment}.webm`;
-              document.body.appendChild(a);
-              a.click();
-              setTimeout(() => {
-                URL.revokeObjectURL(a.href);
-                document.body.removeChild(a);
-              }, 100);
-              headDownloadDoneRef.current[segment] = true;
+              // Store the blob for later download instead of downloading immediately
+              if (!recordedChunksPerSegmentRef.current[`head${segment}`]) {
+                recordedChunksPerSegmentRef.current[`head${segment}`] = [];
+              }
+              // Store the full blob (we'll download it later)
+              (recordedChunksPerSegmentRef.current as any)[`head${segment}_blob`] = blobToDownload;
+              
               console.log(
                 "info",
-                `[HeadVerification] Downloaded head${segment}.webm`,
+                `[HeadVerification] Stored head${segment}.webm for later download`,
               );
             } else {
               console.warn(
-                "[HeadVerification] No head blob available to download after success",
+                "[HeadVerification] No head blob available to store after success",
               );
             }
           } catch (e) {
             console.warn(
-              "[HeadVerification] Failed to download head video after success:",
+              "[HeadVerification] Failed to store head video after success:",
               e,
             );
           } finally {
@@ -1951,6 +1995,9 @@ export default function CameraCapture({
   }, [setIsCameraOn]);
 
   const downloadAllBlobs = useCallback(() => {
+    console.log("[Downloads] downloadAllBlobs called");
+    console.log("[Downloads] downloadsTriggeredRef.current:", downloadsTriggeredRef.current);
+    
     if (downloadsTriggeredRef.current) {
       console.log(
         "info",
@@ -1966,6 +2013,11 @@ export default function CameraCapture({
       "info",
       "[Downloads] completedSegments count:",
       completedSegments.length,
+    );
+    console.log(
+      "info",
+      "[Downloads] recordedChunksPerSegmentRef keys:",
+      Object.keys(recordedChunksPerSegmentRef.current),
     );
 
     // Build exactly one blob per segment (1..totalSegments) to avoid duplicates
@@ -2037,12 +2089,37 @@ export default function CameraCapture({
       "[Downloads] Skipping partial segment downloads (internal use only)",
     );
 
-    // Head verification videos are already downloaded immediately after each verification
-    // (see headRecorder.onstop in performVerificationForCurrentSegment)
-    console.log(
-      "info",
-      "[Downloads] Head verification videos already downloaded during verification",
-    );
+    // Download stored head verification videos (head1 and head2)
+    console.log("info", "[Downloads] Downloading head verification videos...");
+    let headDownloadCount = 0;
+    for (let seg = 1; seg <= 2; seg++) {
+      const headBlob = (recordedChunksPerSegmentRef.current as any)[`head${seg}_blob`];
+      if (headBlob && headBlob instanceof Blob) {
+        const delay = (finalSegments.length + headDownloadCount) * 300;
+        setTimeout(() => {
+          try {
+            const filename = `head${seg}.webm`;
+            const url = URL.createObjectURL(headBlob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }, 1000);
+            console.log("info", `[Downloads] Triggered: ${filename}`);
+          } catch (e) {
+            console.log("error", `[Downloads] Failed to download head${seg}:`, e);
+          }
+        }, delay);
+        headDownloadCount++;
+      } else {
+        console.log("info", `[Downloads] No head${seg} blob stored for download`);
+      }
+    }
 
     setStatusMessage("Downloads complete ✅ (segments + head verifications)");
 
@@ -2149,8 +2226,19 @@ export default function CameraCapture({
         // Capture the last frame before stopping camera
         captureLastFrame();
 
-        // Immediately download all blobs
-        downloadAllBlobs();
+        // Mark capture as completed - videos stored but not downloaded yet
+        setCaptureCompleted(true);
+        
+        // Notify parent that capture is complete and provide download function
+        onStepComplete?.();
+        
+        // Always expose download function via window object for submit button
+        console.log("[BiometricCapture] Exposing download function to window.__biometricDownloadFn");
+        (window as any).__biometricDownloadFn = downloadAllBlobs;
+        
+        // DON'T download immediately - wait for submit button click
+        // Parent will trigger download via (window as any).__biometricDownloadFn()
+        // downloadAllBlobs();
       }
     }
   }, [
@@ -3822,6 +3910,42 @@ export default function CameraCapture({
             <div className="selfie-capture-complete-message">
               <p>Capture complete</p>
             </div>
+          )}
+
+          {/* Retry button - shown when capture is completed */}
+          {captureCompleted && currentAttempt < maxRetries && (
+            <button
+              onClick={handleRetry}
+              className="selfie-retry-button"
+              style={{
+                position: 'absolute',
+                bottom: '10px',
+                right: '10px',
+                padding: '8px 16px',
+                backgroundColor: '#0073EA',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                zIndex: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                transition: 'background-color 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#0060C0';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#0073EA';
+              }}
+            >
+              <span>🔄</span>
+              <span>Retry ({currentAttempt}/{maxRetries})</span>
+            </button>
           )}
 
           {isRecording && (

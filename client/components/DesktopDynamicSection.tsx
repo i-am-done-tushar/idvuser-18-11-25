@@ -408,6 +408,7 @@ export function DesktopDynamicSection({
                           <CameraSelfieStep
                             onStepComplete={onSelfieComplete || (() => {})}
                             userId={submissionId}
+                            maxRetries={bioCfg.maxRetries}
                           />
                         </div>
                         <div className="flex w-full px-4 py-2 items-center justify-end gap-2 rounded-b border-t-0 border-[1.5px] border-dashed border-[#C3C6D4] bg-[#F6F7FB]"></div>
