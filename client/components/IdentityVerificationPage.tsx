@@ -1891,6 +1891,51 @@ export function IdentityVerificationPage({
     }
   };
 
+  const fetchSubmission = async (id) => {
+    const response = await fetch(`${API_BASE}/api/UserTemplateSubmissions/${id}`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "X-Device-Fingerprint": getDesktopDeviceFingerprint(),  // Include device fingerprint if needed
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch submission");
+    }
+
+    const data = await response.json();
+    return data.rowVersionBase64;
+  };
+
+  const updateSubmission = async (id, rowVersionBase64) => {
+    const token = getToken();
+    const deviceFingerprint = getDesktopDeviceFingerprint();
+
+    const response = await fetch(`${API_BASE}/api/UserTemplateSubmissions/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Device-Fingerprint": deviceFingerprint,
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        status: 2,  // Example data; modify as needed
+        sectionProgress: 100,
+        rowVersionBase64,  // Include the rowVersionBase64 for concurrency control
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update submission: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  };
+
   const handleSubmit = async () => {
     if (!isFormValid()) {
       const missingFields = getMissingFields();
@@ -2012,6 +2057,15 @@ export function IdentityVerificationPage({
         title: "Form Submitted Successfully!",
         description: "Your identity verification form has been submitted.",
       });
+
+      // Call the function to update submission status
+      try {
+        const rowVersionBase64 = await fetchSubmission(submissionId);
+        const updateResult = await updateSubmission(submissionId, rowVersionBase64);
+        console.log("Submission updated successfully", updateResult);
+      } catch (error) {
+        console.error("Error updating submission", error);
+      }
 
       navigate("/verification-progress");
     } catch (error) {
