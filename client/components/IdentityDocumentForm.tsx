@@ -13,7 +13,6 @@ import { getDeviceFingerprint } from "@/lib/deviceFingerprint";
 // read API base from env; avoid hardcoding
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
-// base for IdentityVerification service (uses port 8086 in some environments)
 const IDV_VERIFICATION_BASE =
   import.meta.env.VITE_IDV_VERIFICATION_BASE || import.meta.env.VITE_IDV_API_BASE || import.meta.env.VITE_API_BASE || "";
 
@@ -119,32 +118,45 @@ export function IdentityDocumentForm({
   // Format: "shortCode:submissionId" - this allows us to redirect back to the form and fetch saved data
   const getBackString = `${shortCode || 'unknown'}:${submissionId || 0}`;
 
-  // call backend to get DigiLocker URL and redirect
   const handleDigilockerClick = async () => {
     try {
       setIsDigilockerLoading(true);
 
-      const authUrl = `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
-        getBackString,
-      )}`;
+      // API endpoint for generating DigiLocker URL
+      const apiUrl = `${API_BASE}/api/digilocker/generate-url`;
 
-      const res = await fetch(authUrl, { method: "GET", headers: { accept: "*/*" } });
+      // Collect necessary request headers and body data
+      const deviceFingerprint = getDeviceFingerprint(); // Get device fingerprint
+      const requestBody = {
+        submissionId: submissionId || 0,
+        userId: userId || 0,
+        email: "user@example.com", // You may want to use a dynamic email
+      };
+
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwianRpIjoiNDM4ZGU0NmItNDc5MS00ZDIxLTk1OTUtMzRhYzk3ODIwNjAyIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZWlkZW50aWZpZXIiOiIxIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlN1cGVyQWRtaW4iLCJ2ZXJpZmllZCI6ImZhbHNlIiwicm9sZXNfdmVyIjoiMSIsInBlcm0iOlsiQWNjZXNzU2Vuc2l0aXZlRGF0YSIsIkFwaUludGVncmF0aW9uTWdtdCIsIkNvbmZpZ3VyZVJiYWMiLCJDcmVhdGVFZGl0V29ya2Zsb3dzIiwiRWRpdFN5c3RlbVNldHRpbmdzIiwiTWFuYWdlU3VwcG9ydFRpY2tldHMiLCJNYW5hZ2VVc2Vyc0FuZFJvbGVzIiwiTWFudWFsT3ZlcnJpZGVSZXZpZXciLCJWaWV3UmVzcG9uZFZlcmlmaWNhdGlvbnMiXSwibmJmIjoxNzYzNTcwNzg2LCJleHAiOjE3NjM1NzQzODYsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.8leSItvSlt9HbfBUR3LpRJeKB1Mr2fE1rPFnk4fbheU`,
+          "X-Device-Fingerprint": deviceFingerprint,
+          "Content-Type": "application/json", // Specify content type for POST
+        },
+        body: JSON.stringify(requestBody),
+      });
 
       if (!res.ok) {
-        const txt = await res.text().catch(() => "");
+        const txt = await res.text();
         throw new Error(`Failed to generate auth URL: ${res.status} ${txt}`);
       }
 
-      const { url, codeVerifier } = await res.json();
+      const { authUrl, state, sessionId, message } = await res.json();
 
-      // Persist the PKCE code_verifier + state so we can use it after redirect
-      sessionStorage.setItem("digilocker_code_verifier", codeVerifier || "");
-      sessionStorage.setItem("digilocker_state", getBackString);
-      // persist user choice so the callback knows what to mark as uploaded
-      sessionStorage.setItem("digilocker_selected_document", selectedDocument || "");
-      sessionStorage.setItem("digilocker_country", country || "");
-      // Hard redirect to DigiLocker consent page
-      window.location.href = url;
+      // Persist the state for later use (e.g., callback or redirect logic)
+      sessionStorage.setItem("digilocker_state", state);
+      sessionStorage.setItem("digilocker_sessionId", String(sessionId));
+      sessionStorage.setItem("digilocker_message", message || "");
+
+      // Redirect the user to DigiLocker authorization URL
+      window.location.href = authUrl;
     } catch (err) {
       console.error(err);
       alert("Could not start DigiLocker flow. Please try again.");
@@ -155,14 +167,6 @@ export function IdentityDocumentForm({
 
   // Determine if we're using lifted state or local state
   const isUsingLiftedState = !!(documentFormState && setDocumentFormState);
-  
-  // console.log('🏗️ IdentityDocumentForm render:', {
-  //   isUsingLiftedState,
-  //   hasDocumentFormState: !!documentFormState,
-  //   hasSetDocumentFormState: !!setDocumentFormState,
-  //   currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
-  //   currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
-  // });
 
   // Get current state values
   const country = isUsingLiftedState ? documentFormState!.country : localCountry;
@@ -417,7 +421,7 @@ export function IdentityDocumentForm({
       const email = "siddhi.tawde@arconnet.com";
       const templateName = "Test Template";
 
-      const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
+      const url = new URL(`${API_BASE}/api/IdentityVerification/fetch-document`);
 
       url.searchParams.set("AuthCode", authCode);
       url.searchParams.set("CodeVerifier", codeVerifier);
