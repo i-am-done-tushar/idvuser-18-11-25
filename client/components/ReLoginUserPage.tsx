@@ -7,12 +7,15 @@ import { useNavigate } from "react-router-dom";
 // CIAM bits
 const CIAM_URL = "https://qaanbciammy.arconnet.com";
 //local
-const APP_KEY = "Dpq1L3rnkE5YkAlEtrxr2eOQOG69OvpiM7uWUOPPgv7UD5/idy7KBPCzS+x9wXD7JVn+Gawh9DVxCpu2M0OAvQ==";
-const ENCRYPTED_KEY = "UIhPvKz3QGYrSDAcZ6JCHg==";
+// const APP_KEY = "Dpq1L3rnkE5YkAlEtrxr2eOQOG69OvpiM7uWUOPPgv7UD5/idy7KBPCzS+x9wXD7JVn+Gawh9DVxCpu2M0OAvQ==";
+// const ENCRYPTED_KEY = "UIhPvKz3QGYrSDAcZ6JCHg==";
 
 //hosted 
 // const APP_KEY = "KgLd9TMSUX4Ydqwwo86dA2rBQTGwDd+lIhjs0NqMi5wHkHNDGrKzHliLh0OQuIYADwE/x+hLvlLNH4kZtd0peQ==";
 // const ENCRYPTED_KEY = "qUqQrWwodFhUsCghEHbO7w==";
+
+const APP_KEY = import.meta.env.APP_KEY;
+const ENCRYPTED_KEY = import.meta.env.ENCRYPTED_KEY;
 
 const b64 = (v: string) => btoa(v);
 const buildCiamUrl = (userId: string) =>
