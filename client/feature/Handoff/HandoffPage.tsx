@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Header } from "../../../components/Header";
+import { Header } from "../../components/Header";
 import { StepSidebar } from "@/components/StepSidebar";
 import { HowItWorksDialog } from "@/components/HowItWorksDialog";
 import { ConsentDialog } from "@/components/ConsentDialog";
