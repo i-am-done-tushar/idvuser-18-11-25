@@ -355,6 +355,7 @@ export function DesktopDynamicSection({
             {!isBiometricScanStarted ? (
               <BiometricCaptureUI 
                 onScanFace={handleScanFace}
+                showQRCode={false}
                 shortCode={shortCode}
                 templateVersionId={templateVersionId}
                 userId={userId}

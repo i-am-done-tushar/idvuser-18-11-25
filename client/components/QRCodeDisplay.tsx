@@ -8,6 +8,7 @@ import { getDeviceFingerprint } from '@/lib/deviceFingerprint';
 
 // API base & IDV_VERIFICATION base
 
+
 interface QRCodeDisplayProps {
   shortCode: string;
   templateVersionId?: number;
@@ -110,7 +111,7 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         setError('');
         
         // Get access token from localStorage
-        const accessToken = localStorage.getItem('access') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwic3VibWlzc2lvbl9pZCI6IjIiLCJqdGkiOiJmNWM3M2Y1NzM5NDc0YTIyOTQ1MzgwOGUxMDkxNTY2NCIsImlhdCI6MTc2MjQzNjExMCwibmJmIjoxNzYyNDM2MTEwLCJleHAiOjE3NjI0NzIxMTAsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.ASHPD25bzLVLXdlfrm0Qh-C02QC5kyf3RUwQI72dDJ8';
+        const accessToken = localStorage.getItem('access');
         
         // Check if we already have a saved join code for this submission
         savedJoinCodeKey = `joinCode_${submissionId}`;
