@@ -290,7 +290,6 @@ export function DocumentDetailsModal({
                   </button>
                 }
                 onConfirm={() => {
-                  console.log("Consent revoked");
                 }}
               />
             </div>
