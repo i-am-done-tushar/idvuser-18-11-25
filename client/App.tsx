@@ -19,7 +19,7 @@ import { OngoingVerificationPage } from "./components/OngoingVerificationPage";
 import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
 import { VerifiedCredentialsPage } from "./components/VerifiedCredentialsPage";
 import { ContactAdminPage } from "./components/ContactAdminPage";
-import HandoffPage from "@/feature/Handoff/HandoffPage";
+import HandoffPage from "@/feature/handoff/HandoffPage";
 import { PasswordSetupPage as PWSetUp } from "./components/PasswordSetupPage";
 
 //1st change

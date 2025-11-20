@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { IdentityVerificationPage } from "@/components/IdentityVerificationPage";
+import { IdentityVerificationPage } from "@/feature/formpage/components/IdentityVerificationPage";
 import { ShortCodeResolveResponse } from "@shared/api";
 
 export default function Index() {
