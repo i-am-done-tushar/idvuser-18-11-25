@@ -23,9 +23,14 @@ const COUNTRIES: Country[] = [
 
 // --- add near imports/top ---
 const CIAM_URL = "https://qaanbciammy.arconnet.com";
-const APP_KEY =
-  "Dpq1L3rnkE5YkAlEtrxr2eOQOG69OvpiM7uWUOPPgv7UD5/idy7KBPCzS+x9wXD7JVn+Gawh9DVxCpu2M0OAvQ==";
+//local
+const APP_KEY = "Dpq1L3rnkE5YkAlEtrxr2eOQOG69OvpiM7uWUOPPgv7UD5/idy7KBPCzS+x9wXD7JVn+Gawh9DVxCpu2M0OAvQ==";
 const ENCRYPTED_KEY = "UIhPvKz3QGYrSDAcZ6JCHg==";
+
+//hosted 
+// const APP_KEY = "KgLd9TMSUX4Ydqwwo86dA2rBQTGwDd+lIhjs0NqMi5wHkHNDGrKzHliLh0OQuIYADwE/x+hLvlLNH4kZtd0peQ==";
+// const ENCRYPTED_KEY = "qUqQrWwodFhUsCghEHbO7w==";
+
 const b64 = (v: string) => btoa(v);
 const buildCiamUrl = (userId: string) =>
   `${CIAM_URL}/api/v1.0/ciamexternalauth` +
