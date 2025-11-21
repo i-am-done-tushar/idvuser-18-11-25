@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   validatePassword,
@@ -7,6 +7,8 @@ import {
 } from "@/lib/password-validation";
 import { PasswordStrengthIndicator } from "./PasswordStrengthIndicator";
 import { useToast } from "@/hooks/use-toast";
+
+const HARDCODED_SHORTCODE = "IO_zIdSiYhW6gUhLM7qMQCAs8z-XeQKqxmkwif0Ejdk";
 
 export function PasswordSetupPage() {
   const navigate = useNavigate();
@@ -18,11 +20,55 @@ export function PasswordSetupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showPasswordStrength, setShowPasswordStrength] = useState(true);
+  const [resetNonce, setResetNonce] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(true);
 
   const passwordStrength = validatePassword(password);
   const isPasswordStrong = isPasswordValid(password);
   const doesPasswordMatch = passwordsMatch(password, confirmPassword);
-  const canSubmit = isPasswordStrong && doesPasswordMatch && !isLoading;
+  const canSubmit = isPasswordStrong && doesPasswordMatch && !isLoading && resetNonce !== null;
+
+  // Validate shortcode on page load
+  useEffect(() => {
+    const validateShortcode = async () => {
+      setIsValidating(true);
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE || "https://idvapi-test.arconnet.com:1019";
+        const response = await fetch(`${apiBase}/api/auth/reset/validate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ shortcode: HARDCODED_SHORTCODE }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.message || `Shortcode validation failed with status ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+        setResetNonce(data.resetNonce);
+        setValidationError(null);
+      } catch (error) {
+        console.error("Shortcode validation error:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to validate shortcode";
+        setValidationError(errorMessage);
+        toast({
+          title: "Validation Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateShortcode();
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
