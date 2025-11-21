@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   validatePassword,
@@ -7,6 +7,8 @@ import {
 } from "@/lib/password-validation";
 import { PasswordStrengthIndicator } from "./PasswordStrengthIndicator";
 import { useToast } from "@/hooks/use-toast";
+
+const HARDCODED_SHORTCODE = "IO_zIdSiYhW6gUhLM7qMQCAs8z-XeQKqxmkwif0Ejdk";
 
 export function PasswordSetupPage() {
   const navigate = useNavigate();
@@ -18,11 +20,62 @@ export function PasswordSetupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showPasswordStrength, setShowPasswordStrength] = useState(true);
+  const [resetNonce, setResetNonce] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(true);
 
   const passwordStrength = validatePassword(password);
   const isPasswordStrong = isPasswordValid(password);
   const doesPasswordMatch = passwordsMatch(password, confirmPassword);
-  const canSubmit = isPasswordStrong && doesPasswordMatch && !isLoading;
+  const canSubmit =
+    isPasswordStrong && doesPasswordMatch && !isLoading && resetNonce !== null;
+
+  // Validate shortcode on page load
+  useEffect(() => {
+    const validateShortcode = async () => {
+      setIsValidating(true);
+      try {
+        const apiBase =
+          import.meta.env.VITE_API_BASE ||
+          "https://idvapi-test.arconnet.com:1019";
+        const response = await fetch(`${apiBase}/api/auth/reset/validate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ shortcode: HARDCODED_SHORTCODE }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.message ||
+              `Shortcode validation failed with status ${response.status}`,
+          );
+        }
+
+        const data = await response.json();
+        setResetNonce(data.resetNonce);
+        setValidationError(null);
+      } catch (error) {
+        console.error("Shortcode validation error:", error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to validate shortcode";
+        setValidationError(errorMessage);
+        toast({
+          title: "Validation Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateShortcode();
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,26 +98,58 @@ export function PasswordSetupPage() {
       return;
     }
 
+    if (!resetNonce) {
+      toast({
+        title: "Error",
+        description: "Reset nonce is missing. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // TODO: Integrate with backend to save password
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      toast({
-        title: "Success",
-        description: "Your password has been set successfully.",
-        duration: 3000,
+      const apiBase =
+        import.meta.env.VITE_API_BASE ||
+        "https://idvapi-test.arconnet.com:1019";
+      const response = await fetch(`${apiBase}/api/auth/reset/complete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resetNonce,
+          newPassword: password,
+        }),
       });
 
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
+      if (response.status === 204) {
+        toast({
+          title: "Success",
+          description: "Your password has been set successfully.",
+          duration: 3000,
+        });
+
+        setTimeout(() => {
+          navigate("/login", { replace: true });
+        }, 1000);
+      } else if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Password reset failed with status ${response.status}`,
+        );
+      }
     } catch (error) {
       console.error("Password setup error:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to set password. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to set password. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -306,203 +391,253 @@ export function PasswordSetupPage() {
         {/* Form Container */}
         <div className="flex-1 overflow-auto flex items-center justify-center px-4 py-8">
           <div className="w-full max-w-[360px]">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-              {/* Heading */}
-              <div className="flex flex-col justify-center items-center gap-0">
-                <h1 className="text-[#172B4D] text-center font-roboto text-[28px] font-extrabold leading-[42px]">
-                  Set Your Password
-                </h1>
-                <p className="text-[#676879] text-center font-roboto text-[14px] font-normal leading-[22px]">
-                  Create a strong password to secure your account
+            {isValidating && (
+              <div className="flex flex-col gap-6 items-center justify-center">
+                <svg
+                  className="animate-spin h-8 w-8 text-[#0073EA]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <p className="text-[#676879] font-roboto text-base">
+                  Validating shortcode...
                 </p>
               </div>
+            )}
 
-              {/* New Password Field */}
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="password"
-                  className="text-[#323238] font-roboto text-[13px] font-medium leading-normal"
-                >
-                  New Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setShowPasswordStrength(true);
-                    }}
-                    className="w-full h-[54px] px-3 py-[15px] border border-[#C3C6D4] rounded bg-white text-[#323238] font-roboto text-base leading-5 placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-[#0073EA] focus:border-transparent"
-                    placeholder="Enter a strong password"
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    disabled={isLoading}
-                  >
-                    {showPassword ? (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0m7.6 0a10.05 10.05 0 011.563 4.803m-5.596 3.856a4.872 4.872 0 005.049-7.52M3 12a9 9 0 1118 0 9 9 0 01-18 0z"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Password Strength Indicator */}
-              {password && showPasswordStrength && (
-                <PasswordStrengthIndicator
-                  strength={passwordStrength}
-                  onDismiss={() => setShowPasswordStrength(false)}
-                />
-              )}
-
-              {/* Confirm Password Field */}
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="confirmPassword"
-                  className="text-[#323238] font-roboto text-[13px] font-medium leading-normal"
-                >
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className={`w-full h-[54px] px-3 py-[15px] border rounded bg-white text-[#323238] font-roboto text-base leading-5 placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:border-transparent ${
-                      confirmPassword && !doesPasswordMatch
-                        ? "border-red-300 focus:ring-red-500"
-                        : "border-[#C3C6D4] focus:ring-[#0073EA]"
-                    }`}
-                    placeholder="Confirm your password"
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    disabled={isLoading}
-                  >
-                    {showConfirmPassword ? (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0m7.6 0a10.05 10.05 0 011.563 4.803m-5.596 3.856a4.872 4.872 0 005.049-7.52M3 12a9 9 0 1118 0 9 9 0 01-18 0z"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                {confirmPassword && !doesPasswordMatch && (
-                  <p className="text-sm text-red-600">
-                    Passwords do not match.
+            {validationError && !isValidating && (
+              <div className="flex flex-col gap-6 items-center justify-center">
+                <div className="text-center">
+                  <h2 className="text-[#172B4D] font-roboto text-2xl font-bold mb-4">
+                    Validation Failed
+                  </h2>
+                  <p className="text-[#676879] font-roboto text-base mb-6">
+                    {validationError}
                   </p>
-                )}
+                  <button
+                    onClick={() => navigate("/verification-success")}
+                    className="px-6 py-3 rounded bg-primary text-white font-roboto text-base font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    Go Back
+                  </button>
+                </div>
               </div>
+            )}
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className={`w-full h-12 px-4 py-[11px] rounded bg-[#0073EA] flex items-center justify-center gap-2 transition-colors ${
-                  canSubmit
-                    ? "hover:bg-[#0062c7] cursor-pointer"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <span className="text-white font-roboto text-base font-bold leading-normal">
-                  {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <svg
-                        className="animate-spin h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
+            {!isValidating && !validationError && (
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                {/* Heading */}
+                <div className="flex flex-col justify-center items-center gap-0">
+                  <h1 className="text-[#172B4D] text-center font-roboto text-[28px] font-extrabold leading-[42px]">
+                    Set Your Password
+                  </h1>
+                  <p className="text-[#676879] text-center font-roboto text-[14px] font-normal leading-[22px]">
+                    Create a strong password to secure your account
+                  </p>
+                </div>
+
+                {/* New Password Field */}
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="password"
+                    className="text-[#323238] font-roboto text-[13px] font-medium leading-normal"
+                  >
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setShowPasswordStrength(true);
+                      }}
+                      className="w-full h-[54px] px-3 py-[15px] border border-[#C3C6D4] rounded bg-white text-[#323238] font-roboto text-base leading-5 placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:ring-[#0073EA] focus:border-transparent"
+                      placeholder="Enter a strong password"
+                      disabled={isLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      disabled={isLoading}
+                    >
+                      {showPassword ? (
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
                           stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Setting Password...
-                    </span>
-                  ) : (
-                    "Set Password"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0m7.6 0a10.05 10.05 0 011.563 4.803m-5.596 3.856a4.872 4.872 0 005.049-7.52M3 12a9 9 0 1118 0 9 9 0 01-18 0z"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password Strength Indicator */}
+                {password && showPasswordStrength && (
+                  <PasswordStrengthIndicator
+                    strength={passwordStrength}
+                    onDismiss={() => setShowPasswordStrength(false)}
+                  />
+                )}
+
+                {/* Confirm Password Field */}
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="text-[#323238] font-roboto text-[13px] font-medium leading-normal"
+                  >
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={`w-full h-[54px] px-3 py-[15px] border rounded bg-white text-[#323238] font-roboto text-base leading-5 placeholder:text-[#676879] focus:outline-none focus:ring-2 focus:border-transparent ${
+                        confirmPassword && !doesPasswordMatch
+                          ? "border-red-300 focus:ring-red-500"
+                          : "border-[#C3C6D4] focus:ring-[#0073EA]"
+                      }`}
+                      placeholder="Confirm your password"
+                      disabled={isLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      disabled={isLoading}
+                    >
+                      {showConfirmPassword ? (
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0m7.6 0a10.05 10.05 0 011.563 4.803m-5.596 3.856a4.872 4.872 0 005.049-7.52M3 12a9 9 0 1118 0 9 9 0 01-18 0z"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  {confirmPassword && !doesPasswordMatch && (
+                    <p className="text-sm text-red-600">
+                      Passwords do not match.
+                    </p>
                   )}
-                </span>
-              </button>
-            </form>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className={`w-full h-12 px-4 py-[11px] rounded bg-[#0073EA] flex items-center justify-center gap-2 transition-colors ${
+                    canSubmit
+                      ? "hover:bg-[#0062c7] cursor-pointer"
+                      : "opacity-50 cursor-not-allowed"
+                  }`}
+                >
+                  <span className="text-white font-roboto text-base font-bold leading-normal">
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <svg
+                          className="animate-spin h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Setting Password...
+                      </span>
+                    ) : (
+                      "Set Password"
+                    )}
+                  </span>
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
