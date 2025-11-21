@@ -13,7 +13,6 @@ import { getDeviceFingerprint } from "@/lib/deviceFingerprint";
 // read API base from env; avoid hardcoding
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
-// base for IdentityVerification service (uses port 8086 in some environments)
 const IDV_VERIFICATION_BASE =
   import.meta.env.VITE_IDV_VERIFICATION_BASE || import.meta.env.VITE_IDV_API_BASE || import.meta.env.VITE_API_BASE || "";
 
@@ -119,32 +118,45 @@ export function IdentityDocumentForm({
   // Format: "shortCode:submissionId" - this allows us to redirect back to the form and fetch saved data
   const getBackString = `${shortCode || 'unknown'}:${submissionId || 0}`;
 
-  // call backend to get DigiLocker URL and redirect
   const handleDigilockerClick = async () => {
     try {
       setIsDigilockerLoading(true);
 
-      const authUrl = `http://10.10.2.133:8086/api/IdentityVerification/generate-auth-url?getBackString=${encodeURIComponent(
-        getBackString,
-      )}`;
+      // API endpoint for generating DigiLocker URL
+      const apiUrl = `${API_BASE}/api/digilocker/generate-url`;
 
-      const res = await fetch(authUrl, { method: "GET", headers: { accept: "*/*" } });
+      // Collect necessary request headers and body data
+      const deviceFingerprint = getDeviceFingerprint(); // Get device fingerprint
+      const requestBody = {
+        submissionId: submissionId || 0,
+        userId: userId || 0,
+        email: "user@example.com", // You may want to use a dynamic email
+      };
+
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwianRpIjoiY2E4NWJiNTYtYWMzOS00YzZjLTk4MzUtY2E1NWM2ZjNlNWE0IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZWlkZW50aWZpZXIiOiIxIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlN1cGVyQWRtaW4iLCJ2ZXJpZmllZCI6ImZhbHNlIiwicm9sZXNfdmVyIjoiMSIsInBlcm0iOlsiQWNjZXNzU2Vuc2l0aXZlRGF0YSIsIkFwaUludGVncmF0aW9uTWdtdCIsIkNvbmZpZ3VyZVJiYWMiLCJDcmVhdGVFZGl0V29ya2Zsb3dzIiwiRWRpdFN5c3RlbVNldHRpbmdzIiwiTWFuYWdlU3VwcG9ydFRpY2tldHMiLCJNYW5hZ2VVc2Vyc0FuZFJvbGVzIiwiTWFudWFsT3ZlcnJpZGVSZXZpZXciLCJWaWV3UmVzcG9uZFZlcmlmaWNhdGlvbnMiXSwibmJmIjoxNzYzNzA4MTc1LCJleHAiOjE3NjM3MTE3NzUsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.UTmGeKxXi798V6GfeW_OggFBVdgbA3NYtv9y4rwn0d0`,
+          "X-Device-Fingerprint": deviceFingerprint,
+          "Content-Type": "application/json", // Specify content type for POST
+        },
+        body: JSON.stringify(requestBody),
+      });
 
       if (!res.ok) {
-        const txt = await res.text().catch(() => "");
+        const txt = await res.text();
         throw new Error(`Failed to generate auth URL: ${res.status} ${txt}`);
       }
 
-      const { url, codeVerifier } = await res.json();
+      const { authUrl, state, sessionId, message } = await res.json();
 
-      // Persist the PKCE code_verifier + state so we can use it after redirect
-      sessionStorage.setItem("digilocker_code_verifier", codeVerifier || "");
-      sessionStorage.setItem("digilocker_state", getBackString);
-      // persist user choice so the callback knows what to mark as uploaded
-      sessionStorage.setItem("digilocker_selected_document", selectedDocument || "");
-      sessionStorage.setItem("digilocker_country", country || "");
-      // Hard redirect to DigiLocker consent page
-      window.location.href = url;
+      // Persist the state for later use (e.g., callback or redirect logic)
+      sessionStorage.setItem("digilocker_state", state);
+      sessionStorage.setItem("digilocker_sessionId", String(sessionId));
+      sessionStorage.setItem("digilocker_message", message || "");
+
+      // Redirect the user to DigiLocker authorization URL
+      window.location.href = authUrl;
     } catch (err) {
       console.error(err);
       alert("Could not start DigiLocker flow. Please try again.");
@@ -155,14 +167,6 @@ export function IdentityDocumentForm({
 
   // Determine if we're using lifted state or local state
   const isUsingLiftedState = !!(documentFormState && setDocumentFormState);
-  
-  // console.log('🏗️ IdentityDocumentForm render:', {
-  //   isUsingLiftedState,
-  //   hasDocumentFormState: !!documentFormState,
-  //   hasSetDocumentFormState: !!setDocumentFormState,
-  //   currentUploadedDocuments: isUsingLiftedState ? documentFormState?.uploadedDocuments : localUploadedDocuments,
-  //   currentUploadedFiles: isUsingLiftedState ? documentFormState?.uploadedFiles : localUploadedFiles,
-  // });
 
   // Get current state values
   const country = isUsingLiftedState ? documentFormState!.country : localCountry;
@@ -195,10 +199,8 @@ export function IdentityDocumentForm({
   };
 
   const setUploadedDocuments = (value: string[] | ((prev: string[]) => string[])) => {
-    // console.log('🔧 setUploadedDocuments called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedDocuments) : value;
-      // console.log('🔧 Setting lifted uploadedDocuments:', newValue);
       setDocumentFormState!((prevState) => ({
         ...prevState,
         uploadedDocuments: newValue,
@@ -209,15 +211,12 @@ export function IdentityDocumentForm({
       } else {
         setLocalUploadedDocuments(value);
       }
-      // console.log('🔧 Setting local uploadedDocuments');
     }
   };
 
   const setUploadedFiles = (value: UploadedFile[] | ((prev: UploadedFile[]) => UploadedFile[])) => {
-    // console.log('🔧 setUploadedFiles called, isUsingLiftedState:', isUsingLiftedState);
     if (isUsingLiftedState) {
       const newValue = typeof value === 'function' ? value(documentFormState!.uploadedFiles) : value;
-      // console.log('🔧 Setting lifted uploadedFiles:', newValue);
       setDocumentFormState!((prevState) => ({
         ...prevState,
         uploadedFiles: newValue,
@@ -228,7 +227,6 @@ export function IdentityDocumentForm({
       } else {
         setLocalUploadedFiles(value);
       }
-      console.log('🔧 Setting local uploadedFiles');
     }
   };
 
@@ -285,8 +283,6 @@ export function IdentityDocumentForm({
         newDetails = [...prevState.documentsDetails, newDetail];
       }
       
-      console.log('📝 Updated documentsDetails:', newDetails);
-      
       return {
         ...prevState,
         documentsDetails: newDetails,
@@ -304,16 +300,11 @@ export function IdentityDocumentForm({
     
     // Only trigger if length increased (new document added)
     if (currentLength > previousDocsLength && currentLength > 0) {
-      // console.log('🔔 documentsDetails changed! Length:', currentLength);
-      // console.log('📋 Current documentsDetails:', documentFormState.documentsDetails);
-      
       // Update previous length BEFORE triggering callback
       setPreviousDocsLength(currentLength);
       
       // Trigger POST request in background after short delay
       setTimeout(() => {
-        // console.log('⏰ Triggering auto-save after document upload...');
-        // console.log('📤 Documents to be sent:', documentFormState.documentsDetails.map(doc => doc.documentName));
         onDocumentUploaded?.(documentFormState.documentsDetails);
       }, 200);
     }
@@ -351,8 +342,6 @@ export function IdentityDocumentForm({
 
     if (!authCode || !callbackState || !isFreshCallback) return;
 
-    console.log("🔐 Processing DigiLocker callback data");
-
     const run = async () => {
       const codeVerifier = sessionStorage.getItem("digilocker_code_verifier") || "";
       const expectedState = sessionStorage.getItem("digilocker_state") || "";
@@ -364,10 +353,6 @@ export function IdentityDocumentForm({
 
       // Parse state to get submissionId for context
       const [stateShortCode, stateSubmissionId] = callbackState.split(":");
-      console.log("📝 DigiLocker callback context:", {
-        shortCode: stateShortCode,
-        submissionId: stateSubmissionId,
-      });
 
       // Map your selected document id to the label DigiLocker expects
       // e.g. "aadhaar_card" -> "Aadhaar card"
@@ -417,7 +402,7 @@ export function IdentityDocumentForm({
       const email = "siddhi.tawde@arconnet.com";
       const templateName = "Test Template";
 
-      const url = new URL(`http://10.10.2.133:8086/api/IdentityVerification/fetch-document`);
+      const url = new URL(`${API_BASE}/api/IdentityVerification/fetch-document`);
 
       url.searchParams.set("AuthCode", authCode);
       url.searchParams.set("CodeVerifier", codeVerifier);
@@ -448,8 +433,6 @@ export function IdentityDocumentForm({
           console.error("❌ Failed to parse DigiLocker response:", err);
           throw new Error("Invalid response from DigiLocker service");
         });
-
-        console.log("📝 DigiLocker response:", data);
 
         // Only check for success flag, not data.id
         if (!data || typeof data.success !== "boolean") {
@@ -502,8 +485,6 @@ export function IdentityDocumentForm({
         sessionStorage.removeItem("digilocker_skip_consent");
         sessionStorage.removeItem("digilocker_selected_document");
         sessionStorage.removeItem("digilocker_country");
-
-        console.log("🧹 DigiLocker session data cleaned up");
       }
     };
 
@@ -528,7 +509,6 @@ export function IdentityDocumentForm({
     const urlSession = extractSessionFromURL();
     if (urlSession.sessionId) {
       // User scanned QR code - restore session state
-      console.log('Loading session from QR scan:', urlSession);
     }
   }, []);
 
@@ -648,16 +628,6 @@ export function IdentityDocumentForm({
     formData.append("DocumentDefinitionId", documentDefinitionId);
     formData.append("Bucket", "string");
     const submissionIdToUse = submissionId?.toString() || "1";
-    // console.log(
-    //   "IdentityDocumentForm: Using UserTemplateSubmissionId:",
-    //   submissionIdToUse,
-    // );
-    // console.log(
-    //   "IdentityDocumentForm: Using DocumentDefinitionId:",
-    //   documentDefinitionId,
-    //   "for document:",
-    //   selectedDocumentName,
-    // );
     formData.append("UserTemplateSubmissionId", submissionIdToUse);
     return formData;
   };
@@ -711,9 +681,7 @@ export function IdentityDocumentForm({
   // Function to download file from server
   const downloadFileFromServer = async (fileId: number, fileName: string) => {
     try {
-      console.log('🔽 Starting download for fileId:', fileId, 'fileName:', fileName);
       const downloadUrl = `${API_BASE}/api/Files/${fileId}/content?inline=false`;
-      console.log('🔽 Download URL:', downloadUrl);
       
       const response = await fetch(downloadUrl, {
         method: 'GET',
@@ -722,15 +690,12 @@ export function IdentityDocumentForm({
         },
       });
 
-      console.log('🔽 Download response status:', response.status);
-
       if (!response.ok) {
         throw new Error(`Failed to download file: ${response.statusText}`);
       }
 
       // Get the blob from response
       const blob = await response.blob();
-      console.log('🔽 Downloaded blob size:', blob.size, 'bytes');
       
       // Create a temporary URL for the blob
       const url = window.URL.createObjectURL(blob);
@@ -741,8 +706,6 @@ export function IdentityDocumentForm({
       a.download = fileName || `document-${fileId}`;
       document.body.appendChild(a);
       a.click();
-      
-      console.log('🔽 Download triggered for:', fileName);
       
       // Clean up
       window.URL.revokeObjectURL(url);
@@ -755,8 +718,6 @@ export function IdentityDocumentForm({
 
   // Function to download all files for a document (front and back)
   const downloadDocumentFiles = async (docId: string) => {
-    console.log('📥 downloadDocumentFiles called for docId:', docId);
-    console.log('📥 Available documentUploadIds:', documentUploadIds);
     
     const fileIds = documentUploadIds[docId];
     if (!fileIds) {
@@ -765,23 +726,18 @@ export function IdentityDocumentForm({
       return;
     }
 
-    console.log('📥 Found fileIds:', fileIds);
-
     const documentName = currentDocuments.find(
       (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
     ) || docId.replace(/_/g, " ");
 
-    console.log('📥 Document name:', documentName);
 
     // Download front side if exists
     if (fileIds.front) {
-      console.log('📥 Downloading front file, ID:', fileIds.front);
       await downloadFileFromServer(fileIds.front, `${documentName} - Front.jpg`);
     }
 
     // Download back side if exists (with a small delay to avoid browser blocking multiple downloads)
     if (fileIds.back) {
-      console.log('📥 Downloading back file (after 500ms delay), ID:', fileIds.back);
       setTimeout(() => {
         downloadFileFromServer(fileIds.back!, `${documentName} - Back.jpg`);
       }, 500);
@@ -875,8 +831,6 @@ export function IdentityDocumentForm({
         queueMicrotask(() => {
           setTimeout(() => {
             if (onDocumentUploaded) {
-              console.log('📤 POST request triggered after DigiLocker upload:', displayName);
-              console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
               onDocumentUploaded(newDetails);
             }
           }, 200);
@@ -901,9 +855,7 @@ export function IdentityDocumentForm({
   // Function to delete a file from server
   const deleteFileFromServer = async (fileId: number, eTag?: string) => {
     try {
-      console.log('🗑️ Deleting file ID:', fileId, 'with eTag:', eTag);
       const deleteUrl = `${API_BASE}/api/Files/${fileId}`;
-      console.log('🗑️ Delete URL:', deleteUrl);
       
       const headers: Record<string, string> = {
         Accept: '*/*',
@@ -914,7 +866,6 @@ export function IdentityDocumentForm({
         // Clean eTag format: remove W/"" wrapper if present
         const cleanETag = eTag.replace(/^W\/"|"$/g, '');
         headers['If-Match'] = cleanETag;
-        console.log('🔒 Using If-Match header:', cleanETag);
       }
       
       const response = await fetch(deleteUrl, {
@@ -922,13 +873,10 @@ export function IdentityDocumentForm({
         headers,
       });
 
-      console.log('🗑️ Delete response status:', response.status);
-
       if (!response.ok) {
         throw new Error(`Failed to delete file: ${response.statusText}`);
       }
 
-      console.log('✅ File deleted successfully:', fileId);
       return true;
     } catch (error) {
       console.error('❌ Error deleting file:', error);
@@ -955,13 +903,11 @@ export function IdentityDocumentForm({
 
       // Delete front side if exists
       if (fileIds.front) {
-        console.log('🗑️ Deleting front file, ID:', fileIds.front, 'eTag:', fileIds.frontETag);
         deletePromises.push(deleteFileFromServer(fileIds.front, fileIds.frontETag));
       }
 
       // Delete back side if exists
       if (fileIds.back) {
-        console.log('🗑️ Deleting back file, ID:', fileIds.back, 'eTag:', fileIds.backETag);
         deletePromises.push(deleteFileFromServer(fileIds.back, fileIds.backETag));
       }
 
@@ -1003,17 +949,11 @@ export function IdentityDocumentForm({
             return !(removedFrontMatch || removedBackMatch || nameMatch);
           });
 
-          console.log('🗑️ Removed from documentsDetails (by fileId/name):', documentName);
-          console.log('📋 Updated documentsDetails after deletion:', newDetails);
-          console.log('📊 Remaining documents count:', newDetails.length);
-
     // Schedule POST request to run after this state update completes
     // Use queueMicrotask + setTimeout to ensure React has flushed the update
     queueMicrotask(() => {
       setTimeout(() => {
         if (onDocumentUploaded) {
-          console.log('📤 POST request triggered after deleting:', documentName);
-          console.log('📋 Remaining documents to be sent:', newDetails.map(doc => doc.documentName));
           onDocumentUploaded(newDetails);
         }
       }, 200); // Slightly longer delay to be safer
@@ -1026,10 +966,6 @@ export function IdentityDocumentForm({
 
       // Remove from localStorage
       localStorage.removeItem(`document_${docId}_image`);
-
-      console.log('✅ Document deleted successfully:', documentName);
-      
-      console.log(`✅ ${documentName} deleted and backend will be updated with remaining documents`);
     } catch (error) {
       console.error('❌ Error deleting document:', error);
       alert(`Failed to delete ${documentName}. Please try again.`);
@@ -1077,13 +1013,7 @@ export function IdentityDocumentForm({
 
   // Helper to get documentDefinitionId for current selected document
   const getCurrentDocumentDefinitionId = (): string | number | null => {
-    // console.log('🔍 getCurrentDocumentDefinitionId called:', {
-    //   country,
-    //   selectedDocument,
-    // });
-    
     if (!country || !selectedDocument) {
-      // console.log('❌ Missing country or selectedDocument');
       return null;
     }
     
@@ -1092,37 +1022,28 @@ export function IdentityDocumentForm({
       (docName) => docName.toLowerCase().replace(/\s+/g, "_") === selectedDocument
     );
     
-    // console.log('🔍 Found document name:', documentName);
-    
     if (!documentName) return null;
     
     // Try to get from config first
     let documentDefinitionId = getDocumentDefinitionIdFromConfig(country, documentName);
     
-    // console.log('🔍 From config:', documentDefinitionId);
-    
     // Fallback to hardcoded IDs if not in config
     if (!documentDefinitionId) {
       documentDefinitionId = getDocumentDefinitionId(country, documentName);
-      // console.log('🔍 From hardcoded:', documentDefinitionId);
     }
     
     // Return as-is if it's a UUID string, or parse as int if it's numeric
     if (!documentDefinitionId) {
-      // console.log('🔍 No documentDefinitionId found');
       return null;
     }
     
     // Check if it's a UUID (contains hyphens and hex characters)
     if (typeof documentDefinitionId === 'string' && documentDefinitionId.includes('-')) {
-      // console.log('🔍 Returning UUID as-is:', documentDefinitionId);
       return documentDefinitionId;
     }
     
     // Otherwise parse as integer
     const result = parseInt(documentDefinitionId, 10);
-    // console.log('🔍 Final documentDefinitionId (parsed as int):', result);
-    
     return result;
   };
 
@@ -1547,12 +1468,6 @@ export function IdentityDocumentForm({
       {/* Files Uploaded Section */}
       {(() => {
         const hasUploadedDocs = uploadedDocuments && uploadedDocuments.length > 0;
-        // console.log('🔍 Documents Uploaded section:', {
-        //   uploadedFiles,
-        //   uploadedDocuments,
-        //   hasUploadedDocs,
-        //   documentUploadIds
-        // });
         return hasUploadedDocs;
       })() && (
         <div className="flex flex-col items-start gap-4 self-stretch">
@@ -1582,7 +1497,6 @@ export function IdentityDocumentForm({
                   key={docId}
                   className="relative flex w-[180px] h-[180px] p-4 flex-col justify-between items-center gap-3 rounded-lg border-2 border-green-300 bg-green-50 cursor-pointer transition-all duration-200 hover:bg-green-100 hover:border-green-400 hover:shadow-md"
                   onClick={() => {
-                    console.log('📥 Download clicked for document:', docId, 'File IDs:', fileIds);
                     if (hasFileIds) {
                       downloadDocumentFiles(docId);
                     } else {
@@ -1670,7 +1584,6 @@ export function IdentityDocumentForm({
             // ensure uploadedDocuments contains docId
             setUploadedDocuments((prevDocs) => {
               const newDocs = prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId];
-              console.log('📄 Updated uploadedDocuments (Camera):', newDocs);
               return newDocs;
             });
 
@@ -1687,20 +1600,12 @@ export function IdentityDocumentForm({
                 (f) => f.id.replace(/-\d+$/, "") !== docId,
               );
               const newFiles = [...filtered, newFile];
-              console.log('📁 Updated uploadedFiles (Camera):', newFiles);
               return newFiles;
             });
 
             // Add document details for backend storage (if using lifted state)
             // Use the fileIds passed from CameraDialog to ensure we have the correct uploaded IDs
             const documentDefinitionId = getCurrentDocumentDefinitionId();
-            console.log('🔍 Camera Dialog - Checking addDocumentDetail conditions:', {
-              documentDefinitionId,
-              frontFileId: uploadedFileIds?.front,
-              backFileId: uploadedFileIds?.back,
-              isUsingLiftedState,
-              shouldAdd: !!(documentDefinitionId && uploadedFileIds?.front),
-            });
             if (documentDefinitionId && uploadedFileIds?.front) {
               const documentName = currentDocuments.find(
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
@@ -1729,25 +1634,16 @@ export function IdentityDocumentForm({
                 uploadedFileIds.front,
                 uploadedFileIds.back
               );
-              console.log('✅ Added document detail (Camera):', {
-                documentName,
-                documentDefinitionId,
-                frontFileId: uploadedFileIds.front,
-                backFileId: uploadedFileIds.back,
-              });
 
               // Schedule POST request with updated documents
               queueMicrotask(() => {
                 setTimeout(() => {
                   if (onDocumentUploaded) {
-                    console.log('📤 POST request triggered after camera upload:', documentName);
-                    console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
                     onDocumentUploaded(newDetails);
                   }
                 }, 200);
               });
             } else {
-              console.log('❌ Skipping addDocumentDetail (Camera) - conditions not met');
               // Still call onDocumentUploaded even if no document details added
               onDocumentUploaded?.();
             }
@@ -1775,8 +1671,6 @@ export function IdentityDocumentForm({
           try {
             // Get documentDefinitionId BEFORE clearing selectedDocument
             const documentDefinitionId = getCurrentDocumentDefinitionId();
-            // console.log('🔍 Upload Dialog - Got documentDefinitionId:', documentDefinitionId);
-
             const prevIds = documentUploadIds[docId];
 
             const [frontResult, backResult] = await Promise.all([
@@ -1796,8 +1690,6 @@ export function IdentityDocumentForm({
             const backId = backResult.id;
             const frontETag = frontResult.eTag;
             const backETag = backResult.eTag;
-
-            // console.log('🔍 Upload Dialog - File IDs:', { frontId, backId, frontETag, backETag });
 
             // Save eTags to localStorage
             if (submissionId) {
@@ -1825,7 +1717,6 @@ export function IdentityDocumentForm({
 
             setUploadedDocuments((prevDocs) => {
               const newDocs = prevDocs.includes(docId) ? prevDocs : [...prevDocs, docId];
-              // console.log('📄 Updated uploadedDocuments:', newDocs);
               return newDocs;
             });
 
@@ -1840,19 +1731,11 @@ export function IdentityDocumentForm({
                 (f) => f.id.replace(/-\d+$/, "") !== docId,
               );
               const newFiles = [...filtered, newFile];
-              // console.log('📁 Updated uploadedFiles:', newFiles);
               return newFiles;
             });
 
             // Add document details for backend storage (if using lifted state)
             // Use the documentDefinitionId we got earlier (before any state changes)
-            // console.log('🔍 Upload Dialog - Checking addDocumentDetail conditions:', {
-            //   documentDefinitionId,
-            //   frontId,
-            //   backId,
-            //   isUsingLiftedState,
-            //   shouldAdd: !!(documentDefinitionId && frontId),
-            // });
             if (documentDefinitionId && frontId) {
               const documentName = currentDocuments.find(
                 (docName) => docName.toLowerCase().replace(/\s+/g, "_") === docId
@@ -1883,25 +1766,16 @@ export function IdentityDocumentForm({
                 frontETag || undefined,
                 backETag || undefined
               );
-              // console.log('✅ Added document detail (Upload Dialog):', {
-              //   documentName,
-              //   documentDefinitionId,
-              //   frontFileId: frontId,
-              //   backFileId: backId,
-              // });
 
               // Schedule POST request with updated documents
               queueMicrotask(() => {
                 setTimeout(() => {
                   if (onDocumentUploaded) {
-                    console.log('📤 POST request triggered after file upload:', documentName);
-                    console.log('📋 Documents to be sent:', newDetails.map(doc => doc.documentName));
                     onDocumentUploaded(newDetails);
                   }
                 }, 200);
               });
             } else {
-              // console.log('❌ Skipping addDocumentDetail - conditions not met');
               // Still call onDocumentUploaded even if no document details added
               onDocumentUploaded?.();
             }

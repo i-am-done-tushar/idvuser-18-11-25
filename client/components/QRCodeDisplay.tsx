@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { ErrorOutline, Spinner, CloseIcon } from './SVG_Files';
+import { CheckCircle } from 'lucide-react';
 import { generateQRCodeDataURL, QRCodeOptions } from '@/lib/qr-utils';
 import { useToast } from '@/hooks/use-toast';
 import * as signalR from '@microsoft/signalr';
 import { getDeviceFingerprint } from '@/lib/deviceFingerprint';
 
 // API base & IDV_VERIFICATION base
+
 
 interface QRCodeDisplayProps {
   shortCode: string;
@@ -43,6 +45,7 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
   const [verificationUrl, setVerificationUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [handoffResolved, setHandoffResolved] = useState(false);
   const internalConnectionRef = useRef<signalR.HubConnection | null>(null);
   
   // Use external ref if provided, otherwise use internal ref
@@ -60,6 +63,26 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
     large: 'w-24 h-24 sm:w-32 sm:h-32',
     enlarged: 'w-40 h-40 sm:w-56 sm:h-56',
   };
+
+  // Function to clear saved join code for this submission
+  const clearSavedJoinCode = (submissionId: number) => {
+    const savedJoinCodeKey = `joinCode_${submissionId}`;
+    localStorage.removeItem(savedJoinCodeKey);
+    console.log('Cleared saved join code for submission:', submissionId);
+  };
+
+  // Check if join code exists on mount and auto-generate QR if it does
+  useEffect(() => {
+    if (submissionId) {
+      const savedJoinCodeKey = `joinCode_${submissionId}`;
+      const existingJoinCode = localStorage.getItem(savedJoinCodeKey);
+      
+      if (existingJoinCode) {
+        console.log('Found existing join code, auto-generating QR:', existingJoinCode);
+        setClickStep(1); // Automatically trigger QR generation
+      }
+    }
+  }, [submissionId]);
 
   // Generate QR after the first click (when clickStep becomes 1)
   useEffect(() => {
@@ -79,40 +102,55 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         return;
       }
       
+      // Declare variables for error handling
+      let joinCode: string | null = null;
+      let savedJoinCodeKey: string = '';
+      
       try {
         setLoading(true);
         setError('');
         
         // Get access token from localStorage
-        const accessToken = localStorage.getItem('access') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwic3VibWlzc2lvbl9pZCI6IjIiLCJqdGkiOiJmNWM3M2Y1NzM5NDc0YTIyOTQ1MzgwOGUxMDkxNTY2NCIsImlhdCI6MTc2MjQzNjExMCwibmJmIjoxNzYyNDM2MTEwLCJleHAiOjE3NjI0NzIxMTAsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.ASHPD25bzLVLXdlfrm0Qh-C02QC5kyf3RUwQI72dDJ8';
+        const accessToken = localStorage.getItem('access');
         
-        // Store submissionId in localStorage for future reference
-        localStorage.setItem('submissionId', submissionId.toString());
+        // Check if we already have a saved join code for this submission
+        savedJoinCodeKey = `joinCode_${submissionId}`;
+        joinCode = localStorage.getItem(savedJoinCodeKey);
         
-        // Call the handoff API to get join code
-        const handoffResponse = await fetch('https://idvapi-test.arconnet.com:1019/api/handoff/start', {
-          method: 'POST',
-          headers: {
-            'accept': 'text/plain',
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            submissionId: submissionId,
-            ttlSeconds: 1000000
-          })
-        });
+        if (!joinCode) {
+          // Store submissionId in localStorage for future reference
+          localStorage.setItem('submissionId', submissionId.toString());
+          
+          // Call the handoff API to get join code
+          const handoffResponse = await fetch('https://idvapi-test.arconnet.com:1019/api/handoff/start', {
+            method: 'POST',
+            headers: {
+              'accept': 'text/plain',
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              submissionId: submissionId,
+              ttlSeconds: 1000000
+            })
+          });
 
-        if (!handoffResponse.ok) {
-          const errorText = await handoffResponse.text();
-          throw new Error(`Failed to start handoff: ${errorText}`);
+          if (!handoffResponse.ok) {
+            const errorText = await handoffResponse.text();
+            throw new Error(`Failed to start handoff: ${errorText}`);
+          }
+
+          const handoffData = await handoffResponse.json();
+          joinCode = handoffData.joinCode;
+          
+          // Save the join code in localStorage for future use
+          localStorage.setItem(savedJoinCodeKey, joinCode);
+          
+          console.log('Handoff API Response:', handoffData);
+          console.log('New Join Code generated and saved:', joinCode);
+        } else {
+          console.log('Using saved Join Code:', joinCode);
         }
-
-        const handoffData = await handoffResponse.json();
-        const joinCode = handoffData.joinCode;
-        
-        console.log('Handoff API Response:', handoffData);
-        console.log('Join Code:', joinCode);
         
         // Generate QR code with join code URL
         //QR code URL
@@ -136,6 +174,12 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         await connectToSignalR(accessToken, submissionId);
       } catch (err) {
         console.error('Failed to generate QR code:', err);
+        
+        // If there's an error and we were using a saved join code, clear it so we can regenerate
+        if (joinCode && localStorage.getItem(savedJoinCodeKey) === joinCode) {
+          clearSavedJoinCode(submissionId);
+        }
+        
         setError('Failed to generate QR code');
       } finally {
         setLoading(false);
@@ -270,6 +314,18 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
         });
       });
 
+      // Listen for handoff resolved events
+      connection.on('handoff.resolved', (data: any) => {
+        console.log('🔔 handoff.resolved - RAW Data:', JSON.stringify(data, null, 2));
+        
+        setHandoffResolved(true);
+        toast({
+          title: "✅ QR Code Scanned",
+          description: "This QR code has been scanned on another device. Please continue verification there.",
+          duration: 5000,
+        });
+      });
+
       // Listen for generic notifications (if backend sends any)
       connection.on('ReceiveNotification', (message: string) => {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -381,7 +437,17 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [clickStep]);
 
-  const handleClickBase = () => {
+  const handleClickBase = (e?: React.MouseEvent) => {
+    // If Ctrl+click or double-click, clear saved join code and regenerate
+    if (e && (e.ctrlKey || e.detail === 2)) {
+      clearSavedJoinCode(submissionId);
+      setQrCodeDataUrl(''); // Clear current QR to force regeneration
+      setVerificationUrl('');
+      setClickStep(0); // Reset to initial state
+      setTimeout(() => setClickStep(1), 100); // Trigger regeneration
+      return;
+    }
+    
     if (clickStep === 0) setClickStep(1);                // first click -> generate
     else if (clickStep === 1 && qrCodeDataUrl) setClickStep(2); // second click -> enlarge
   };
@@ -395,12 +461,17 @@ export function QRCodeDisplay(props: QRCodeDisplayProps) {
     );
   }
 
-  // Error state
-  if (error) {
+  // Handoff resolved state - show message instead of QR
+  if (handoffResolved) {
     return (
-      <div className={`flex flex-col justify-center items-center ${sizeClasses[size]} ${className} bg-gray-100 rounded-lg`}>
-        <ErrorOutline className="w-6 h-6 text-gray-400 mb-1" />
-        <span className="text-xs text-gray-500 text-center">QR Error</span>
+      <div className={`flex flex-col justify-center items-center ${sizeClasses[size]} ${className} bg-green-50 rounded-lg border-2 border-green-200`}>
+        <CheckCircle className="w-8 h-8 text-green-600 mb-2" />
+        <span className="text-sm font-medium text-green-800 text-center px-2">
+          QR Code Scanned
+        </span>
+        <span className="text-xs text-green-600 text-center px-2 mt-1">
+          Continue verification on the other device
+        </span>
       </div>
     );
   }

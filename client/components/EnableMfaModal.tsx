@@ -49,7 +49,6 @@ export default function EnableMfaModal({
       }
 
       const data = await response.json();
-      console.log("MFA status updated:", data);
     } catch (err: any) {
       console.error("Error updating MFA status:", err);
       throw new Error("Failed to enable MFA. Please try again.");
@@ -81,7 +80,6 @@ export default function EnableMfaModal({
         }
 
         const data = await response.json();
-        console.log("Email OTP sent:", data);
         setSuccess("Verification code sent to your email!");
         setVerificationStep("verify-otp");
       } else {
@@ -106,7 +104,6 @@ export default function EnableMfaModal({
         }
 
         const data = await response.json();
-        console.log("Phone OTP sent:", data);
         // Store the otpId for verification
         if (data.otpId) {
           setOtpId(data.otpId);
@@ -148,7 +145,6 @@ export default function EnableMfaModal({
         }
 
         const data = await response.json();
-        console.log("Email OTP verified:", data);
         
         // Update user's MFA status
         await updateUserMfaStatus();
@@ -182,7 +178,6 @@ export default function EnableMfaModal({
         }
 
         const data = await response.json();
-        console.log("Phone OTP verified:", data);
         
         // Update user's MFA status
         await updateUserMfaStatus();

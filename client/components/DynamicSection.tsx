@@ -6,6 +6,7 @@ import CameraSelfieStep from "./CameraSelfieStep";
 import { LockedStepComponent } from "./LockedStepComponent";
 import { FormData } from "@shared/templates";
 import { BiometricCaptureUI } from "./BiometricCaptureUI";
+import { QRCodeDisplay } from "./QRCodeDisplay";
 
 interface DynamicSectionProps {
   section: TemplateVersionSection;
@@ -267,7 +268,18 @@ export function DynamicSection({
             </div>
 
             {!isBiometricScanStarted ? (
-              <BiometricCaptureUI onScanFace={handleScanFace} />
+              <BiometricCaptureUI 
+                onScanFace={handleScanFace}
+                showQRCode={false}
+                shortCode={shortCode}
+                templateVersionId={templateVersionId}
+                userId={userId}
+                sessionId={'default-session'}
+                submissionId={submissionId}
+                connectionRef={connectionRef}
+                shouldMaintainConnection={shouldMaintainConnection}
+                onHandoffConnected={onHandoffConnected}
+              />
             ) : (
               <div className="flex w-full flex-col gap-4 rounded bg-white">
                 {/* Header Section */}
@@ -305,9 +317,9 @@ export function DynamicSection({
 
                   {/* Main Content Area */}
                   <div className="flex w-full flex-col justify-center items-center border-t border-[#DEDEDD] bg-white p-4">
-                    <div className="flex w-full flex-col lg:flex-row items-stretch lg:items-center gap-6">
+                    <div className={`flex w-full ${shortCode ? 'flex-col lg:flex-row' : 'flex-col'} items-stretch lg:items-center gap-6`}>
                       {/* Left Box - Camera Selfie */}
-                      <div className="flex-1 flex flex-col min-w-0">
+                      <div className={`flex ${shortCode ? 'flex-1' : 'w-full'} flex flex-col min-w-0`}>
                         <div className="flex h-[428px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4">
                           <CameraSelfieStep
                             onStepComplete={onSelfieComplete || (() => {})}
@@ -319,43 +331,47 @@ export function DynamicSection({
                       </div>
 
                       {/* Separator with "or" - Hidden on mobile, visible on lg screens */}
-                      <div className="hidden lg:flex flex-col items-center justify-center gap-1 h-[428px]">
-                        <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
-                        <div className="text-[#676879] font-roboto text-[13px] font-normal">
-                          or
+                      {shortCode && (
+                        <div className="hidden lg:flex flex-col items-center justify-center gap-1 h-[428px]">
+                          <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
+                          <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                            or
+                          </div>
+                          <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
                         </div>
-                        <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
-                      </div>
+                      )}
 
                       {/* Horizontal separator for mobile - Visible below lg */}
-                      <div className="flex lg:hidden w-full items-center justify-center gap-3 py-2">
-                        <div className="flex-1 h-px bg-[#D0D4E4]"></div>
-                        <div className="text-[#676879] font-roboto text-[13px] font-normal">
-                          or
+                      {shortCode && (
+                        <div className="flex lg:hidden w-full items-center justify-center gap-3 py-2">
+                          <div className="flex-1 h-px bg-[#D0D4E4]"></div>
+                          <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                            or
+                          </div>
+                          <div className="flex-1 h-px bg-[#D0D4E4]"></div>
                         </div>
-                        <div className="flex-1 h-px bg-[#D0D4E4]"></div>
-                      </div>
+                      )}
 
                       {/* Right Box - QR Code */}
-                      <div className="flex-1 flex flex-col min-w-0">
+                      {shortCode && (
+                        <div className="flex-1 flex flex-col min-w-0">
                         <div className="flex h-[428px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white">
-                          <img
-                            src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=https://id.xyz/verify"
-                            alt="QR Code"
-                            className="w-32 h-32"
+                          <QRCodeDisplay
+                            shortCode={shortCode}
+                            templateVersionId={templateVersionId}
+                            userId={userId}
+                            sessionId={'default-session'}
+                            currentStep="biometric-capture"
+                            submissionId={submissionId}
+                            size="large"
+                            showUrl={false}
+                            connectionRef={connectionRef}
+                            shouldMaintainConnection={shouldMaintainConnection}
+                            onConnected={onHandoffConnected}
                           />
                           <div className="flex flex-col items-center gap-3 max-w-[214px]">
                             <p className="text-[#676879] text-center font-roboto text-[13px] font-normal leading-5">
-                              Continue on another device by scanning the QR code
-                              or opening{" "}
-                              <a
-                                href="https://id.xyz/verify"
-                                className="text-[#0073EA]"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                https://id.xyz/verify
-                              </a>
+                              Scan this QR code with your other device to continue verification.
                             </p>
                           </div>
                         </div>
@@ -387,6 +403,7 @@ export function DynamicSection({
                           </span>
                         </div>
                       </div>
+                      )}
                     </div>
                   </div>
                 </div>

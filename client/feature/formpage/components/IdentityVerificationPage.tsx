@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { Header } from "./Header";
-import { StepSidebar } from "./StepSidebar";
-import { ConsentDialog } from "./ConsentDialog";
-import { HowItWorksDialog } from "./HowItWorksDialog";
-import { DynamicSection } from "./DynamicSection";
-import { DesktopDynamicSection } from "./DesktopDynamicSection";
-import { OTPVerificationDialog } from "./OTPVerificationDialog";
-import { QRCodeDisplay } from "./QRCodeDisplay";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Header } from "../../../components/Header";
+import { StepSidebar } from "../../../components/StepSidebar";
+import { ConsentDialog } from "../../../components/ConsentDialog";
+import { HowItWorksDialog } from "../../../components/HowItWorksDialog";
+import { DynamicSection } from "../../../components/DynamicSection";
+import { DesktopDynamicSection } from "../../../components/DesktopDynamicSection";
+import { OTPVerificationDialog } from "../../../components/OTPVerificationDialog";
+import { QRCodeDisplay } from "../../../components/QRCodeDisplay";
 import { FormData } from "@shared/templates";
 import { TemplateVersionResponse } from "@shared/api";
 import { useToast } from "@/hooks/use-toast";
@@ -50,12 +50,12 @@ export function IdentityVerificationPage({
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [templateVersion, setTemplateVersion] =
-    useState<TemplateVersionResponse | null>(null);
+  const [templateVersion, setTemplateVersion] = useState<TemplateVersionResponse | null>(null);
 
   useEffect(() => {
     console.log('[templateVersion] Updated:', templateVersion);
   }, [templateVersion]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,17 +63,18 @@ export function IdentityVerificationPage({
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [hasShownStep1Toast, setHasShownStep1Toast] = useState(false);
-  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] =
-    useState(false);
+  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] = useState(false);
   const [hasShownStep2Toast, setHasShownStep2Toast] = useState(false);
   const [hasShownWelcomeBackToast, setHasShownWelcomeBackToast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
   const [showConsentDialog, setShowConsentDialog] = useState(false);
+
   const [hasConsented, setHasConsented] = useState(() => {
     // Check if user already has accessToken on initial load
     return typeof window !== "undefined" && !!localStorage.getItem("access");
   });
+
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
 
   // shortCode resolve + OTP states
@@ -235,9 +236,12 @@ export function IdentityVerificationPage({
     return fieldConfig.personalInfo || {};
   };
 
+  const [searchParams] = useSearchParams();
+  const state = searchParams.get("state");
+
   // resolve shortCode → prefill email → (after consent) send OTP
   useEffect(() => {
-    if (!shortCode) {
+    if (!shortCode || state) {
       setLinkResolveLoading(false);
       return;
     }
@@ -1939,6 +1943,51 @@ export function IdentityVerificationPage({
     }
   };
 
+  const fetchSubmission = async (id) => {
+    const response = await fetch(`${API_BASE}/api/UserTemplateSubmissions/${id}`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "X-Device-Fingerprint": getDesktopDeviceFingerprint(),  // Include device fingerprint if needed
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch submission");
+    }
+
+    const data = await response.json();
+    return data.rowVersionBase64;
+  };
+
+  const updateSubmission = async (id, rowVersionBase64) => {
+    const token = getToken();
+    const deviceFingerprint = getDesktopDeviceFingerprint();
+
+    const response = await fetch(`${API_BASE}/api/UserTemplateSubmissions/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Device-Fingerprint": deviceFingerprint,
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        status: 2,  // Example data; modify as needed
+        sectionProgress: 100,
+        rowVersionBase64,  // Include the rowVersionBase64 for concurrency control
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update submission: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  };
+
   const handleSubmit = async () => {
     if (!isFormValid()) {
       const missingFields = getMissingFields();
@@ -2073,6 +2122,15 @@ export function IdentityVerificationPage({
         title: "Form Submitted Successfully!",
         description: "Your identity verification form has been submitted.",
       });
+
+      // Call the function to update submission status
+      try {
+        const rowVersionBase64 = await fetchSubmission(submissionId);
+        const updateResult = await updateSubmission(submissionId, rowVersionBase64);
+        console.log("Submission updated successfully", updateResult);
+      } catch (error) {
+        console.error("Error updating submission", error);
+      }
 
       navigate("/verification-progress");
     } catch (error) {
