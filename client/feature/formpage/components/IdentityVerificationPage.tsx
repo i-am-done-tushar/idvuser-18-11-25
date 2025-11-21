@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Header } from "../../../components/Header";
 import { StepSidebar } from "../../../components/StepSidebar";
 import { ConsentDialog } from "../../../components/ConsentDialog";
@@ -46,12 +46,12 @@ export function IdentityVerificationPage({
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [templateVersion, setTemplateVersion] =
-    useState<TemplateVersionResponse | null>(null);
+  const [templateVersion, setTemplateVersion] = useState<TemplateVersionResponse | null>(null);
 
   useEffect(() => {
     console.log('[templateVersion] Updated:', templateVersion);
   }, [templateVersion]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,17 +59,18 @@ export function IdentityVerificationPage({
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [hasShownStep1Toast, setHasShownStep1Toast] = useState(false);
-  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] =
-    useState(false);
+  const [isIdentityDocumentCompleted, setIsIdentityDocumentCompleted] = useState(false);
   const [hasShownStep2Toast, setHasShownStep2Toast] = useState(false);
   const [hasShownWelcomeBackToast, setHasShownWelcomeBackToast] = useState(false);
   const [isSelfieCompleted, setIsSelfieCompleted] = useState(false);
 
   const [showConsentDialog, setShowConsentDialog] = useState(false);
+
   const [hasConsented, setHasConsented] = useState(() => {
     // Check if user already has accessToken on initial load
     return typeof window !== "undefined" && !!localStorage.getItem("access");
   });
+
   const [showHowItWorksDialog, setShowHowItWorksDialog] = useState(false);
 
   // shortCode resolve + OTP states
@@ -187,9 +188,12 @@ export function IdentityVerificationPage({
     return fieldConfig.personalInfo || {};
   };
 
+  const [searchParams] = useSearchParams();
+  const state = searchParams.get("state");
+
   // resolve shortCode → prefill email → (after consent) send OTP
   useEffect(() => {
-    if (!shortCode) {
+    if (!shortCode || state) {
       setLinkResolveLoading(false);
       return;
     }

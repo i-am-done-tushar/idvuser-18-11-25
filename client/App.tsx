@@ -19,7 +19,7 @@ import { OngoingVerificationPage } from "./components/OngoingVerificationPage";
 import { ExpiredVerificationPage } from "./components/ExpiredVerificationPage";
 import { VerifiedCredentialsPage } from "./components/VerifiedCredentialsPage";
 import { ContactAdminPage } from "./components/ContactAdminPage";
-import HandoffPage from "@/feature/handoff/HandoffPage";
+import HandoffPage from "./feature/Handoff/HandoffPage";
 import { PasswordSetupPage as PWSetUp } from "./components/PasswordSetupPage";
 
 //1st change
@@ -38,31 +38,16 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/form" element={<Index />} />
-          <Route
-            path="/verification-progress"
-            element={<VerificationProgressPage />}
-          />
-          <Route
-            path="/verification-success"
-            element={<VerificationSuccessPage />}
-          />
+          <Route path="/verification-progress" element={<VerificationProgressPage />} />
+          <Route path="/verification-success" element={<VerificationSuccessPage />} />
           <Route path="/password-setup" element={<PasswordSetupPage />} />
-          <Route path="/auth/login" element={<PWSetUp />} />
-          <Route path="/login" element={<PWSetUp />} />
+          <Route path="/auth/login" element={<AuthLoginPage />} />
+          <Route path="/login" element={<ReLoginUserPage />} />
           <Route path="/auth/otp" element={<AuthOtpPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route
-            path="/ongoing-verification"
-            element={<OngoingVerificationPage />}
-          />
-          <Route
-            path="/expired-verification"
-            element={<ExpiredVerificationPage />}
-          />
-          <Route
-            path="/verified-credentials"
-            element={<VerifiedCredentialsPage />}
-          />
+          <Route path="/ongoing-verification" element={<OngoingVerificationPage />} />
+          <Route path="/expired-verification" element={<ExpiredVerificationPage />}/>
+          <Route path="/verified-credentials" element={<VerifiedCredentialsPage />} />
           <Route path="/contact-admin" element={<ContactAdminPage />} />
           <Route path="/contact-admin" element={<ContactAdminPage />} />
           <Route path="/profile" element={<Profile />} />

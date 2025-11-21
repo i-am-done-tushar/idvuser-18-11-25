@@ -16,47 +16,172 @@ export default function Index() {
 
   const DEMO_SHORTCODE = "Ad-5fCStWvEJoqVbxLtt26bnAqpE8-lie1RD1JYlXh2l4faiZGjFOr5O_WtRZrJuYfYzF-b2GiM_2Al2hRWKRS9EBPfoFd40G11bugUEJIEIChk9LtrWLmmit8zkyDyF24-drMfaQk5Zyl2RnZVmmMKKiitrRQcCcNMftj6E-c7KxWN0MPuuFtJ5NAwlZAb-i669e9_iz2h8_y7umUfoxzRu7HPqYZBfEufgYwcV8Hnag55i1MPKlztQgLqYdasYDL5HEmGwSr24fdOluLlnIiN8MS6VJatd";
 
-  const API_BASE = "https://idvapi-test.arconnet.com:1019";
-  //const API_BASE = "http://10.10.2.133:8080";
-
-    // import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
+  // const API_BASE = "https://idvapi-test.arconnet.com:1019";
+  const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
 
   // Check for DigiLocker callback at root URL
+  // useEffect(() => {
+  //   const code = searchParams.get("code");
+  //   const state = searchParams.get("state");
+  //   const jti = searchParams.get("jti");
+
+  //   // If this is a DigiLocker callback (has code and state), handle it
+  //   if (code && state) {      
+  //     try {
+  //       // Parse state to extract shortCode and submissionId
+  //       const [shortCodeFromState, submissionIdFromState] = state.split(":");
+        
+  //       if (!shortCodeFromState || shortCodeFromState === "unknown") {
+  //         console.error("❌ Invalid shortCode in DigiLocker state");
+  //         alert("Invalid DigiLocker callback. Please try again.");
+  //         return;
+  //       }
+
+  //       // Store DigiLocker data in sessionStorage
+  //       localStorage.setItem("digilocker_auth_code", code);
+  //       localStorage.setItem("digilocker_callback_state", state);
+  //       localStorage.setItem("digilocker_jti", jti || "");
+  //       localStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
+
+  // // Redirect to the form page with the shortCode in query string
+  // navigate(`/form?code=${encodeURIComponent(shortCodeFromState)}`, { replace: true });
+  //     } catch (error) {
+  //       console.error("❌ Error processing DigiLocker callback:", error);
+  //       alert("Failed to process DigiLocker response. Please try again.");
+  //     }
+  //   }
+  // }, [searchParams, navigate]);
+
   useEffect(() => {
-    const code = searchParams.get("code");
+    const authCode = searchParams.get("code");
     const state = searchParams.get("state");
     const jti = searchParams.get("jti");
 
-    // If this is a DigiLocker callback (has code and state), handle it
-    if (code && state) {      
+    console.log("🔐 DigiLocker callback received:", { authCode, state, jti });
+
+    if (!authCode || !state) {
+      console.log("ℹ️ Not a DigiLocker callback (missing code/state)");
+      return;
+    }
+
+    const run = async () => {
       try {
-        // Parse state to extract shortCode and submissionId
-        const [shortCodeFromState, submissionIdFromState] = state.split(":");
-        
-        if (!shortCodeFromState || shortCodeFromState === "unknown") {
-          console.error("❌ Invalid shortCode in DigiLocker state");
-          alert("Invalid DigiLocker callback. Please try again.");
+        // 1) Store raw values in localStorage
+        localStorage.setItem("digilocker_auth_code", authCode);
+        localStorage.setItem("digilocker_callback_state", state);
+        localStorage.setItem("digilocker_jti", jti || "");
+        localStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
+
+        // 2) Prepare stable device fingerprint for header
+        let deviceFingerprint = localStorage.getItem("device_fingerprint_desktop") || localStorage.getItem("device_fingerprint_mobile");
+        if (!deviceFingerprint) {
+          // Use crypto.randomUUID if available, else simple fallback
+          if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+            deviceFingerprint = crypto.randomUUID();
+          } else {
+            deviceFingerprint = `df-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+          }
+          localStorage.setItem("device_fingerprint", deviceFingerprint);
+        }
+
+        console.log("📡 Calling /api/digilocker/callback ...");
+
+        const response = await fetch(`${API_BASE}/api/digilocker/callback`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwianRpIjoiY2E4NWJiNTYtYWMzOS00YzZjLTk4MzUtY2E1NWM2ZjNlNWE0IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZWlkZW50aWZpZXIiOiIxIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImFkbWluQGlkdi5sb2NhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IlN1cGVyQWRtaW4iLCJ2ZXJpZmllZCI6ImZhbHNlIiwicm9sZXNfdmVyIjoiMSIsInBlcm0iOlsiQWNjZXNzU2Vuc2l0aXZlRGF0YSIsIkFwaUludGVncmF0aW9uTWdtdCIsIkNvbmZpZ3VyZVJiYWMiLCJDcmVhdGVFZGl0V29ya2Zsb3dzIiwiRWRpdFN5c3RlbVNldHRpbmdzIiwiTWFuYWdlU3VwcG9ydFRpY2tldHMiLCJNYW5hZ2VVc2Vyc0FuZFJvbGVzIiwiTWFudWFsT3ZlcnJpZGVSZXZpZXciLCJWaWV3UmVzcG9uZFZlcmlmaWNhdGlvbnMiXSwibmJmIjoxNzYzNzA4MTc1LCJleHAiOjE3NjM3MTE3NzUsImlzcyI6IkFyY29uLklEVi5BUEkiLCJhdWQiOiJBcmNvbi5JRFYuQ2xpZW50In0.UTmGeKxXi798V6GfeW_OggFBVdgbA3NYtv9y4rwn0d0`,
+            "Content-Type": "application/json",
+            "X-Device-Fingerprint": deviceFingerprint,
+          },
+          body: JSON.stringify({
+            code: authCode,
+            state: state,
+          }),
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          console.error("❌ DigiLocker callback HTTP error:", response.status, text);
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data: {
+          success: boolean;
+          sessionId?: number;
+          tokenReceived?: boolean;
+          expiresIn?: number;
+          message?: string;
+          errorMessage?: string;
+          submissionId?: number;
+          templateVersionId?: number;
+        } = await response.json();
+
+        console.log("✅ DigiLocker callback response:", data);
+
+        if (!data.success) {
+          console.error("❌ DigiLocker callback returned success=false:", data);
+          alert(data.errorMessage || "Failed to process DigiLocker response.");
+          navigate("/", { replace: true });
           return;
         }
 
-        // Store DigiLocker data in sessionStorage
-        sessionStorage.setItem("digilocker_auth_code", code);
-        sessionStorage.setItem("digilocker_callback_state", state);
-        sessionStorage.setItem("digilocker_jti", jti || "");
-        sessionStorage.setItem("digilocker_callback_timestamp", Date.now().toString());
+        const { submissionId, templateVersionId } = data;
 
-  // Redirect to the form page with the shortCode in query string
-  navigate(`/form?code=${encodeURIComponent(shortCodeFromState)}`, { replace: true });
+        // if (!submissionId || !templateVersionId) {
+        //   console.error(
+        //     "❌ Missing submissionId/templateVersionId in DigiLocker response:",
+        //     data
+        //   );
+        //   alert(
+        //     "Incomplete DigiLocker response received. Please try again from the beginning."
+        //   );
+        //   navigate("/", { replace: true });
+        //   return;
+        // }
+
+        // Optionally store IDs for later usage in /form as well
+        localStorage.setItem(
+          "digilocker_submission_id",
+          // submissionId.toString()
+          "222"
+        );
+        localStorage.setItem(
+          "digilocker_template_version_id",
+          // templateVersionId.toString()
+          "222"
+        );
+        if (data.sessionId != null) {
+          localStorage.setItem(
+            "digilocker_session_id",
+            data.sessionId.toString()
+          );
+        }
+
+        console.log(
+          `🔀 Redirecting to: /form?submissionId=111&templateVersionId=111`
+        );
+
+        // 3) Navigate to /form with IDs in query string
+        navigate(
+          `/formnew/?submissionId=${encodeURIComponent(
+            1111
+          )}&templateVersionId=${encodeURIComponent(1111)}`,
+          { replace: true }
+        );
       } catch (error) {
-        console.error("❌ Error processing DigiLocker callback:", error);
+        console.error("❌ Error handling DigiLocker callback:", error);
         alert("Failed to process DigiLocker response. Please try again.");
+        navigate("/", { replace: true });
       }
-    }
+    };
+
+    void run();
   }, [searchParams, navigate]);
 
   useEffect(() => {
     const code = searchParams.get("code");
-    if (code) {
+    const state = searchParams.get("state");
+    if (code && !state) {
       // If we have a shortcode in query string, resolve it to get template version ID
       resolveShortCode(code);
     }
