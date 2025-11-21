@@ -106,6 +106,9 @@ export function DynamicSection({
 }: DynamicSectionProps) {
   const [isBiometricScanStarted, setIsBiometricScanStarted] = useState(false);
 
+  // Note: ML models and OpenCV are preloaded by IdentityVerificationPage
+  // CameraSelfieStep will check if models are loaded and use cached versions
+
   const handleScanFace = () => {
     setIsBiometricScanStarted(true);
   };

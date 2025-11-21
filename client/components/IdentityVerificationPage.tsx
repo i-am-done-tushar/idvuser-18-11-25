@@ -20,6 +20,10 @@ import {
   isValidPostalCode,
 } from "@/lib/validation";
 import { getDesktopDeviceFingerprint } from "@/lib/deviceFingerprint";
+import * as faceapi from "face-api.js";
+import * as tf from "@tensorflow/tfjs";
+import { waitForOpenCv } from "../lib/opencvLoader";
+import { performanceLogger } from "../lib/performanceLogger";
 
 // ---- single source of truth for API base ----
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
@@ -139,6 +143,50 @@ export function IdentityVerificationPage({
     useEffect(() => {
       console.log('🟢 [formData] Updated:', formData);
     }, [formData]);
+
+  // Preload ML models and OpenCV immediately when page loads to speed up camera startup
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        performanceLogger.log('info', 'PageLoad', 'Starting model preload');
+        performanceLogger.captureMemorySnapshot('Before Model Load');
+
+        // Prepare TF backend
+        if (tf.getBackend() !== "webgl") {
+          performanceLogger.startTiming('TensorFlow Backend Init');
+          await tf.setBackend("webgl");
+          await tf.ready();
+          performanceLogger.endTiming('TensorFlow Backend Init');
+        }
+
+        // Load face-api models (idempotent; cached by the browser)
+        performanceLogger.startTiming('Face-API Models Load');
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights"),
+          faceapi.nets.faceExpressionNet.loadFromUri("/assets/weights"),
+        ]);
+        performanceLogger.endTiming('Face-API Models Load');
+
+        // Ensure OpenCV is ready
+        performanceLogger.startTiming('OpenCV Load');
+        await waitForOpenCv();
+        performanceLogger.endTiming('OpenCV Load');
+
+        if (!cancelled) {
+          performanceLogger.captureMemorySnapshot('After Model Load');
+          performanceLogger.log('info', 'PageLoad', 'All models and OpenCV loaded successfully');
+        }
+      } catch (e) {
+        performanceLogger.log('error', 'PageLoad', 'Model/OpenCV preload failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Document state
   const [documentFormState, setDocumentFormState] = useState({
@@ -1973,17 +2021,30 @@ export function IdentityVerificationPage({
         } else if (section.sectionType === "biometrics") {
           // Trigger download of biometric videos before submitting
           if (typeof (window as any).__biometricDownloadFn === 'function') {
-            console.log('📥 Triggering biometric video downloads...');
+            performanceLogger.log('info', 'Submit', 'Triggering biometric video downloads');
+            performanceLogger.startTiming('Video Downloads');
+            
             try {
               (window as any).__biometricDownloadFn();
               // Wait briefly to allow downloads to be initiated
               await new Promise(resolve => setTimeout(resolve, 500));
+              
+              performanceLogger.endTiming('Video Downloads');
             } catch (err) {
+              performanceLogger.log('error', 'Submit', 'Error downloading biometric videos', err);
               console.error('❌ Error downloading biometric videos:', err);
             }
           } else {
+            performanceLogger.log('warning', 'Submit', 'Biometric download function not found');
             console.warn('⚠️ Biometric download function not found');
           }
+
+          // Download performance report along with the videos
+          performanceLogger.captureMemorySnapshot('Before Report Download');
+          performanceLogger.log('info', 'Submit', 'Downloading performance report');
+          
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+          performanceLogger.downloadReport(`biometric-performance-${timestamp}.txt`);
           
           fieldValue = JSON.stringify({
             selfieUploaded: isSelfieCompleted,

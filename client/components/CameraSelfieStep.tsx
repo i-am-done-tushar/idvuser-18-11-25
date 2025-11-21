@@ -3,6 +3,9 @@ import * as faceapi from "face-api.js";
 import * as tf from "@tensorflow/tfjs";
 import "./CameraSelfieStep.css";
 import { waitForOpenCv } from "../lib/opencvLoader";
+import { performanceLogger } from "../lib/performanceLogger";
+
+//1st change
 
 interface FaceGuideOval {
   cx: number;
@@ -63,7 +66,7 @@ export default function CameraCapture({
   //-----------------------------useState-------------------------------------
   //UI/Display State (triggers re-renders):
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [isFaceDetected, setIsFaceDetected] = useState(false);
+  // Note: isFaceDetected is managed via isFaceDetectedRef only (no state) for performance
   const [statusMessage, setStatusMessage] = useState("");
   const [dashedCircleAlignMessage, setDashedCircleAlignMessage] = useState("");
   const [cameraErrorMessage, setCameraErrorMessage] = useState("");
@@ -224,9 +227,12 @@ export default function CameraCapture({
   const recordingFlagRef = useRef(0);
   const isSegmentValidRef = useRef(true);
   const stoppingForRestartRef = useRef(false);
+  const detectionInProgressRef = useRef(false); // Prevent concurrent face detections
+  // Track last adjusted segment resume time (single -1 adjustment). Initialize to -1 sentinel.
+  const lastAdjustedSegmentSecondsRecordedRef = useRef<number>(-1);
   const restartCooldownRef = useRef(false);
+  const restartTimeoutIdRef = useRef<number | null>(null);
   const processingSegmentCompletionRef = useRef(false);
-  const lastAdjustedSegmentSecondsRecordedRef = useRef<number | null>(null);
   const messageCooldownsRef = useRef<Record<string, boolean>>({});
   // Guard to avoid concurrent starts of the same segment (prevents duplicate timers/recorders)
   const startingSegmentRef = useRef(false);
@@ -250,6 +256,8 @@ export default function CameraCapture({
   const segmentSecondsRecordedRef = useRef(0);
   const extraSecondsRecordedRef = useRef(0);
   const captureProgressRef = useRef(0); // progress percentage 0-100 for outer circle
+  const measuredFPSRef = useRef<number | null>(null); // Store measured FPS to avoid repeated warnings
+  const fpsWarningShownRef = useRef(false); // Track if FPS warning has been shown
   // Session lifecycle flags
   const sessionCompletedRef = useRef(false); // Set true after all segments & verifications finish
   const autoStartDisabledRef = useRef(false); // Prevent auto re-start after completion until user manually resets
@@ -259,6 +267,7 @@ export default function CameraCapture({
   const verificationPendingRef = useRef(false); // Block auto-start while verification is pending/deferred
   // Pre-prompt gating before starting a segment
   const prePromptInProgressRef = useRef(false);
+  const skipPrePromptRef = useRef(false); // Skip pre-prompt when auto-advancing segments
   const plannedVerificationDirectionRef = useRef<
     Record<number, "up" | "down" | "left" | "right">
   >({});
@@ -270,14 +279,23 @@ export default function CameraCapture({
   const lastPitchRef = useRef<number | undefined>(undefined);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Message refs to avoid re-renders (updated directly, state updated periodically)
+  const dashedCircleAlignMessageRef = useRef<string>('');
+  const distanceMessageRef = useRef<string>('');
+  const ovalAlignMessageRef = useRef<string>('');
+  const verificationMessageRef = useRef<string>(''); // Prevent re-renders during face loss
+  const messageUpdateTimerRef = useRef<number | null>(null);
+  const lastMessageUpdateTimeRef = useRef<number>(0);
+  const MESSAGE_UPDATE_THROTTLE = 200; // Update state max once per 200ms
+
   // Initialize logServiceRef with a mock logger
   const logServiceRef = useRef({
     log: (level: string, message: string) => console.log(`[${level}]`, message),
   });
 
   //Constants (can be plain const):
-  const DETECT_EVERY = 1;
-  const BRIGHT_EVERY = 6;
+  const DETECT_EVERY = 1;  // Match Angular: detect every frame for smooth tracking
+  const BRIGHT_EVERY = 6;  // Match Angular brightness check frequency
   const totalSegments = 3;
   const totalDuration = 10;
   const maxHeadTurnAttempts = 2;
@@ -297,50 +315,66 @@ export default function CameraCapture({
     let cancelled = false;
 
     const init = async () => {
+      performanceLogger.startTiming('Camera Component Init');
+      performanceLogger.captureMemorySnapshot('Camera Init Start');
+      
       try {
         checkIsMobile();
 
-        // Only load models and OpenCV on first mount (retryTrigger === 0)
+        // Only load models and OpenCV on first mount (retryTrigger === 0) AND if not already loaded
         if (retryTrigger === 0) {
-          console.log("Setting TensorFlow.js backend to webgl...");
-          await tf.setBackend("webgl");
-          await tf.ready();
-          console.log("TensorFlow backend:", tf.getBackend());
+          // Check if models are already loaded (from page-level preload)
+          const modelsAlreadyLoaded = 
+            faceapi.nets.tinyFaceDetector.isLoaded &&
+            faceapi.nets.faceLandmark68Net.isLoaded &&
+            faceapi.nets.faceRecognitionNet.isLoaded &&
+            faceapi.nets.faceExpressionNet.isLoaded;
 
-          console.log("Loading face-api models...");
-          // logService.log('debug', 'Loading face-api models...');
-          await Promise.all([
-            faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
-            faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
-            faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights"),
-            faceapi.nets.faceExpressionNet.loadFromUri("/assets/weights"),
-          ]);
-          console.log("✅ FaceAPI models loaded");
-          // logService.log('debug', '✅ FaceAPI models loaded');
+          if (!modelsAlreadyLoaded) {
+            performanceLogger.log('info', 'CameraInit', 'Models not preloaded, loading now');
+            
+            performanceLogger.startTiming('TensorFlow Backend (Camera)');
+            await tf.setBackend("webgl");
+            await tf.ready();
+            performanceLogger.endTiming('TensorFlow Backend (Camera)');
 
-          // Ensure OpenCV is loaded and initialized before any cv.* usage
-          console.log("Loading OpenCV.js...");
-          try {
-            await waitForOpenCv();
-            if (!cancelled) setOpenCvReady(true);
-            console.log("✅ OpenCV.js ready");
-          } catch (e) {
-            console.error("Failed to load OpenCV.js", e);
-            // Not fatal for camera start; features using cv will be skipped
+            performanceLogger.startTiming('Face-API Models (Camera)');
+            await Promise.all([
+              faceapi.nets.tinyFaceDetector.loadFromUri("/assets/weights"),
+              faceapi.nets.faceLandmark68Net.loadFromUri("/assets/weights"),
+              faceapi.nets.faceRecognitionNet.loadFromUri("/assets/weights"),
+              faceapi.nets.faceExpressionNet.loadFromUri("/assets/weights"),
+            ]);
+            performanceLogger.endTiming('Face-API Models (Camera)');
+          } else {
+            performanceLogger.log('info', 'CameraInit', 'Models already preloaded - using cached models');
           }
 
-          // Example: COCO-SSD load removed/commented—keep consistent with Angular
-          // await cocoSsd.load();
-
-          // logService.log('info', 'Step 6 loaded');
-          // if (!cancelled) {
-          //   setLogs(logService.getLogs());
-          // }
+          // Ensure OpenCV is loaded and initialized before any cv.* usage
+          if (!window.cv || !window.cv.Mat) {
+            performanceLogger.startTiming('OpenCV Load (Camera)');
+            try {
+              await waitForOpenCv();
+              if (!cancelled) setOpenCvReady(true);
+              performanceLogger.endTiming('OpenCV Load (Camera)');
+            } catch (e) {
+              performanceLogger.log('error', 'CameraInit', 'Failed to load OpenCV.js', e);
+              // Not fatal for camera start; features using cv will be skipped
+            }
+          } else {
+            performanceLogger.log('info', 'CameraInit', 'OpenCV already loaded');
+            if (!cancelled) setOpenCvReady(true);
+          }
         }
 
-        console.log(retryTrigger === 0 ? "Starting camera..." : "Restarting camera...");
-        await startCamera(); // fill in inside your React version
+        performanceLogger.startTiming('Camera Hardware Start');
+        await startCamera();
+        performanceLogger.endTiming('Camera Hardware Start');
+        
+        performanceLogger.endTiming('Camera Component Init');
+        performanceLogger.captureMemorySnapshot('Camera Init Complete');
       } catch (err: any) {
+        performanceLogger.log('error', 'CameraInit', 'Camera initialization failed', err);
         console.error("Camera initialization failed:", err);
         if (cancelled) return;
 
@@ -393,6 +427,9 @@ export default function CameraCapture({
       duration: number = 2000,
       cooldownDuration: number = 1000,
     ) => {
+      // Frequently-updated detection loop messages use refs to avoid re-renders
+      const refOnlyKeys = ['dashedCircleAlignMessage', 'distanceMessage', 'ovalAlignMessage'];
+      
       // Normalize key: if empty or not a valid state property, fallback to statusMessage
       const validKeys = [
         "statusMessage",
@@ -430,12 +467,40 @@ export default function CameraCapture({
         text = String(msg);
       }
 
-      // Check cooldown
+      // For ref-only keys (called 30-60x/sec), ultra-fast path with minimal overhead
+      // Check ref-only keys FIRST before any other operations for maximum performance
+      if (key === 'dashedCircleAlignMessage' || key === 'distanceMessage' || key === 'ovalAlignMessage' || key === 'verificationMessage') {
+        const ref = key === 'dashedCircleAlignMessage' ? dashedCircleAlignMessageRef
+                  : key === 'distanceMessage' ? distanceMessageRef
+                  : key === 'ovalAlignMessage' ? ovalAlignMessageRef
+                  : verificationMessageRef;
+        
+        // Ultra-fast early exit if value unchanged - skip all other checks
+        if (ref.current === text) {
+          return;
+        }
+        
+        ref.current = text;
+        
+        // Schedule state update (throttled to ~100ms) - only if not already scheduled
+        if (!messageUpdateTimerRef.current) {
+          messageUpdateTimerRef.current = window.setTimeout(() => {
+            setDashedCircleAlignMessage(dashedCircleAlignMessageRef.current);
+            setDistanceMessage(distanceMessageRef.current);
+            setOvalAlignMessage(ovalAlignMessageRef.current);
+            setVerificationMessage(verificationMessageRef.current);
+            messageUpdateTimerRef.current = null;
+          }, 100);
+        }
+        return;
+      }
+
+      // Check cooldown (only for non-ref keys)
       if (messageCooldownsRef.current[key]) {
         return;
       }
 
-      // Get current value from the appropriate state
+      // For non-ref keys, get current value from state (less frequent updates)
       const stateGetters: Record<string, () => string> = {
         statusMessage: () => statusMessage,
         dashedCircleAlignMessage: () => dashedCircleAlignMessage,
@@ -449,6 +514,12 @@ export default function CameraCapture({
         headTurnAttemptStatus: () => headTurnAttemptStatus,
       };
 
+      // Update refs immediately for internal logic
+      if (key === 'dashedCircleAlignMessage') dashedCircleAlignMessageRef.current = text;
+      if (key === 'distanceMessage') distanceMessageRef.current = text;
+      if (key === 'ovalAlignMessage') ovalAlignMessageRef.current = text;
+      if (key === 'verificationMessage') verificationMessageRef.current = text;
+
       const currentVal = stateGetters[key]?.() ?? "";
 
       // Don't update if value hasn't changed
@@ -456,7 +527,21 @@ export default function CameraCapture({
         return;
       }
 
-      // State setters mapping
+      // Throttle state updates to prevent re-renders on every frame
+      const now = performance.now();
+      const timeSinceLastUpdate = now - lastMessageUpdateTimeRef.current;
+      
+      // For critical messages (errors, recording status), update immediately
+      const isCritical = key === 'cameraErrorMessage' || key === 'recordingMessage' || key === 'statusMessage';
+      
+      if (!isCritical && timeSinceLastUpdate < MESSAGE_UPDATE_THROTTLE) {
+        // Skip state update, only refs are updated above
+        return;
+      }
+      
+      lastMessageUpdateTimeRef.current = now;
+
+      // State setters mapping for non-ref keys
       const stateSetters: Record<string, (value: string) => void> = {
         statusMessage: setStatusMessage,
         dashedCircleAlignMessage: setDashedCircleAlignMessage,
@@ -504,19 +589,7 @@ export default function CameraCapture({
         }, duration);
       }
     },
-    [
-      isMobile,
-      statusMessage,
-      dashedCircleAlignMessage,
-      cameraErrorMessage,
-      brightnessMessage,
-      ovalAlignMessage,
-      distanceMessage,
-      recordingMessage,
-      verificationMessage,
-      mobileStatusMessage,
-      headTurnAttemptStatus,
-    ],
+    [isMobile],  // Only isMobile needed - all messages use refs or state setters, no need for state values in deps
   );
 
   // Angular-style function that sets the state and also returns the value
@@ -543,23 +616,24 @@ export default function CameraCapture({
     );
   }, [totalDuration]);
 
-  const validateCameraAndVideo = useCallback((loop: () => void): boolean => {
-    if (!streamRef.current || !videoRef.current) {
-      console.log(
-        "info",
-        "Camera off or video element missing; stopping detection loop.",
-      );
-      return false;
-    }
-    return true;
-  }, []);
-
   const scheduleNext = useCallback(
     (fn: FrameRequestCallback | (() => void)): void => {
       rafIdRef.current = requestAnimationFrame(fn as FrameRequestCallback);
     },
     [],
   );
+
+  const validateCameraAndVideo = useCallback((loop: () => void): boolean => {
+    if (!streamRef.current || !videoRef.current) {
+      console.log(
+        "warn",
+        `[ValidateCamera] FAILED - stream=${!!streamRef.current}, video=${!!videoRef.current} - scheduling next frame`,
+      );
+      scheduleNext(loop);  // ✅ Keep loop alive even when camera/video not ready
+      return false;
+    }
+    return true;
+  }, [scheduleNext]);
 
   const validateOval = useCallback(
     (loop: () => void): boolean => {
@@ -674,7 +748,8 @@ export default function CameraCapture({
       ctx.stroke();
 
       // --- BLINKING ARC ---
-      if (blinkingDirectionRef.current && blinkVisibleRef.current) {
+      // Only show blinking arc when recording is active
+      if (blinkingDirectionRef.current && blinkVisibleRef.current && isRecordingRef.current) {
         ctx.beginPath();
         ctx.lineWidth = 12;
 
@@ -762,7 +837,7 @@ export default function CameraCapture({
         h: outerRadius * 2,
       };
     },
-    [isRecording, isFaceDetected, captureProgress],
+    [isRecording, captureProgress],
   );
 
   // Helper to update progress and force redraw immediately
@@ -894,7 +969,7 @@ export default function CameraCapture({
               try {
                 mediaRecorderRef.current.resume();
                 // Silent resume - background recording
-                // showMessage('recordingMessage','▶️ Resumed – original face restored');
+                // showMessage('recordingMessage', '▶️ Resumed – original face restored');
               } catch {}
             }
           }
@@ -902,6 +977,23 @@ export default function CameraCapture({
       } else {
         console.log("warn", `[FaceCheck] ⚠️ No face detected (null detection)`);
         faceMismatchCounterRef.current = 0; // temporary loss, not mismatch
+        
+        // Clear stale landmarks/box so detection loop knows face is truly gone
+        lastLandmarksRef.current = null;
+        lastBoxRef.current = null;
+        
+        // If face is lost during active recording, trigger restart logic
+        if (isRecordingRef.current && isFaceDetectedRef.current && !isVerifyingHeadTurnRef.current) {
+          const recorderState = mediaRecorderRef.current?.state;
+          if (recorderState === 'recording' || recorderState === 'paused') {
+            console.log("warn", `[FaceCheck] Face lost during active recording - triggering restart`);
+            isFaceDetectedRef.current = false;
+            // Trigger restart to pause and wait for face to return
+            _restartCurrentSegmentDueToFaceLoss();
+          } else {
+            console.log("debug", `[FaceCheck] No face in checkDifferentFace, but recorder is ${recorderState} - not triggering restart`);
+          }
+        }
       }
     } catch (err) {
       console.log(
@@ -909,6 +1001,13 @@ export default function CameraCapture({
         `[FaceCheck] ⚠️ Error during face detection: ${err}`,
       );
       faceMismatchCounterRef.current = 0;
+      
+      // On error during active recording, mark face as not detected
+      const recorderState = mediaRecorderRef.current?.state;
+      if (isRecordingRef.current && isFaceDetectedRef.current && recorderState === 'recording') {
+        console.log("warn", `[FaceCheck] Detection error during active recording - setting isFaceDetectedRef.current = false`);
+        isFaceDetectedRef.current = false;
+      }
     }
 
     return false; // default safe
@@ -931,15 +1030,20 @@ export default function CameraCapture({
 
   const startBlinking = useCallback(
     (direction: "left" | "right" | "up" | "down" | "forward") => {
-      // Save direction for reference
-      blinkingDirectionRef.current = direction;
-      blinkVisibleRef.current = true;
-
       // Clear existing blink interval if any
       if (blinkIntervalIdRef.current) {
         clearInterval(blinkIntervalIdRef.current);
+        blinkIntervalIdRef.current = null;
       }
 
+      // Save direction and ensure visible state is true
+      blinkingDirectionRef.current = direction;
+      blinkVisibleRef.current = true;
+
+      // Force an initial redraw to show the blinking arc immediately
+      drawFaceGuideOverlay(currentBrightnessRef.current || 100);
+
+      // Start the interval for toggling visibility
       blinkIntervalIdRef.current = setInterval(() => {
         // Toggle visibility on/off to create blink effect
         blinkVisibleRef.current = !blinkVisibleRef.current;
@@ -947,6 +1051,8 @@ export default function CameraCapture({
         // Redraw face guide overlay with current brightness (default 100 if not set)
         drawFaceGuideOverlay(currentBrightnessRef.current || 100);
       }, 500); // Repeat every 500 milliseconds (twice per second)
+
+      console.log(`[Blinking] Started blinking for direction: ${direction}`);
     },
     [drawFaceGuideOverlay],
   );
@@ -956,6 +1062,7 @@ export default function CameraCapture({
     if (blinkIntervalIdRef.current) {
       clearInterval(blinkIntervalIdRef.current);
       blinkIntervalIdRef.current = null;
+      console.log('[Blinking] Stopped blinking interval');
     }
 
     // Clear stored blinking direction
@@ -1521,6 +1628,10 @@ export default function CameraCapture({
   const performVerificationForCurrentSegment: () => Promise<void> =
     useCallback(async () => {
       const segment = currentSegmentRef.current; // ✅ Use ref to avoid stale closure
+      
+      performanceLogger.startTiming(`Head Verification Segment ${segment}`);
+      performanceLogger.log('info', 'HeadVerification', `Starting verification for segment ${segment}`);
+      
       console.log(
         "info",
         "[HeadVerification] performVerificationForCurrentSegment called for segment",
@@ -1535,6 +1646,7 @@ export default function CameraCapture({
           "info",
           "Head verification already in progress; skipping new request.",
         );
+        performanceLogger.log('warning', 'HeadVerification', 'Verification already in progress');
         return; // Prevent duplicate starts
       }
       verificationInProgressRef.current = true;
@@ -1745,6 +1857,10 @@ export default function CameraCapture({
     const progressAfterHeadTurn = segment === 2 ? 80 : 40;
     updateCaptureProgress(progressAfterHeadTurn);
         
+        performanceLogger.endTiming(`Head Verification Segment ${segment}`);
+        performanceLogger.log('info', 'HeadVerification', `✅ SUCCESS for segment ${segment}`);
+        performanceLogger.captureMemorySnapshot(`After Head Verification ${segment}`);
+        
         console.log(
           "info",
           `[HeadVerification] ✅ SUCCESS for segment ${segment}. verificationDoneForSegmentRef is now:`,
@@ -1923,6 +2039,10 @@ export default function CameraCapture({
       isCameraOn,
     ]);
 
+  // -------------------------------
+  // ngOnDestroy equivalent (cleanup)
+  // -------------------------------
+  // Moved stopCamera definition above useEffect to avoid 'used before declaration' TS error
   const stopCamera = useCallback(() => {
     console.log("info", "[Camera] Stopping camera and cleaning up...");
 
@@ -1993,6 +2113,13 @@ export default function CameraCapture({
       "[Camera] ✅ Camera stopped and cleaned up successfully",
     );
   }, [setIsCameraOn]);
+
+  useEffect(() => {
+    return () => {
+      // Stop camera and release resources
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const downloadAllBlobs = useCallback(() => {
     console.log("[Downloads] downloadAllBlobs called");
@@ -2191,6 +2318,7 @@ export default function CameraCapture({
       // Start next segment after a short delay
       // Pre-set recording flag so RAF loop won't race a concurrent start
       recordingFlagRef.current = 1;
+      skipPrePromptRef.current = true; // Skip pre-prompt when auto-advancing
       setTimeout(() => {
         _startSegmentRecording(0);
       }, 600);
@@ -2317,6 +2445,14 @@ export default function CameraCapture({
         if (!streamRef.current) {
           showMessage("statusMessage", "⚠️ Camera not initialized.");
           // logService.log('error', 'Camera stream not initialized when trying to start segment recording.');
+          return;
+        }
+
+        // FPS validation check - prevent recording if FPS is too low
+        if (measuredFPSRef.current !== null && measuredFPSRef.current < 10) {
+          showMessage("statusMessage", "⚠️ Camera FPS too low. Cannot start recording. Please check your camera or try a different device.");
+          setCameraErrorMessage("⚠️ Camera FPS is too low for recording. Please improve lighting or try another camera.");
+          console.error(`[Recording] Blocked - FPS too low: ${measuredFPSRef.current} FPS`);
           return;
         }
 
@@ -2471,7 +2607,7 @@ export default function CameraCapture({
           console.log("info", `🛑 [onstop] ENTERED for segment ${segment}`);
           // Clear starting guard when recorder stops so a new segment can be started later
           startingSegmentRef.current = false;
-          // ✅ Read from ref (always up-to-date)
+          // ✅ Read from ref
           const actualSecondsRecorded = segmentSecondsRecordedRef.current;
           const chunkCount =
             recordedChunksPerSegmentRef.current[segment]?.length || 0;
@@ -2584,7 +2720,6 @@ export default function CameraCapture({
         // Timer logic
         if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = setInterval(async () => {
-          // If recording flag dropped unexpectedly (e.g. onstop already fired), stop ticking
           if (recordingFlagRef.current === 0 && !isRecordingRef.current) {
             clearInterval(timerIntervalRef.current);
             return;
@@ -2594,13 +2729,14 @@ export default function CameraCapture({
             return;
           }
 
+          // Check if face is not detected - pause recording
           if (!isFaceDetectedRef.current) {
             if (recorder.state === "recording") {
               recorder.pause();
-              // Silent pause - no UI message for background recording
-              // showMessage('recordingMessage', `⏸️ Paused because face not detected`);
+              showMessage('recordingMessage', `⏸️ Recording paused - please align your face inside the circle`);
             }
-            return;
+            // DO NOT clear timer here; allow resume when face returns
+            return; // Exit early, don't increment timer
           }
 
           // Additional gating: pause when multiple faces or different face detected
@@ -2610,27 +2746,24 @@ export default function CameraCapture({
           ) {
             if (recorder.state === "recording") {
               recorder.pause();
-              // Silent pause - no UI message for background recording
-              // showMessage('recordingMessage', multipleFacesDetectedRef.current
-              //   ? '⏸️ Paused – multiple faces detected'
-              //   : '⏸️ Paused – different face detected'
-              // );
+              showMessage('recordingMessage', multipleFacesDetectedRef.current
+                ? '⏸️ Recording paused - multiple faces detected'
+                : '⏸️ Recording paused - different face detected'
+              );
             }
-            return;
+            // DO NOT clear timer here; allow resume when face returns
+            return; // Exit early, don't increment timer
           }
 
+          // Face is detected and valid - resume if paused
           if (recorder.state === "paused") {
             recorder.resume();
-            // Silent resume - no UI message for background recording
-            // showMessage('recordingMessage', `▶️ Resumed recording`);
+            showMessage('recordingMessage', `▶️ Recording resumed - segment ${currentSegmentRef.current} (${segmentTarget - segmentSecondsRecordedRef.current}s left)`);
           }
 
+          // Only increment timer when actively recording
           if (recorder.state === "recording") {
             const currentSeconds = segmentSecondsRecordedRef.current;
-            console.log(
-              "info",
-              `⏱️ Timer tick: currentSeconds=${currentSeconds}, target=${segmentTarget}`,
-            );
 
             // Check for different face (only if still recording segment)
             if (currentSeconds < segmentTarget) {
@@ -2708,7 +2841,6 @@ export default function CameraCapture({
       totalDuration,
       totalSegments,
       isRecording,
-      isFaceDetected,
       isSegmentValid,
       recordedChunksPerSegment,
       showMessage,
@@ -2735,114 +2867,66 @@ export default function CameraCapture({
   // Export or use _startSegmentRecording in your component
 
   const _restartCurrentSegmentDueToFaceLoss: () => void = useCallback(() => {
-    console.log(
-      "info",
-      "Attempting to restart current segment due to face loss.",
-    );
-
+    // Match Angular: only restart if cooldown not active
     if (restartCooldownRef.current) {
-      console.log("warn", "Restart called but cooldown active. Ignoring.");
-      return;
+      return; // Cooldown active; ignore
     }
-
     restartCooldownRef.current = true;
-    console.log("info", "Restart cooldown activated.");
 
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
+    // Match Angular: ONLY stop if state is 'recording' (not 'paused')
+    // If already paused, the timer interval will handle resume when face returns
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state === "recording") {
       stoppingForRestartRef.current = true;
+      // Show message using ref to avoid re-render lag during face loss
       showMessage(
         "verificationMessage",
-        "⚠️ Recording reset due to face loss. Continuing from current progress...",
+        "⚠️ Face lost – resetting segment (progress preserved)..."
       );
-      console.log(
-        "warn",
-        "Recording reset due to face loss or quality issues.",
-      );
-
-      clearInterval(timerIntervalRef.current);
-      console.log("info", "Timer interval cleared.");
-
-      try {
-        console.log(
-          "info",
-          `Stopping mediaRecorder. Current state: ${mediaRecorderRef.current.state}`,
-        );
-        mediaRecorderRef.current.stop();
-        console.log("info", "MediaRecorder.stop() called successfully.");
-      } catch (stopErr) {
-        console.log(
-          "error",
-          `Error stopping mediaRecorder during restart: ${stopErr}`,
-        );
+      // Clear timer so it doesn't mutate counters while we restart
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
       }
-    } else {
-      console.log(
-        "info",
-        "MediaRecorder not recording or undefined, skipping stop.",
-      );
+      try {
+        rec.stop();
+      } catch {}
     }
 
-    setTimeout(() => {
+    // Cancel any previously scheduled restart timeout to avoid duplicates
+    if (restartTimeoutIdRef.current) {
+      clearTimeout(restartTimeoutIdRef.current);
+      restartTimeoutIdRef.current = null;
+    }
+
+    // Schedule resume marker after cooldown (align with Angular's 1000ms)
+    restartTimeoutIdRef.current = window.setTimeout(() => {
+      restartTimeoutIdRef.current = null;
       restartCooldownRef.current = false;
-      console.log("info", "Restart cooldown reset.");
 
-      // Use ref to get correct current segment value
-      const segment = currentSegmentRef.current || currentSegment;
-      const segmentSeconds = segmentSecondsRecordedRef.current ?? 0;
-
-      // Clear verification flags for this segment since we're restarting it
-      verificationDoneForSegmentRef.current[segment] = false;
-      verificationSuccessForSegmentRef.current[segment] = false;
-      verificationTriggeredForSegmentRef.current[segment] = false;
-
-      // Reset face mismatch counter to prevent false positives after restart
-      faceMismatchCounterRef.current = 0;
-
-      console.log(
-        "info",
-        `[Restart] Cleared verification flags for segment ${segment}, reset face mismatch counter`,
-      );
-
-      let resumeTime;
-
+      // Compute resume time (minus 1s once to smooth boundary like Angular)
+      const segSeconds = segmentSecondsRecordedRef.current || 0;
+      let resumeTime: number;
       if (
-        segmentSeconds > 1 &&
-        lastAdjustedSegmentSecondsRecordedRef.current !== segmentSeconds
+        segSeconds > 1 &&
+        lastAdjustedSegmentSecondsRecordedRef.current !== segSeconds
       ) {
-        // Subtract 1 only if segmentSeconds changed since last adjustment
-        resumeTime = segmentSeconds - 1;
+        resumeTime = segSeconds - 1;
         lastAdjustedSegmentSecondsRecordedRef.current = resumeTime;
-        console.log(
-          "info",
-          `Adjusted segmentSecondsRecorded by -1 for segment ${segment}`,
-        );
       } else {
-        // Otherwise, use the segmentSeconds as is (or 0)
-        resumeTime = segmentSeconds;
+        resumeTime = segSeconds;
       }
 
-      console.log(
-        "info",
-        `Resuming recording from ${resumeTime}s for segment ${segment}.`,
-      );
-
-      if (
-        !mediaRecorderRef.current ||
-        mediaRecorderRef.current.state !== "recording"
-      ) {
-        console.log("info", "Starting segment recording after restart.");
+      // Match Angular: restart recording immediately with resume time (creates new recorder + timer)
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+        console.log("info", `Restarting segment recording from ${resumeTime}s after cooldown`);
         _startSegmentRecording(resumeTime);
       } else {
-        console.log(
-          "warn",
-          "Attempted to restart recording but MediaRecorder is already recording.",
-        );
+        console.log("warn", "Recorder already active during restart timeout, skipping restart");
+        showMessage("verificationMessage", "");
       }
     }, 1000);
-  }, [showMessage, segmentSecondsRecorded, currentSegment]);
+  }, [showMessage, _startSegmentRecording]);
 
   const showAndLogMessage = useCallback(
     (
@@ -3093,11 +3177,7 @@ export default function CameraCapture({
   const handleBrightnessChecks = useCallback(
     async (loop: () => void): Promise<boolean> => {
       const brightness = getFrameBrightness();
-      console.log(
-        "info",
-        `[BrightnessCheck] Frame brightness: ${brightness}`,
-        "brightness",
-      );
+      // Removed console.log to prevent performance overhead (runs 5x/sec)
 
       drawFaceGuideOverlay(brightness);
 
@@ -3276,7 +3356,7 @@ export default function CameraCapture({
   );
 
   const handleFaceAlignment = useCallback(
-    async (_loop: () => void): Promise<[boolean, boolean]> => {
+    (_loop: () => void): [boolean, boolean] => {
       /* Validates face alignment inside oval, size constraints, and triggers recording. */
       const box = lastBoxRef.current;
       const landmarks = lastLandmarksRef.current;
@@ -3425,27 +3505,31 @@ export default function CameraCapture({
 
   const handleNoFaceDetected = useCallback(
     (loop: () => void): void => {
-      setIsFaceDetected(false);
-      isFaceDetectedRef.current = false; // ✅ Sync ref
+      isFaceDetectedRef.current = false;
       insideOvalFramesRef.current = 0;
 
-      if (isRecording && !isVerifyingHeadTurn) {
+      if (isRecordingRef.current && !isVerifyingHeadTurnRef.current) {
         _restartCurrentSegmentDueToFaceLoss();
       }
-
-      // logServiceRef.current?.log('info', 'No face detected in the current frame.');
+      
+      // ✅ CRITICAL: Schedule next frame to keep detection loop alive
+      scheduleNext(loop);
     },
-    [isRecording, isVerifyingHeadTurn, _restartCurrentSegmentDueToFaceLoss],
+    [_restartCurrentSegmentDueToFaceLoss, scheduleNext],
   );
 
   const startDetectionRAF = useCallback(() => {
-    // logService.log('info', '🔄 Starting face detection loop...');
     const options = new faceapi.TinyFaceDetectorOptions();
 
     const loop = async () => {
       // Stop detection loop immediately if session is completed
       if (sessionCompletedRef.current || autoStartDisabledRef.current) {
-        console.log("info", "[Detection] Loop stopped - session completed");
+        return;
+      }
+
+      // Skip this frame if detection is already in progress (prevents concurrent detections)
+      if (detectionInProgressRef.current) {
+        scheduleNext(loop);
         return;
       }
 
@@ -3457,61 +3541,58 @@ export default function CameraCapture({
 
       frameCountRef.current++;
 
-      // Perform brightness and image quality checks at intervals
-      if (frameCountRef.current % BRIGHT_EVERY === 0) {
-        if (await handleBrightnessChecks(loop)) return;
-      }
+      // Mark detection as in progress
+      detectionInProgressRef.current = true;
 
-      // Detect all faces periodically to check for multiple faces
-      if (frameCountRef.current % DETECT_EVERY === 0) {
-        if (await checkMultipleFaces(loop, options)) return;
-        await detectSingleFaceWithLandmarks(options);
-      }
+      try {
+        // Perform brightness and image quality checks at intervals
+        if (frameCountRef.current % BRIGHT_EVERY === 0) {
+          if (await handleBrightnessChecks(loop)) {
+            detectionInProgressRef.current = false;
+            return;
+          }
+        }
+
+        // Detect all faces periodically to check for multiple faces
+        if (frameCountRef.current % DETECT_EVERY === 0) {
+          if (await checkMultipleFaces(loop, options)) {
+            detectionInProgressRef.current = false;
+            return;
+          }
+          await detectSingleFaceWithLandmarks(options);
+        }
 
       // Analyze face position, size, and alignment
       if (lastBoxRef.current && lastLandmarksRef.current) {
-        const [faceInside, sizeOK] = await handleFaceAlignment(loop);
+        const [faceInside, sizeOK] = handleFaceAlignment(loop);
 
         if (sizeOK && faceInside) {
           insideOvalFramesRef.current++;
           showMessage("dashedCircleAlignMessage", "");
 
           if (insideOvalFramesRef.current >= requiredFrames) {
-            // showMessage('statusMessage', '✅ Perfect! Stay still inside the dashed circle.');
-            setIsFaceDetected(true);
-            isFaceDetectedRef.current = true;
-
-            await checkDifferentFace();
+            // Mark face as detected ONLY after meeting requiredFrames threshold (matches Angular)
+            if (!isFaceDetectedRef.current) {
+              isFaceDetectedRef.current = true;
+            }
+            
+            // NOTE: checkDifferentFace is called in the timer interval (once per second),
+            // not here in the detection loop. This matches Angular's architecture and
+            // prevents lag from running expensive face detection 30 times per second.
 
             const recorderActive =
               mediaRecorderRef.current &&
               (mediaRecorderRef.current.state === "recording" ||
                 mediaRecorderRef.current.state === "paused");
 
-            console.log(
-              "info",
-              `Recording flag: ${recordingFlagRef.current}, isRecording: ${isRecording}, recorderState: ${mediaRecorderRef.current?.state || "none"}`,
-            );
-            // Use ref-based isRecording for more accurate immediate state
-            console.log(
-              "debug",
-              `Ref states -> isRecordingRef=${isRecordingRef.current}, startingGuard=${startingSegmentRef.current}`,
-            );
-            console.log(
-              "info",
-              `Recording flag: ${recordingFlagRef.current}, isRecording(state)=${isRecording}, isRecording(ref)=${isRecordingRef.current}, recorderState: ${mediaRecorderRef.current?.state || "none"}`,
-            );
-
             // Prevent auto start when session is completed
             if (sessionCompletedRef.current || autoStartDisabledRef.current) {
-              return; // Do nothing after session completion until manual reset
+              scheduleNext(loop);  // ✅ Keep loop alive
+              return;
             }
 
             if (processingSegmentCompletionRef.current) {
-              console.log(
-                "info",
-                "⏳ Processing segment completion, not starting new recording",
-              );
+              scheduleNext(loop);  // ✅ Keep loop alive
               return;
             }
 
@@ -3540,10 +3621,21 @@ export default function CameraCapture({
                 ) {
                   startRecording_FaceReference();
                 }
-                // Show a head-turn prompt BEFORE starting recording
+                // Show a head-turn prompt BEFORE starting recording ONLY if not already shown
                 if (prePromptInProgressRef.current) {
+                  scheduleNext(loop);  // ✅ Keep loop alive
                   return;
                 }
+                
+                // Skip pre-prompt if we're auto-advancing after verification
+                if (skipPrePromptRef.current) {
+                  skipPrePromptRef.current = false;
+                  recordingFlagRef.current = 1;
+                  _startSegmentRecording();
+                  scheduleNext(loop);
+                  return;
+                }
+                
                 const segToStart = currentSegmentRef.current || 1;
                 // Pick direction consistent with later verification and store it
                 let chosen: "up" | "down" | "left" | "right";
@@ -3587,10 +3679,6 @@ export default function CameraCapture({
                 setTimeout(async () => {
                   stopBlinking();
                   setShowHeadTurnPrompt(false);
-                  console.log(
-                    "info",
-                    "��� Starting recording after head-turn prompt...",
-                  );
                   recordingFlagRef.current = 1;
                   try {
                     await _startSegmentRecording();
@@ -3605,38 +3693,36 @@ export default function CameraCapture({
                   }
                 }, 1200);
               }
-            } else if (recordingFlagRef.current === 1 && !recorderActive) {
-              // Flag is set but recording isn't active - this happens due to React state timing
-              // Don't reset immediately, give the recorder a moment to start
-              console.log("info", "Waiting for recorder to start...");
             }
           }
         } else {
           insideOvalFramesRef.current = 0;
-          setIsFaceDetected(false);
-          isFaceDetectedRef.current = false; // ✅ Sync ref
-
-          if (isRecording && !isVerifyingHeadTurn) {
-            _restartCurrentSegmentDueToFaceLoss();
+          
+          if (isFaceDetectedRef.current) {
+            isFaceDetectedRef.current = false;
+            // Always call restart after face loss (Angular parity)
+            // Only trigger if not already in cooldown to prevent duplicate calls
+            if (isRecordingRef.current && !isVerifyingHeadTurnRef.current && !restartCooldownRef.current) {
+              _restartCurrentSegmentDueToFaceLoss();
+            }
           }
-
-          // User guidance based on alignment
+          
+          // User guidance based on alignment - throttled via showMessage
           if (!sizeOK && !faceInside) {
-            console.log(
-              "dashedCircleAlignMessage",
-              "🧭 Make sure your full face is inside the dashed circle and adjust distance.",
-            );
+            showMessage('dashedCircleAlignMessage', '🧭 Make sure your full face is inside the dashed circle and adjust distance.');
           } else if (!faceInside) {
-            console.log(
-              "dashedCircleAlignMessage",
-              "🧭 Your entire face must be inside the dashed circle.",
-            );
+            showMessage('dashedCircleAlignMessage', '🧭 Your entire face must be inside the dashed circle.');
           } else {
-            console.log("dashedCircleAlignMessage", "");
+            showMessage('dashedCircleAlignMessage', '');
           }
         }
       } else {
+        // No face detected - lastBox or lastLandmarks are null
         handleNoFaceDetected(loop);
+      }
+      } finally {
+        // Always release detection lock and schedule next frame
+        detectionInProgressRef.current = false;
       }
 
       // Schedule the next frame detection
@@ -3711,21 +3797,29 @@ export default function CameraCapture({
 
         if (settings.frameRate && settings.frameRate < 15) {
           setCameraErrorMessage(
-            "⚠️ Low frame rate. Detection quality may be affected.",
+            "⚠️ Camera FPS appears low; detection may pause if performance degrades.",
           );
-          // logService.log('warn', 'Low frame rate detected.');
         }
-      }
 
-      // Check measured FPS (keep your helper; don’t inline logic here)
-      const fps = await checkCameraFPS();
-      // logService.log('debug', `Measured camera FPS: ${fps}`);
-      if (fps < 10) {
-        setCameraErrorMessage(
-          "⚠️ Camera FPS is too low for reliable detection.",
-        );
-        // logService.log('warn', 'Camera FPS too low.');
-      }
+        // Async FPS validation (post-play)
+        checkCameraFPS()
+          .then((fps) => {
+            if (fps < 10 && !fpsWarningShownRef.current) {
+              setCameraErrorMessage(
+                "⚠️ Camera FPS is too low for reliable detection.",
+              );
+              fpsWarningShownRef.current = true;
+              console.warn(`⚠️ Camera FPS too low: ${fps} FPS`);
+            } else if (fps >= 10 && fpsWarningShownRef.current) {
+              setCameraErrorMessage("");
+              fpsWarningShownRef.current = false;
+            }
+          })
+          .catch((err) => {
+            console.warn("FPS check failed:", err);
+          });
+
+      } // <-- close videoTracks.length IF block
 
       // Validate stream binding
       if (!videoEl.srcObject || !(videoEl.srcObject instanceof MediaStream)) {
@@ -3807,12 +3901,15 @@ export default function CameraCapture({
     return new Promise<number>((resolve) => {
       let frameCount = 0;
       let startTime = performance.now();
+      const measureDuration = 2000; // Measure over 2 seconds for more accuracy
 
       const countFrame = () => {
         frameCount++;
         const elapsed = performance.now() - startTime;
-        if (elapsed >= 1000) {
-          resolve(frameCount);
+        if (elapsed >= measureDuration) {
+          // Calculate FPS based on actual elapsed time
+          const fps = Math.round((frameCount / elapsed) * 1000);
+          resolve(fps);
         } else {
           requestAnimationFrame(countFrame);
         }
