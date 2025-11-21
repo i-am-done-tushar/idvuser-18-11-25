@@ -22,8 +22,8 @@ import {
 import { getDesktopDeviceFingerprint } from "@/lib/deviceFingerprint";
 import * as faceapi from "face-api.js";
 import * as tf from "@tensorflow/tfjs";
-import { waitForOpenCv } from "../lib/opencvLoader";
-import { performanceLogger } from "../lib/performanceLogger";
+import { waitForOpenCv } from "../../../lib/opencvLoader";
+import { performanceLogger } from "../../../lib/performanceLogger";
 
 // ---- single source of truth for API base ----
 const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || "";
