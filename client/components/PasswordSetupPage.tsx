@@ -91,26 +91,52 @@ export function PasswordSetupPage() {
       return;
     }
 
+    if (!resetNonce) {
+      toast({
+        title: "Error",
+        description: "Reset nonce is missing. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // TODO: Integrate with backend to save password
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      toast({
-        title: "Success",
-        description: "Your password has been set successfully.",
-        duration: 3000,
+      const apiBase = import.meta.env.VITE_API_BASE || "https://idvapi-test.arconnet.com:1019";
+      const response = await fetch(`${apiBase}/api/auth/reset/complete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resetNonce,
+          newPassword: password,
+        }),
       });
 
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
+      if (response.status === 204) {
+        toast({
+          title: "Success",
+          description: "Your password has been set successfully.",
+          duration: 3000,
+        });
+
+        setTimeout(() => {
+          navigate("/login", { replace: true });
+        }, 1000);
+      } else if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || `Password reset failed with status ${response.status}`
+        );
+      }
     } catch (error) {
       console.error("Password setup error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to set password. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to set password. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
