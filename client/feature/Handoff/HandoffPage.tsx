@@ -992,7 +992,7 @@ export default function HandoffPage() {
 
           // Fetch template version
           const templateResponse = await fetch(
-            `${API_BASE}/api/TemplateVersion?templateId=${templateVersionId}&page=1&pageSize=50`,
+            `${API_BASE}/api/TemplateVersion/${templateVersionId}`,
             {
               method: 'GET',
               headers: { 'accept': 'application/json' }
@@ -1003,10 +1003,9 @@ export default function HandoffPage() {
             throw new Error('Failed to fetch template version');
           }
 
-          const templateArray = await templateResponse.json();
+          const template = await templateResponse.json();
           
-          if (templateArray && templateArray.length > 0) {
-            const template = templateArray[0];
+          if (template) {
             setTemplateVersion(template);
 
             // Hydrate form data from cached snapshot
@@ -1117,7 +1116,7 @@ export default function HandoffPage() {
 
         // Step 3: Fetch template version
         const templateResponse = await fetch(
-          `${API_BASE}/api/TemplateVersion?templateId=${templateVersionId}&page=1&pageSize=50`,
+          `${API_BASE}/api/TemplateVersion/${templateVersionId}`,
           {
             method: 'GET',
             headers: { 'accept': 'application/json' }
@@ -1128,11 +1127,10 @@ export default function HandoffPage() {
           throw new Error('Failed to fetch template version');
         }
 
-        const templateArray = await templateResponse.json();
-        console.log('📄 Template Version:', templateArray);
+        const template = await templateResponse.json();
+        console.log('📄 Template Version:', template);
 
-        if (templateArray && templateArray.length > 0) {
-          const template = templateArray[0];
+        if (template) {
           setTemplateVersion(template);
 
           // Step 4: Hydrate form data from snapshot

@@ -4,6 +4,7 @@ import { QRCodeDisplay } from "./QRCodeDisplay";
 interface BiometricCaptureUIProps {
   onScanFace: () => void;
   isScanning?: boolean;
+  showQRCode?: boolean;
   // QR Code props
   shortCode?: string;
   templateVersionId?: number;
@@ -18,6 +19,7 @@ interface BiometricCaptureUIProps {
 export function BiometricCaptureUI({
   onScanFace,
   isScanning = false,
+  showQRCode = true,
   shortCode,
   templateVersionId,
   userId,
@@ -65,9 +67,9 @@ export function BiometricCaptureUI({
         {/* Main Content Area */}
         {!isScanning && (
           <div className="flex w-full flex-col justify-center items-center border-t border-[#DEDEDD] bg-white p-4">
-            <div className="flex w-full min-h-[450px] flex-col xl:flex-row justify-center items-stretch gap-0">
+            <div className={`flex w-full min-h-[450px] ${showQRCode ? 'flex-col xl:flex-row' : 'flex-col'} justify-center items-stretch gap-0`}>
               {/* Left Side - Illustration */}
-              <div className="flex flex-1 flex-col justify-between items-center rounded-lg bg-white">
+              <div className={`flex ${showQRCode ? 'flex-1' : 'w-full'} flex-col justify-between items-center rounded-lg bg-white`}>
                 <style>
                   {`
                   @keyframes headTilt {
@@ -188,25 +190,30 @@ export function BiometricCaptureUI({
               </div>
 
               {/* Vertical Divider - Desktop */}
-              <div className="hidden xl:flex flex-col justify-center items-center gap-1">
-                <div className="flex-1 w-px bg-[#D0D4E4]"></div>
-                <div className="text-[#676879] font-roboto text-[13.6px] px-2">
-                  or
+              {showQRCode && (
+                <div className="hidden xl:flex flex-col justify-center items-center gap-1">
+                  <div className="flex-1 w-px bg-[#D0D4E4]"></div>
+                  <div className="text-[#676879] font-roboto text-[13.6px] px-2">
+                    or
+                  </div>
+                  <div className="flex-1 w-px bg-[#D0D4E4]"></div>
                 </div>
-                <div className="flex-1 w-px bg-[#D0D4E4]"></div>
-              </div>
+              )}
 
               {/* Horizontal Divider - Mobile/Tablet */}
-              <div className="flex xl:hidden w-full justify-center items-center gap-2 py-4">
-                <div className="flex-1 h-px bg-[#D0D4E4]"></div>
-                <div className="text-[#676879] font-roboto text-[13.6px]">
-                  or
+              {showQRCode && (
+                <div className="flex xl:hidden w-full justify-center items-center gap-2 py-4">
+                  <div className="flex-1 h-px bg-[#D0D4E4]"></div>
+                  <div className="text-[#676879] font-roboto text-[13.6px]">
+                    or
+                  </div>
+                  <div className="flex-1 h-px bg-[#D0D4E4]"></div>
                 </div>
-                <div className="flex-1 h-px bg-[#D0D4E4]"></div>
-              </div>
+              )}
 
               {/* Right Side - QR Code */}
-              <div className="flex flex-1 flex-col justify-stretch items-stretch">
+              {showQRCode && (
+                <div className="flex flex-1 flex-col justify-stretch items-stretch">
                 <div className="flex flex-col items-center gap-0 self-stretch h-full">
                   <div className="flex flex-col justify-center items-center flex-1 self-stretch rounded-t-lg border-[1.575px] border-dashed border-[#C3C6D4]">
                     <div className="flex flex-col justify-center items-center gap-4 flex-1 px-4 py-4">
@@ -264,6 +271,7 @@ export function BiometricCaptureUI({
                   </div>
                 </div>
               </div>
+            )}
             </div>
           </div>
         )}

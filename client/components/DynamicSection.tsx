@@ -267,6 +267,7 @@ export function DynamicSection({
             {!isBiometricScanStarted ? (
               <BiometricCaptureUI 
                 onScanFace={handleScanFace}
+                showQRCode={false}
                 shortCode={shortCode}
                 templateVersionId={templateVersionId}
                 userId={userId}
@@ -313,9 +314,9 @@ export function DynamicSection({
 
                   {/* Main Content Area */}
                   <div className="flex w-full flex-col justify-center items-center border-t border-[#DEDEDD] bg-white p-4">
-                    <div className="flex w-full flex-col lg:flex-row items-stretch lg:items-center gap-6">
+                    <div className={`flex w-full ${shortCode ? 'flex-col lg:flex-row' : 'flex-col'} items-stretch lg:items-center gap-6`}>
                       {/* Left Box - Camera Selfie */}
-                      <div className="flex-1 flex flex-col min-w-0">
+                      <div className={`flex ${shortCode ? 'flex-1' : 'w-full'} flex flex-col min-w-0`}>
                         <div className="flex h-[428px] flex-col items-center gap-2 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white pt-4">
                           <CameraSelfieStep
                             onStepComplete={onSelfieComplete || (() => {})}
@@ -327,25 +328,30 @@ export function DynamicSection({
                       </div>
 
                       {/* Separator with "or" - Hidden on mobile, visible on lg screens */}
-                      <div className="hidden lg:flex flex-col items-center justify-center gap-1 h-[428px]">
-                        <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
-                        <div className="text-[#676879] font-roboto text-[13px] font-normal">
-                          or
+                      {shortCode && (
+                        <div className="hidden lg:flex flex-col items-center justify-center gap-1 h-[428px]">
+                          <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
+                          <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                            or
+                          </div>
+                          <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
                         </div>
-                        <div className="h-[160px] w-px bg-[#D0D4E4]"></div>
-                      </div>
+                      )}
 
                       {/* Horizontal separator for mobile - Visible below lg */}
-                      <div className="flex lg:hidden w-full items-center justify-center gap-3 py-2">
-                        <div className="flex-1 h-px bg-[#D0D4E4]"></div>
-                        <div className="text-[#676879] font-roboto text-[13px] font-normal">
-                          or
+                      {shortCode && (
+                        <div className="flex lg:hidden w-full items-center justify-center gap-3 py-2">
+                          <div className="flex-1 h-px bg-[#D0D4E4]"></div>
+                          <div className="text-[#676879] font-roboto text-[13px] font-normal">
+                            or
+                          </div>
+                          <div className="flex-1 h-px bg-[#D0D4E4]"></div>
                         </div>
-                        <div className="flex-1 h-px bg-[#D0D4E4]"></div>
-                      </div>
+                      )}
 
                       {/* Right Box - QR Code */}
-                      <div className="flex-1 flex flex-col min-w-0">
+                      {shortCode && (
+                        <div className="flex-1 flex flex-col min-w-0">
                         <div className="flex h-[428px] flex-col items-center justify-center gap-4 rounded-t-lg border-[1.5px] border-dashed border-[#C3C6D4] bg-white">
                           <QRCodeDisplay
                             shortCode={shortCode}
@@ -394,6 +400,7 @@ export function DynamicSection({
                           </span>
                         </div>
                       </div>
+                      )}
                     </div>
                   </div>
                 </div>
